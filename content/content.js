@@ -468,21 +468,80 @@
   const fillCompose = (text) => fillEditor(composeBox, text);
 
   // ── Attachments ──
-  /** WhatsApp's attachment preview (shown after files are added): its Send button and caption box. */
-  function mediaPreview() {
-    const outside = (el) => !el.closest('#side') && !el.closest('#main footer');
-    const icons = $$('[data-icon*="send"]').filter((el) => visible(el) && outside(el));
-    for (const icon of icons) {
-      const btn = icon.closest('button, [role="button"]') || icon;
-      let root = btn;
-      for (let i = 0; i < 14 && root.parentElement; i++) {
-        root = root.parentElement;
-        const caption = $$('[contenteditable="true"]', root).find((c) => visible(c) && outside(c));
-        if (caption) return { btn, caption, root };
-      }
-      return { btn, caption: null, root: btn.parentElement || btn };
+  /** True when el is actually in front at its own position (not covered by another layer). RitPost's own UI is ignored. */
+  function onTop(el) {
+    if (!visible(el)) return false;
+    const r = el.getBoundingClientRect();
+    const x = Math.min(Math.max(r.left + r.width / 2, 1), window.innerWidth - 1);
+    const y = Math.min(Math.max(r.top + Math.min(r.height / 2, 20), 1), window.innerHeight - 1);
+    for (const hit of document.elementsFromPoint(x, y)) {
+      if (hit.id === 'ritpost-overlay' || hit.id === 'ritpost-launcher') continue;
+      return hit === el || el.contains(hit) || hit.contains(el);
     }
-    return null;
+    return false;
+  }
+
+  const clickable = (el) => el.closest('button, [role="button"]') || el;
+  const iconLabel = (el) =>
+    [el.getAttribute('data-icon'), el.getAttribute('aria-label'), el.getAttribute('title'), el.querySelector?.('title')?.textContent]
+      .filter(Boolean)
+      .join(' ');
+
+  /** Buttons that look like a Send button (WhatsApp uses data-icon, aria-label or an SVG <title>). */
+  function sendLikeButtons() {
+    const found = new Set();
+    $$('[data-icon*="send" i], [aria-label="Send" i], [title="Send" i]').forEach((e) => found.add(clickable(e)));
+    $$('svg title').forEach((t) => {
+      if (/send/i.test(t.textContent || '')) found.add(clickable(t.closest('svg')));
+    });
+    return [...found].filter((b) => !b.closest('#side'));
+  }
+
+  /** Buttons that close/discard the attachment editor. */
+  function closeLikeButtons() {
+    const found = new Set();
+    $$('[data-icon="x"], [data-icon="x-alt"], [data-icon*="close" i], [aria-label="Close" i], [aria-label="Cancel" i], [aria-label="Discard" i]').forEach((e) =>
+      found.add(clickable(e))
+    );
+    $$('svg title').forEach((t) => {
+      if (/^(x|x-alt|close|.*-close.*|.*ic-close.*)$/i.test((t.textContent || '').trim())) found.add(clickable(t.closest('svg')));
+    });
+    return [...found].filter((b) => !b.closest('#side'));
+  }
+
+  const buttonWithText = (re) =>
+    $$('button, [role="button"]').find((b) => visible(b) && re.test((b.textContent || '').trim()) && !b.closest('#side'));
+
+  const distance = (a, b) => {
+    const r1 = a.getBoundingClientRect();
+    const r2 = b.getBoundingClientRect();
+    return Math.hypot(r1.left + r1.width / 2 - (r2.left + r2.width / 2), r1.top + r1.height / 2 - (r2.top + r2.height / 2));
+  };
+
+  /**
+   * WhatsApp's attachment preview / media editor, if it is in front of the chat.
+   * It covers the chat header, so the header not being in front is the main signal; the Send
+   * button and caption box are found among the elements that are in front.
+   */
+  function mediaPreview() {
+    const header = $('#main header');
+    if (header && onTop(header)) return null; // the normal chat view is showing
+
+    // With no header at all, the chat's own message bar isn't evidence of a preview.
+    const notChatBar = (e) => header || !e.closest('#main footer');
+    const btn = sendLikeButtons().find((b) => notChatBar(b) && onTop(b)) || null;
+    const caps = $$('[contenteditable="true"]').filter((c) => !c.closest('#side') && notChatBar(c) && onTop(c));
+    const labelled = caps.find((c) =>
+      /caption/i.test(
+        [c.getAttribute('aria-label'), c.getAttribute('aria-placeholder'), c.getAttribute('data-placeholder'), c.getAttribute('title')].join(' ')
+      )
+    );
+    let caption = labelled || null;
+    if (!caption && caps.length) caption = btn ? caps.slice().sort((a, b) => distance(a, btn) - distance(b, btn))[0] : caps[0];
+
+    // Nothing recognisable and no chat at all: not a preview.
+    if (!btn && !caption && !$('#main')) return null;
+    return { btn, caption };
   }
   const captionBox = () => mediaPreview()?.caption || null;
 
@@ -543,6 +602,10 @@
     },
   ];
 
+  /**
+   * Hands the files to WhatsApp. As soon as anything opens over the chat, RitPost stops:
+   * it never presses Escape or stacks a second attempt on top of an open editor.
+   */
   async function attachFiles(files) {
     for (const attempt of attachStrategies) {
       if (mediaPreview()) return true;
@@ -551,29 +614,37 @@
       } catch {
         /* try the next way */
       }
-      if (await waitFor(mediaPreview, 5000, 200)) return true;
-      document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true }));
-      await sleep(300);
+      if (await waitFor(mediaPreview, 7000, 200)) return true;
+      // The attach menu may still be open after the last way; a click on the chat closes it harmlessly.
     }
     return false;
   }
 
-  /** Close an attachment preview without sending it. */
+  /** Close an attachment preview without sending it (only used before re-attaching on Retry). */
   async function closePreview() {
-    const p = mediaPreview();
-    if (!p) return true;
-    const x = $('[data-icon="x"], [data-icon*="close"], [aria-label="Close" i], [aria-label="Cancel" i]', p.root);
-    if (x) fireClick(x.closest('button, [role="button"]') || x);
-    else (p.caption || document.activeElement)?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true }));
-    return !!(await waitFor(() => !mediaPreview(), 3000, 150));
+    for (let i = 0; i < 4; i++) {
+      if (!mediaPreview()) return true;
+      const discard = buttonWithText(/^discard$/i);
+      if (discard) {
+        fireClick(discard);
+      } else {
+        const x = closeLikeButtons().find(onTop);
+        if (x) fireClick(x);
+        else document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true }));
+      }
+      await waitFor(() => !mediaPreview(), 1500, 150);
+    }
+    return !mediaPreview();
   }
 
   /** Presses Send in the attachment preview. True once the preview closes. */
   async function pressPreviewSend() {
     const p = mediaPreview();
     if (!p) return false;
-    fireClick(p.btn);
-    if (await waitFor(() => !mediaPreview(), 6000, 150)) return true;
+    if (p.btn) {
+      fireClick(p.btn);
+      if (await waitFor(() => !mediaPreview(), 8000, 150)) return true;
+    }
     const cap = captionBox();
     if (cap) {
       cap.focus();
@@ -581,7 +652,25 @@
         cap.dispatchEvent(new KeyboardEvent(type, { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true }));
       }
     }
-    return !!(await waitFor(() => !mediaPreview(), 6000, 150));
+    return !!(await waitFor(() => !mediaPreview(), 8000, 150));
+  }
+
+  /** Keeps the RitPost panel off the preview's caption box and Send button. */
+  function previewAvoidRect() {
+    const p = mediaPreview();
+    if (!p) return null;
+    const rects = [p.btn, p.caption].filter(Boolean).map((e) => e.getBoundingClientRect());
+    if (!rects.length) {
+      // Unrecognised editor: keep clear of the bottom of the conversation area, where its Send button sits.
+      const m = ($('#main') || document.body).getBoundingClientRect();
+      return { left: m.left, right: m.right, top: window.innerHeight - 110, bottom: window.innerHeight };
+    }
+    return {
+      left: Math.min(...rects.map((r) => r.left)),
+      right: Math.max(...rects.map((r) => r.right)),
+      top: Math.min(...rects.map((r) => r.top)),
+      bottom: Math.max(...rects.map((r) => r.bottom)),
+    };
   }
 
   /** Rebuild File objects from what the side panel saved (data URLs in chrome.storage). */
@@ -620,8 +709,9 @@
     if (!e.isTrusted) return;
     const btn = e.target?.closest?.('button, [role="button"]');
     if (!btn || btn.closest('#side')) return;
-    const label = `${btn.getAttribute('aria-label') || ''} ${btn.getAttribute('data-tab') || ''}`;
-    if (btn.querySelector('[data-icon*="send"]') || /send/i.test(label)) lastSendIntent = Date.now();
+    const label = `${btn.getAttribute('aria-label') || ''} ${btn.getAttribute('title') || ''} ${btn.getAttribute('data-tab') || ''}`;
+    const svgTitle = [...btn.querySelectorAll('svg title')].map((t) => t.textContent).join(' ');
+    if (btn.querySelector('[data-icon*="send" i]') || /send/i.test(label) || /send/i.test(svgTitle)) lastSendIntent = Date.now();
   };
   document.addEventListener('pointerdown', onSendClick, true);
   document.addEventListener('click', onSendClick, true);
@@ -751,10 +841,12 @@
   function sendButton() {
     const main = $('#main');
     if (!main) return null;
-    const icon = $('footer [data-icon="send"], footer [data-icon="wds-ic-send-filled"], footer [data-icon*="send"]', main);
+    const icon = $('footer [data-icon="send"], footer [data-icon="wds-ic-send-filled"], footer [data-icon*="send" i]', main);
+    const titled = $$('footer svg title', main).find((t) => /send/i.test(t.textContent || ''));
     return (
       icon?.closest('button, [role="button"]') ||
       $('footer button[aria-label="Send" i], footer [role="button"][aria-label="Send" i]', main) ||
+      (titled && clickable(titled.closest('svg'))) ||
       icon
     );
   }
@@ -1044,7 +1136,11 @@
     finish();
   }
 
+  let avoidTimer = 0;
+
   function finish(error) {
+    clearInterval(avoidTimer);
+    ui.avoid(null);
     run.active = false;
     run.action = null;
     run.index = run.items.length;
@@ -1075,6 +1171,10 @@
       startedAt: Date.now(),
     });
     ui.mount();
+    clearInterval(avoidTimer);
+    avoidTimer = setInterval(() => {
+      if (run.active && run.files.length) ui.avoid(previewAvoidRect());
+    }, 400);
     persist(false);
     loop();
     return { ok: true };
@@ -1429,7 +1529,32 @@
       root.innerHTML = `<style>${CSS}</style>${view.phase === 'done' ? renderDone() : renderRunning()}`;
     }
 
-    return { mount, update, unmount };
+    /** Slide the panel up (or left) so it doesn't cover the given area; null puts it back. */
+    let shift = '';
+    function avoid(rect) {
+      if (!host) return;
+      let next = '';
+      if (rect) {
+        host.style.transform = '';
+        const r = host.getBoundingClientRect();
+        const gap = 12;
+        const overlaps = r.left < rect.right + gap && r.right > rect.left - gap && r.top < rect.bottom + gap && r.bottom > rect.top - gap;
+        if (overlaps) {
+          const up = r.bottom - (rect.top - gap);
+          const left = r.right - (rect.left - gap);
+          if (r.top - up >= 8) next = `translateY(${-Math.ceil(up)}px)`;
+          else if (r.left - left >= 8) next = `translateX(${-Math.ceil(left)}px)`;
+          else next = `translateY(${-Math.ceil(Math.max(0, r.top - 8))}px)`;
+        }
+      }
+      if (next !== shift || host.style.transform !== next) {
+        shift = next;
+        host.style.transform = next;
+        host.style.transition = 'transform .18s ease';
+      }
+    }
+
+    return { mount, update, unmount, avoid };
   })();
 
   // ─────────────────────── launcher button ───────────────────────

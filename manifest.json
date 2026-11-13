@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "RitPost – Group Posting for WhatsApp Web",
   "short_name": "RitPost",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "minimum_chrome_version": "116",
   "description": "Write once, pick groups from your saved list, and post to each WhatsApp Web group with a single keypress.",
   "icons": {
