@@ -2,9 +2,10 @@
  * RitPost — content script (runs on web.whatsapp.com)
  *
  * Walks through the queued groups one by one: opens the chat, places the
- * message in the compose box, and waits for YOU to press Enter / Send.
- * As soon as the message is sent it advances to the next group.
- * The extension never presses Send on your behalf.
+ * message (and any attachments, with the message as caption) and then either
+ * waits for you to press Enter / Send (Manual mode, the default) or presses
+ * Send itself after a visible countdown (Automatic mode, opt-in).
+ * As soon as the post is sent it advances to the next group.
  */
 (() => {
   'use strict';
@@ -397,13 +398,34 @@
     return lineKeys(got).length >= lineKeys(text).length ? 2 : 1;
   }
 
-  function clearEditor(getBox) {
+  function selectContents(el) {
+    el.focus();
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+
+  /**
+   * Empties one of WhatsApp's editors. Current WhatsApp (Lexical) ignores execCommand('delete'),
+   * so a delete input event over the selected contents is used when that doesn't work.
+   */
+  async function clearEditor(getBox) {
     const b = getBox();
     if (!b) return null;
-    b.focus();
-    document.execCommand('selectAll', false, null);
+    const empty = () => loose(editorText(getBox() || b)) === '';
+    if (empty()) return b;
+    selectContents(b);
     document.execCommand('delete', false, null);
-    return b;
+    await sleep(150);
+    for (let i = 0; i < 3 && !empty(); i++) {
+      const box = getBox() || b;
+      selectContents(box);
+      box.dispatchEvent(new InputEvent('beforeinput', { inputType: 'deleteContentBackward', bubbles: true, cancelable: true, composed: true }));
+      await sleep(150);
+    }
+    return getBox() || b;
   }
   const clearCompose = () => clearEditor(composeBox);
 
@@ -411,7 +433,7 @@
   const fillStrategies = [
     async (getBox, text) => {
       // Synthetic paste: keeps emoji intact and usually keeps line breaks.
-      const b = clearEditor(getBox);
+      const b = await clearEditor(getBox);
       if (!b) return;
       await sleep(60);
       const dt = new DataTransfer();
@@ -420,7 +442,7 @@
     },
     async (getBox, text) => {
       // Line by line, with soft line breaks between lines.
-      if (!clearEditor(getBox)) return;
+      if (!(await clearEditor(getBox))) return;
       await sleep(60);
       text.split('\n').forEach((line, i) => {
         if (i) document.execCommand('insertLineBreak', false, null);
@@ -429,7 +451,7 @@
     },
     async (getBox, text) => {
       // Line by line, with paragraphs between lines.
-      if (!clearEditor(getBox)) return;
+      if (!(await clearEditor(getBox))) return;
       await sleep(60);
       text.split('\n').forEach((line, i) => {
         if (i) document.execCommand('insertParagraph', false, null);
@@ -519,11 +541,32 @@
   };
 
   /**
-   * WhatsApp's attachment preview / media editor, if it is in front of the chat.
-   * It covers the chat header, so the header not being in front is the main signal; the Send
-   * button and caption box are found among the elements that are in front.
+   * WhatsApp's attachment preview / media editor, if it is open: its Send button and caption box.
    */
   function mediaPreview() {
+    // Current WhatsApp Web: the editor opens in the "drawer-middle" panel, with a marked caption box
+    // and a Send button labelled "Send 1 selected" (icon "ic-send-filled"). The header stays visible.
+    const caption = $$('[data-testid="media-caption-input-container"], [data-testid*="caption-input" i]').find(visible) || null;
+    const editorMark = $$('[data-testid^="media-editor"], [data-testid="media-caption-input-container"]').some(visible);
+    const sendBtns = sendLikeButtons().filter((b) => visible(b) && !b.closest('#main footer'));
+    const drawer = caption?.closest('[data-testid^="drawer"]') || $('[data-testid="drawer-middle"]');
+    const btn =
+      (drawer && sendBtns.find((b) => drawer.contains(b))) ||
+      sendBtns.find((b) => /^send\b/i.test(b.getAttribute('aria-label') || '')) ||
+      (editorMark ? sendBtns[0] : null) ||
+      null;
+    if (caption || editorMark || btn) return { btn, caption: caption || legacyCaption(btn) };
+    return legacyPreview();
+  }
+
+  function legacyCaption(btn) {
+    const caps = $$('[contenteditable="true"]').filter((c) => visible(c) && !c.closest('#side') && !c.closest('#main footer'));
+    if (!caps.length) return null;
+    return btn ? caps.sort((a, b) => distance(a, btn) - distance(b, btn))[0] : caps[0];
+  }
+
+  /** Older layouts: an editor that covers the chat header. */
+  function legacyPreview() {
     const header = $('#main header');
     if (header && onTop(header)) return null; // the normal chat view is showing
 
@@ -591,7 +634,11 @@
         const icon = $(
           '#main footer [data-icon="plus-rounded"], #main footer [data-icon="plus"], #main footer [data-icon="attach-menu-plus"], #main footer [data-icon="clip"], #main footer [data-icon*="attach"]'
         );
-        const btn = icon?.closest('button, [role="button"]') || $('#main footer [title="Attach" i], #main footer [aria-label="Attach" i]');
+        const titled = $$('#main footer svg title').find((t) => /attach|plus|clip/i.test(t.textContent || ''));
+        const btn =
+          $('#main footer button[aria-label="Attach" i], #main footer [role="button"][aria-label="Attach" i], #main footer [title="Attach" i]') ||
+          icon?.closest('button, [role="button"]') ||
+          (titled && clickable(titled.closest('svg')));
         if (!btn) return;
         fireClick(btn);
         input = await waitFor(pick, 2500, 150);
@@ -1004,7 +1051,7 @@
       let baseline;
       let readyMsg;
       if (run.files.length) {
-        clearCompose();
+        await clearCompose();
         baseline = outgoingSignature();
         ui.update({ phase: 'filling', status: `Attaching ${run.files.length === 1 ? 'your file' : `${run.files.length} files`}…` });
         const attached = await attachFiles(run.files).catch(() => false);
