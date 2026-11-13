@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>RitPost</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand">
+      <img src="../icons/icon48.png" alt="">
+      <div>
+        <h1>RitPost <span class="pro">PRO</span></h1>
+        <span>Group posting for WhatsApp Web</span>
+      </div>
+    </div>
+    <button id="conn" class="pill" type="button" title="WhatsApp Web status">
+      <span class="dot"></span><span class="txt">Checking…</span>
+    </button>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    <button class="tab active" data-tab="compose" role="tab">Compose</button>
+    <button class="tab" data-tab="groups" role="tab">Groups <span id="groupCount" class="badge">0</span></button>
+    <button class="tab" data-tab="settings" role="tab">Settings</button>
+  </nav>
+
+  <main>
+    <!-- ── Compose ─────────────────────────────── -->
+    <section id="tab-compose" class="panel">
+      <div class="field">
+        <div class="field-head">
+          <label for="message">Message</label>
+          <div class="menu-wrap">
+            <button type="button" class="link with-icon" id="tplBtn">
+              <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 3h9l3 3v11H4V3Zm1.5 1.5v11h9V6.6L12.4 4.5H5.5ZM7 9h6v1.5H7V9Zm0 3h6v1.5H7V12Z"/></svg>
+              Templates
+            </button>
+            <div id="tplMenu" class="menu" hidden></div>
+          </div>
+        </div>
+
+        <div class="editor">
+          <div class="toolbar">
+            <button type="button" class="tb" data-wrap="*" title="Bold (Ctrl+B)"><b>B</b></button>
+            <button type="button" class="tb" data-wrap="_" title="Italic (Ctrl+I)"><i>I</i></button>
+            <button type="button" class="tb" data-wrap="~" title="Strikethrough"><s>S</s></button>
+            <button type="button" class="tb mono" data-wrap="```" title="Monospace">&lt;/&gt;</button>
+            <span class="tb-sep"></span>
+            <button type="button" class="tb token" id="insertToken" title="Insert the group's name">{group}</button>
+            <span class="spacer"></span>
+            <button type="button" class="tb toggle" id="previewToggle" title="Preview how it will look">
+              <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4c4.2 0 7.3 3.4 8 6-.7 2.6-3.8 6-8 6s-7.3-3.4-8-6c.7-2.6 3.8-6 8-6Zm0 1.5c-3.2 0-5.7 2.4-6.4 4.5.7 2.1 3.2 4.5 6.4 4.5s5.7-2.4 6.4-4.5c-.7-2.1-3.2-4.5-6.4-4.5Zm0 1.8a2.7 2.7 0 1 1 0 5.4 2.7 2.7 0 0 1 0-5.4Z"/></svg>
+              Preview
+            </button>
+          </div>
+          <textarea id="message" rows="6" placeholder="Write your message once. It goes to every group you select below."></textarea>
+          <div id="preview" class="preview" hidden><div class="bubble" id="bubble"></div></div>
+        </div>
+        <div class="field-foot">
+          <span class="hint">Formatting works like WhatsApp: *bold*, _italic_, ~strike~</span>
+          <span id="charCount" class="muted">0</span>
+        </div>
+      </div>
+
+      <div class="field">
+        <div class="field-head">
+          <label>Send to <span id="selCount" class="muted"></span></label>
+          <div class="links">
+            <button type="button" class="link" id="selAll">All</button>
+            <span class="sep">·</span>
+            <button type="button" class="link" id="selNone">None</button>
+          </div>
+        </div>
+
+        <div class="lists-bar" id="listsBar">
+          <div id="listChips" class="chips-row"></div>
+          <button type="button" class="chip-btn add" id="saveListBtn" title="Save the current selection as a list">+ Save selection</button>
+        </div>
+
+        <div class="search" id="filterWrap">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M8.5 3a5.5 5.5 0 0 1 4.38 8.83l3.65 3.64-1.06 1.06-3.64-3.65A5.5 5.5 0 1 1 8.5 3Zm0 1.5a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z"/></svg>
+          <input id="filter" type="search" placeholder="Filter groups">
+        </div>
+        <ul id="pickList" class="list"></ul>
+        <div id="pickEmpty" class="empty" hidden>
+          <p><strong>No saved groups yet</strong></p>
+          <p class="muted">Import them from WhatsApp Web in one click.</p>
+          <button type="button" class="btn secondary sm" data-goto="groups">Manage groups</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Groups ──────────────────────────────── -->
+    <section id="tab-groups" class="panel" hidden>
+      <button id="importBtn" type="button" class="btn primary block">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2.5a.75.75 0 0 1 .75.75v8.69l2.72-2.72 1.06 1.06-4.53 4.53-4.53-4.53 1.06-1.06 2.72 2.72V3.25A.75.75 0 0 1 10 2.5ZM3.5 15h13v1.5h-13z"/></svg>
+        Import groups from WhatsApp Web
+      </button>
+      <form id="addForm" class="add-row" autocomplete="off">
+        <input id="newGroup" type="text" placeholder="Or type a group name exactly as in WhatsApp" maxlength="120">
+        <button class="btn secondary" type="submit">Add</button>
+      </form>
+      <div class="search" id="manageFilterWrap">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M8.5 3a5.5 5.5 0 0 1 4.38 8.83l3.65 3.64-1.06 1.06-3.64-3.65A5.5 5.5 0 1 1 8.5 3Zm0 1.5a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z"/></svg>
+        <input id="manageFilter" type="search" placeholder="Search saved groups">
+      </div>
+      <ul id="manageList" class="list manage"></ul>
+      <div id="manageEmpty" class="empty" hidden>
+        <p><strong>Your group list is empty</strong></p>
+        <p class="muted">Importing is the most reliable way to add groups, because names must match WhatsApp exactly.</p>
+      </div>
+    </section>
+
+    <!-- ── Settings ────────────────────────────── -->
+    <section id="tab-settings" class="panel" hidden>
+      <div class="setting">
+        <div>
+          <div class="s-title">Automatic sending interval</div>
+          <div class="muted">In Automatic mode, RitPost waits this long on each group (a countdown you can stop) before pressing Send. 5 to 600 seconds.</div>
+        </div>
+        <div class="num-field"><input id="intervalSetting" type="number" min="5" max="600" step="1"> <span class="muted">s</span></div>
+      </div>
+
+      <div class="setting">
+        <div>
+          <div class="s-title">Vary the interval slightly</div>
+          <div class="muted">Makes each countdown a little different (−15% to +25%) instead of perfectly regular.</div>
+        </div>
+        <label class="switch"><input id="randomize" type="checkbox"><span></span></label>
+      </div>
+
+      <div class="setting">
+        <div>
+          <div class="s-title">Pause between groups (manual)</div>
+          <div class="muted">In Manual mode, the wait after each send before the next group opens.</div>
+        </div>
+        <select id="delay">
+          <option value="1000">1 s</option>
+          <option value="2000">2 s</option>
+          <option value="3000">3 s</option>
+          <option value="5000">5 s</option>
+          <option value="8000">8 s</option>
+        </select>
+      </div>
+
+      <div class="setting">
+        <div>
+          <div class="s-title">Backup</div>
+          <div class="muted">Export or restore groups, lists and templates.</div>
+        </div>
+        <div class="btn-group">
+          <button type="button" id="exportBtn" class="btn secondary sm">Export</button>
+          <button type="button" id="restoreBtn" class="btn secondary sm">Import</button>
+          <input type="file" id="restoreFile" accept="application/json,.json" hidden>
+        </div>
+      </div>
+
+      <div class="setting">
+        <div>
+          <div class="s-title">Reset</div>
+          <div class="muted">Delete all saved data from this browser.</div>
+        </div>
+        <button type="button" id="resetBtn" class="btn danger sm">Reset</button>
+      </div>
+
+      <div class="about">
+        <h2>How it works</h2>
+        <ol>
+          <li>RitPost opens each selected group in WhatsApp Web.</li>
+          <li>It fills in your message, ready to go.</li>
+          <li>You press <kbd>Enter</kbd>, and the next group opens automatically.</li>
+        </ol>
+        <p class="muted"><b>Manual</b> mode: you press Enter for every message. <b>Automatic</b> mode: RitPost presses Send after a countdown. WhatsApp’s terms don’t allow automated messaging, so automatic mode can get your account restricted, whatever the interval. Shortcut: <kbd>Ctrl</kbd>+<kbd>Enter</kbd> starts sending.</p>
+      </div>
+      <p class="version muted" id="version"></p>
+    </section>
+  </main>
+
+  <footer class="app-footer">
+    <div id="runBox" class="run-box" hidden>
+      <div class="run-top">
+        <span class="run-title"><span class="live-dot"></span><b id="runTitle">Sending…</b></span>
+        <span id="runMeta" class="muted"></span>
+      </div>
+      <div class="run-bar"><div id="runFill"></div></div>
+      <div class="run-actions">
+        <button type="button" id="runFocus" class="btn secondary sm">Show WhatsApp</button>
+        <button type="button" id="runPause" class="btn secondary sm">Pause</button>
+        <button type="button" id="runStop" class="btn danger sm">Stop</button>
+      </div>
+    </div>
+    <div id="lastRun" class="last-run" hidden></div>
+    <div class="mode-bar" id="modeBar">
+      <div class="seg" id="modeSeg" role="radiogroup" aria-label="Send mode">
+        <button type="button" data-mode="manual" role="radio">Manual</button>
+        <button type="button" data-mode="auto" role="radio">Automatic</button>
+      </div>
+      <label class="interval" id="intervalWrap" title="Seconds RitPost waits on each group before pressing Send">
+        every <input id="interval" type="number" min="5" max="600" step="1" inputmode="numeric"> s
+      </label>
+    </div>
+    <button id="startBtn" class="btn primary block lg" type="button" disabled>
+      <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2.9 2.7a.75.75 0 0 1 .82-.1l13.5 6.75a.75.75 0 0 1 0 1.34L3.72 17.44a.75.75 0 0 1-1.05-.87L4.38 10 2.67 3.43a.75.75 0 0 1 .23-.73ZM5.6 10.75l-1.07 4.13L14.57 10 4.53 5.12l1.07 4.13H10v1.5H5.6Z"/></svg>
+      <span id="startLabel">Start sending</span>
+    </button>
+  </footer>
+
+  <!-- Generic dialog -->
+  <div id="modal" class="modal" hidden>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <div class="sheet-head">
+        <h2 id="modalTitle"></h2>
+        <button type="button" class="icon-btn" data-close-modal aria-label="Close">✕</button>
+      </div>
+      <div id="modalBody" class="sheet-body"></div>
+      <div class="sheet-foot">
+        <button type="button" class="btn secondary" data-close-modal>Cancel</button>
+        <button type="button" id="modalConfirm" class="btn primary">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
