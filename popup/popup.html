@@ -61,6 +61,19 @@
           <span class="hint">Formatting works like WhatsApp: *bold*, _italic_, ~strike~</span>
           <span id="charCount" class="muted">0</span>
         </div>
+
+        <div class="attach">
+          <div class="attach-head">
+            <button type="button" class="link with-icon" id="attachBtn">
+              <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M13.3 3.2a3.3 3.3 0 0 1 4.7 4.7l-7.6 7.6a5 5 0 0 1-7.1-7.1l6.9-6.9 1.1 1.1-6.9 6.9a3.5 3.5 0 0 0 4.9 4.9l7.6-7.6a1.8 1.8 0 0 0-2.5-2.5L7.6 12a.4.4 0 0 0 .6.6l6.5-6.5 1.1 1.1-6.5 6.5a2 2 0 0 1-2.8-2.8l6.8-7.7Z"/></svg>
+              Attach photos, videos or files
+            </button>
+            <span class="hint" id="attachHint">Up to 10 files · 16 MB each</span>
+          </div>
+          <input type="file" id="attachInput" multiple hidden>
+          <ul id="attachList" class="attach-list" hidden></ul>
+          <p id="attachNote" class="hint" hidden>Your message is sent as the caption.</p>
+        </div>
       </div>
 
       <div class="field">

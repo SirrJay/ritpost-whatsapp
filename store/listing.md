@@ -13,7 +13,7 @@ Copy each section into the matching field in the Developer Dashboard.
 ## Summary (max 132 characters)
 
 ```
-Write once, pick your WhatsApp Web groups, and post to each one with a keypress or an optional timed auto-send.
+Write once, attach photos or videos, pick your WhatsApp Web groups, and post to each with a keypress or optional timed auto-send.
 ```
 
 ## Category
@@ -29,7 +29,7 @@ English
 ```
 RitPost makes posting the same announcement to many WhatsApp groups fast and organised.
 
-Write your message once, pick groups from your saved list, and RitPost walks through them for you in WhatsApp Web. For each group it opens the chat and fills in your message. You press Enter, and the next group opens on its own.
+Write your message once, pick groups from your saved list, and RitPost walks through them for you in WhatsApp Web. For each group it opens the chat and fills in your message, with any photos, videos or documents you attached. You press Enter, and the next group opens on its own.
 
 HOW IT WORKS
 1. Open RitPost beside WhatsApp Web (side panel).
@@ -40,6 +40,7 @@ HOW IT WORKS
 FEATURES
 • One-click import of your groups from WhatsApp Web (groups only, no individual contacts)
 • Saved group lists, e.g. "Church groups" or "Clients", for quick selection
+• Attach photos, videos and documents. Your message becomes the caption
 • Message templates for announcements you send often
 • Formatting toolbar (bold, italic, strikethrough, monospace) with a live preview
 • {group} placeholder to put each group's name in the message

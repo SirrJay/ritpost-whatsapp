@@ -385,7 +385,11 @@
    * 2 = text and line breaks are intact.
    */
   function composeQuality(text) {
-    const got = composeRaw();
+    return editorQuality(composeBox, text);
+  }
+
+  function editorQuality(getBox, text) {
+    const got = editorText(getBox());
     const want = alnum(text);
     if (want.length < 3) return loose(got).length > 0 ? 2 : 0;
     const have = alnum(got);
@@ -393,38 +397,39 @@
     return lineKeys(got).length >= lineKeys(text).length ? 2 : 1;
   }
 
-  function clearCompose() {
-    const b = composeBox();
+  function clearEditor(getBox) {
+    const b = getBox();
     if (!b) return null;
     b.focus();
     document.execCommand('selectAll', false, null);
     document.execCommand('delete', false, null);
     return b;
   }
+  const clearCompose = () => clearEditor(composeBox);
 
-  // Ways of putting text into WhatsApp's editor. None of them can send.
+  // Ways of putting text into one of WhatsApp's editors. None of them can send.
   const fillStrategies = [
-    async (text) => {
+    async (getBox, text) => {
       // Synthetic paste: keeps emoji intact and usually keeps line breaks.
-      const b = clearCompose();
+      const b = clearEditor(getBox);
       if (!b) return;
       await sleep(60);
       const dt = new DataTransfer();
       dt.setData('text/plain', text);
       b.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
     },
-    async (text) => {
+    async (getBox, text) => {
       // Line by line, with soft line breaks between lines.
-      if (!clearCompose()) return;
+      if (!clearEditor(getBox)) return;
       await sleep(60);
       text.split('\n').forEach((line, i) => {
         if (i) document.execCommand('insertLineBreak', false, null);
         if (line) document.execCommand('insertText', false, line);
       });
     },
-    async (text) => {
+    async (getBox, text) => {
       // Line by line, with paragraphs between lines.
-      if (!clearCompose()) return;
+      if (!clearEditor(getBox)) return;
       await sleep(60);
       text.split('\n').forEach((line, i) => {
         if (i) document.execCommand('insertParagraph', false, null);
@@ -433,17 +438,17 @@
     },
   ];
 
-  async function fillCompose(text) {
-    if (!(await waitFor(composeBox, 6000))) return false;
+  async function fillEditor(getBox, text) {
+    if (!(await waitFor(getBox, 6000))) return false;
 
     let bestIndex = -1;
     let bestQuality = 0;
     for (let i = 0; i < fillStrategies.length; i++) {
-      await fillStrategies[i](text);
+      await fillStrategies[i](getBox, text);
       await sleep(350);
-      const q = composeQuality(text);
+      const q = editorQuality(getBox, text);
       if (q === 2) {
-        placeCaretAtEnd(composeBox());
+        placeCaretAtEnd(getBox());
         return true;
       }
       if (q > bestQuality) {
@@ -454,11 +459,147 @@
 
     // No method kept every line break: use the best one that got the text in.
     if (bestIndex < 0) return false;
-    await fillStrategies[bestIndex](text);
+    await fillStrategies[bestIndex](getBox, text);
     await sleep(350);
-    if (!composeQuality(text)) return false;
-    placeCaretAtEnd(composeBox());
+    if (!editorQuality(getBox, text)) return false;
+    placeCaretAtEnd(getBox());
     return true;
+  }
+  const fillCompose = (text) => fillEditor(composeBox, text);
+
+  // ── Attachments ──
+  /** WhatsApp's attachment preview (shown after files are added): its Send button and caption box. */
+  function mediaPreview() {
+    const outside = (el) => !el.closest('#side') && !el.closest('#main footer');
+    const icons = $$('[data-icon*="send"]').filter((el) => visible(el) && outside(el));
+    for (const icon of icons) {
+      const btn = icon.closest('button, [role="button"]') || icon;
+      let root = btn;
+      for (let i = 0; i < 14 && root.parentElement; i++) {
+        root = root.parentElement;
+        const caption = $$('[contenteditable="true"]', root).find((c) => visible(c) && outside(c));
+        if (caption) return { btn, caption, root };
+      }
+      return { btn, caption: null, root: btn.parentElement || btn };
+    }
+    return null;
+  }
+  const captionBox = () => mediaPreview()?.caption || null;
+
+  function filesTransfer(files) {
+    const dt = new DataTransfer();
+    files.forEach((f) => dt.items.add(f));
+    return dt;
+  }
+
+  // Ways of handing files to WhatsApp. Each one only opens the preview; none of them sends.
+  const attachStrategies = [
+    async (files) => {
+      // Paste the files into the message box, like Ctrl+V with copied files.
+      const box = composeBox();
+      if (!box) return;
+      box.focus();
+      box.dispatchEvent(new ClipboardEvent('paste', { clipboardData: filesTransfer(files), bubbles: true, cancelable: true }));
+    },
+    async (files) => {
+      // Drag and drop the files onto the open chat.
+      const main = $('#main');
+      if (!main) return;
+      const r = main.getBoundingClientRect();
+      const x = r.left + r.width / 2;
+      const y = r.top + r.height / 2;
+      const fire = (el, type) =>
+        el.dispatchEvent(new DragEvent(type, { dataTransfer: filesTransfer(files), bubbles: true, cancelable: true, clientX: x, clientY: y }));
+      fire(main, 'dragenter');
+      fire(main, 'dragover');
+      await sleep(400);
+      const zone = document.elementFromPoint(x, y) || main;
+      fire(zone, 'dragenter');
+      fire(zone, 'dragover');
+      fire(zone, 'drop');
+    },
+    async (files) => {
+      // WhatsApp's own Attach menu file input (the menu is opened; the file picker is not).
+      const media = files.every((f) => /^(image|video)\//.test(f.type));
+      const pick = () => {
+        const inputs = $$('#main input[type="file"], #app input[type="file"]');
+        return media
+          ? inputs.find((i) => /image|video/.test(i.accept || ''))
+          : inputs.find((i) => !i.accept || i.accept === '*' || !/image/.test(i.accept));
+      };
+      let input = pick();
+      if (!input) {
+        const icon = $(
+          '#main footer [data-icon="plus-rounded"], #main footer [data-icon="plus"], #main footer [data-icon="attach-menu-plus"], #main footer [data-icon="clip"], #main footer [data-icon*="attach"]'
+        );
+        const btn = icon?.closest('button, [role="button"]') || $('#main footer [title="Attach" i], #main footer [aria-label="Attach" i]');
+        if (!btn) return;
+        fireClick(btn);
+        input = await waitFor(pick, 2500, 150);
+      }
+      if (!input) return;
+      input.files = filesTransfer(files).files;
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    },
+  ];
+
+  async function attachFiles(files) {
+    for (const attempt of attachStrategies) {
+      if (mediaPreview()) return true;
+      try {
+        await attempt(files);
+      } catch {
+        /* try the next way */
+      }
+      if (await waitFor(mediaPreview, 5000, 200)) return true;
+      document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true }));
+      await sleep(300);
+    }
+    return false;
+  }
+
+  /** Close an attachment preview without sending it. */
+  async function closePreview() {
+    const p = mediaPreview();
+    if (!p) return true;
+    const x = $('[data-icon="x"], [data-icon*="close"], [aria-label="Close" i], [aria-label="Cancel" i]', p.root);
+    if (x) fireClick(x.closest('button, [role="button"]') || x);
+    else (p.caption || document.activeElement)?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true }));
+    return !!(await waitFor(() => !mediaPreview(), 3000, 150));
+  }
+
+  /** Presses Send in the attachment preview. True once the preview closes. */
+  async function pressPreviewSend() {
+    const p = mediaPreview();
+    if (!p) return false;
+    fireClick(p.btn);
+    if (await waitFor(() => !mediaPreview(), 6000, 150)) return true;
+    const cap = captionBox();
+    if (cap) {
+      cap.focus();
+      for (const type of ['keydown', 'keypress', 'keyup']) {
+        cap.dispatchEvent(new KeyboardEvent(type, { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true }));
+      }
+    }
+    return !!(await waitFor(() => !mediaPreview(), 6000, 150));
+  }
+
+  /** Rebuild File objects from what the side panel saved (data URLs in chrome.storage). */
+  async function loadFiles(ids) {
+    if (!ids?.length) return [];
+    const { attachments } = await chrome.storage.local.get('attachments');
+    const byId = new Map((attachments || []).map((a) => [a.id, a]));
+    const files = [];
+    for (const id of ids) {
+      const a = byId.get(id);
+      if (!a?.data) throw new Error('An attachment is missing. Attach the file again in RitPost.');
+      const b64 = a.data.slice(a.data.indexOf(',') + 1);
+      const bin = atob(b64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      files.push(new File([bytes], a.name, { type: a.type || 'application/octet-stream', lastModified: Date.now() }));
+    }
+    return files;
   }
 
   // ── Send detection ──
@@ -468,14 +609,17 @@
     'keydown',
     (e) => {
       if (!e.isTrusted || e.key !== 'Enter' || e.shiftKey || e.isComposing) return;
-      if (e.target?.closest?.('#main footer, #main [contenteditable="true"]')) lastSendIntent = Date.now();
+      const t = e.target;
+      if (!t?.closest || t.closest('#side')) return;
+      // The chat's message box, or the caption box of an attachment preview.
+      if (t.closest('#main footer, [contenteditable="true"]')) lastSendIntent = Date.now();
     },
     true
   );
   const onSendClick = (e) => {
     if (!e.isTrusted) return;
-    const btn = e.target?.closest?.('#main footer button, #main footer [role="button"], #main [aria-label="Send" i]');
-    if (!btn) return;
+    const btn = e.target?.closest?.('button, [role="button"]');
+    if (!btn || btn.closest('#side')) return;
     const label = `${btn.getAttribute('aria-label') || ''} ${btn.getAttribute('data-tab') || ''}`;
     if (btn.querySelector('[data-icon*="send"]') || /send/i.test(label)) lastSendIntent = Date.now();
   };
@@ -560,6 +704,8 @@
     paused: false,
     action: null,
     settings: { delayMs: 2000 },
+    attachmentIds: [],
+    files: [],
     startedAt: 0,
   };
 
@@ -633,7 +779,33 @@
    * Visible countdown, then a safety check and a Send press.
    * Returns 'sent' | 'manual' | 'failed' | 'skip' | 'stop' | 'retry'.
    */
-  async function autoSend(item) {
+  /** How a group's pending post is checked and sent: a text message, or an attachment preview. */
+  const textCtx = (item) => ({
+    pending: () => !composeEmpty(),
+    inChat: () => chatIsOpen(item.name),
+    verify: () => chatIsOpen(item.name) && !!composeQuality(item.text),
+    press: pressSend,
+    sentExtra: () => messageInChat(item.text),
+    ready: 'Review the message, then press Enter to send.',
+    cleared: 'The message box is empty. Refill it, or mark this group as sent.',
+  });
+  const mediaCtx = (item) => ({
+    pending: () => !!mediaPreview(),
+    // While the preview is up the chat behind it is the one RitPost opened.
+    inChat: () => !!mediaPreview() || chatIsOpen(item.name),
+    verify: () => {
+      const p = mediaPreview();
+      if (!p) return false;
+      if (!item.text.trim()) return true;
+      return !!p.caption && !!editorQuality(() => p.caption, item.text);
+    },
+    press: pressPreviewSend,
+    sentExtra: () => false,
+    ready: 'Check the preview, then press Enter (or click Send) to send.',
+    cleared: 'The attachment preview was closed. Click Refill to attach again, or mark this group as sent.',
+  });
+
+  async function autoSend(item, ctx) {
     let remaining = intervalMs();
     let last = Date.now();
     for (;;) {
@@ -649,7 +821,7 @@
         if (a === 'skip' || a === 'stop' || a === 'retry') return a;
       }
       // Switched to manual, left the chat, or sent/cleared it by hand: let the manual flow take over.
-      if (!isAuto() || !chatIsOpen(item.name) || composeEmpty()) return 'manual';
+      if (!isAuto() || !ctx.inChat() || !ctx.pending()) return 'manual';
 
       const now = Date.now();
       if (!run.paused) remaining -= now - last;
@@ -665,20 +837,17 @@
     }
 
     // Last safety check right before pressing Send.
-    if (!chatIsOpen(item.name) || !composeQuality(item.text)) return 'manual';
+    if (!ctx.verify()) return 'manual';
     ui.update({ phase: 'filling', status: 'Sending…' });
-    return (await pressSend()) ? 'sent' : 'failed';
+    return (await ctx.press()) ? 'sent' : 'failed';
   }
 
-  async function waitForSend(item, baseline, readyMsg = 'Review the message, then press Enter to send.') {
+  async function waitForSend(item, baseline, readyMsg, ctx) {
     let emptySince = 0;
     lastSendIntent = 0;
     const startedAt = Date.now();
-    // Any one of these, together with an empty message box, means the user sent it.
-    const wasSent = () =>
-      lastSendIntent > startedAt ||
-      outgoingSignature() !== baseline ||
-      messageInChat(item.text);
+    // Any one of these, once nothing is left to send, means the user sent it.
+    const wasSent = () => lastSendIntent > startedAt || outgoingSignature() !== baseline || ctx.sentExtra();
     for (;;) {
       await sleep(300);
       const a = run.action;
@@ -687,13 +856,13 @@
         return a === 'marksent' ? 'sent' : a;
       }
 
-      if (!chatIsOpen(item.name)) {
+      if (!ctx.inChat()) {
         emptySince = 0;
         ui.update({ phase: 'away', status: 'You switched to another chat. Click “Reopen” to return to this group.' });
         continue;
       }
 
-      const empty = composeEmpty();
+      const empty = !ctx.pending();
       if (empty && wasSent()) return 'sent';
 
       // User switched (back) to automatic mode mid-group.
@@ -702,7 +871,7 @@
       if (empty) {
         if (!emptySince) emptySince = Date.now();
         else if (Date.now() - emptySince > 4000)
-          ui.update({ phase: 'cleared', status: 'The message box is empty. Refill it, or mark this group as sent.' });
+          ui.update({ phase: 'cleared', status: ctx.cleared });
       } else {
         emptySince = 0;
         ui.update({ phase: 'ready', status: readyMsg });
@@ -736,21 +905,54 @@
         return { status: 'readonly', reason: 'Posting is restricted in this group' };
       }
 
-      const filled = await fillCompose(item.text).catch(() => false);
-      if (!filled) {
-        ui.update({ phase: 'error', status: 'Couldn’t place the message in the chat box. Click Retry or Skip.' });
-        const a = await waitForAction();
-        if (a === 'retry') continue;
-        if (a === 'stop') return { status: 'cancelled' };
-        return { status: 'failed', reason: 'Message could not be inserted' };
+      // A preview left over from an earlier attempt would be sent by mistake.
+      if (mediaPreview()) await closePreview();
+
+      let ctx;
+      let baseline;
+      let readyMsg;
+      if (run.files.length) {
+        clearCompose();
+        baseline = outgoingSignature();
+        ui.update({ phase: 'filling', status: `Attaching ${run.files.length === 1 ? 'your file' : `${run.files.length} files`}…` });
+        const attached = await attachFiles(run.files).catch(() => false);
+        if (run.action === 'stop') return { status: 'cancelled' };
+        if (!attached) {
+          ui.update({ phase: 'error', status: 'Couldn’t attach the files in this chat. Click Retry or Skip.' });
+          const a = await waitForAction();
+          if (a === 'retry') continue;
+          if (a === 'stop') return { status: 'cancelled' };
+          return { status: 'failed', reason: 'Files could not be attached' };
+        }
+        ctx = mediaCtx(item);
+        readyMsg = ctx.ready;
+        if (item.text.trim()) {
+          ui.update({ phase: 'filling', status: 'Adding your message as the caption…' });
+          const captioned = await fillEditor(captionBox, item.text).catch(() => false);
+          if (!captioned) {
+            // Never auto-send media without the caption the user wrote.
+            run.held = true;
+            readyMsg = 'Couldn’t add the caption. Type it in the preview, then press Enter to send.';
+          }
+        }
+      } else {
+        const filled = await fillCompose(item.text).catch(() => false);
+        if (!filled) {
+          ui.update({ phase: 'error', status: 'Couldn’t place the message in the chat box. Click Retry or Skip.' });
+          const a = await waitForAction();
+          if (a === 'retry') continue;
+          if (a === 'stop') return { status: 'cancelled' };
+          return { status: 'failed', reason: 'Message could not be inserted' };
+        }
+        baseline = outgoingSignature();
+        ctx = textCtx(item);
+        readyMsg = ctx.ready;
       }
 
-      const baseline = outgoingSignature();
-      let readyMsg = 'Review the message, then press Enter to send.';
       let result = null;
       for (;;) {
         if (isAuto() && !run.held) {
-          const r = await autoSend(item);
+          const r = await autoSend(item, ctx);
           if (r === 'sent' || r === 'skip' || r === 'stop' || r === 'retry') {
             result = r;
             break;
@@ -761,7 +963,7 @@
           }
         }
         ui.update({ phase: 'ready', status: readyMsg });
-        const m = await waitForSend(item, baseline, readyMsg);
+        const m = await waitForSend(item, baseline, readyMsg, ctx);
         if (m !== 'auto') {
           result = m;
           break;
@@ -810,6 +1012,16 @@
     }
     await sleep(800);
 
+    if (run.attachmentIds.length) {
+      ui.update({ phase: 'opening', status: 'Preparing your attachments…' });
+      try {
+        run.files = await loadFiles(run.attachmentIds);
+      } catch (e) {
+        run.items.forEach((it) => run.results.push({ name: it.name, status: 'failed', reason: 'Attachments could not be loaded' }));
+        return finish(e?.message || 'Your attachments couldn’t be loaded. Attach them again and restart.');
+      }
+    }
+
     while (run.index < run.items.length) {
       await waitWhilePaused();
       if (run.action === 'stop') break;
@@ -843,7 +1055,10 @@
 
   function startRun(payload) {
     if (run.active) return { ok: false, error: 'A send session is already running in WhatsApp Web.' };
-    const items = (payload?.items || []).filter((i) => i && i.name && i.text);
+    const attachmentIds = Array.isArray(payload?.attachments) ? payload.attachments.filter(Boolean) : [];
+    const items = (payload?.items || [])
+      .filter((i) => i && i.name && (i.text || attachmentIds.length))
+      .map((i) => ({ ...i, text: String(i.text || '') }));
     if (!items.length) return { ok: false, error: 'Nothing to send.' };
 
     Object.assign(run, {
@@ -855,6 +1070,8 @@
       action: null,
       settings: { delayMs: 2000, mode: 'manual', intervalSec: 6, randomize: true, autoAck: false, ...(payload.settings || {}) },
       held: false,
+      attachmentIds,
+      files: [],
       startedAt: Date.now(),
     });
     ui.mount();
@@ -866,7 +1083,7 @@
   function retryUnsent() {
     const byName = new Map(run.items.map((i) => [i.name, i]));
     const items = run.results.filter((r) => r.status !== 'sent').map((r) => byName.get(r.name)).filter(Boolean);
-    if (items.length) startRun({ items, settings: run.settings });
+    if (items.length) startRun({ items, settings: run.settings, attachments: run.attachmentIds });
   }
 
   // ─────────────────────── overlay panel ───────────────────────

@@ -7,6 +7,9 @@ const AVATAR_COLORS = ['#0e7c66', '#2563eb', '#7c3aed', '#db2777', '#ea580c', '#
 const CHECK_SVG = '<svg viewBox="0 0 12 12"><path d="M4.6 8.6 2.3 6.3l-.9.9 3.2 3.2 6-6-.9-.9z"/></svg>';
 const PENCIL_SVG = '<svg viewBox="0 0 20 20"><path d="M13.6 2.9a1.8 1.8 0 0 1 2.5 0l1 1a1.8 1.8 0 0 1 0 2.5L7.4 16.1 3 17l.9-4.4 9.7-9.7Zm1.4 1.1-1 1 1 1 1-1-1-1Zm-2 2L5.2 13.4l-.4 1.8 1.8-.4L14 7l-1-1Z"/></svg>';
 const FAILED = new Set(['notfound', 'failed', 'readonly']);
+const MAX_FILES = 10;
+const MAX_FILE_BYTES = 16 * 1024 * 1024;
+const MAX_TOTAL_BYTES = 64 * 1024 * 1024;
 
 const state = {
   groups: [],
@@ -15,6 +18,7 @@ const state = {
   settings: { ...DEFAULT_SETTINGS },
   templates: [],
   lists: [],
+  attachments: [],
   lastRun: null,
   filter: '',
   manageFilter: '',
@@ -40,7 +44,7 @@ function bg(type, payload = {}) {
 
 // ─────────────── storage ───────────────
 async function load() {
-  const d = await chrome.storage.local.get(['groups', 'selected', 'message', 'settings', 'lastRun', 'templates', 'lists']);
+  const d = await chrome.storage.local.get(['groups', 'selected', 'message', 'settings', 'lastRun', 'templates', 'lists', 'attachments']);
   state.groups = Array.isArray(d.groups) ? d.groups : [];
   const ids = new Set(state.groups.map((g) => g.id));
   state.selected = new Set((d.selected || []).filter((id) => ids.has(id)));
@@ -49,6 +53,7 @@ async function load() {
   state.lastRun = d.lastRun || null;
   state.templates = Array.isArray(d.templates) ? d.templates : [];
   state.lists = Array.isArray(d.lists) ? d.lists : [];
+  state.attachments = Array.isArray(d.attachments) ? d.attachments.filter((a) => a?.id && a?.data) : [];
 }
 
 const saveGroups = () => chrome.storage.local.set({ groups: state.groups, selected: [...state.selected], lists: state.lists });
@@ -432,14 +437,19 @@ function renderCounts() {
   $('selCount').textContent = state.groups.length ? `(${n} of ${state.groups.length})` : '';
   $('charCount').textContent = state.message.length.toLocaleString();
 
-  const ready = n > 0 && state.message.trim().length > 0;
+  if (state.attachments.length)
+    $('attachNote').textContent = state.message.trim()
+      ? 'Your message is sent as the caption.'
+      : 'Files will be sent without a caption. Write a message above to add one.';
+  const hasContent = state.message.trim().length > 0 || state.attachments.length > 0;
+  const ready = n > 0 && hasContent;
   const running = !!state.status.running;
   $('startBtn').disabled = !ready || running;
   const auto = state.settings.mode === 'auto';
   $('startLabel').textContent = running
     ? 'Session in progress in WhatsApp…'
-    : !state.message.trim()
-      ? 'Write a message to start'
+    : !hasContent
+      ? 'Write a message or attach a file'
       : !n
         ? 'Select groups to start'
         : auto
@@ -607,6 +617,7 @@ function renderAll() {
   renderLists();
   renderManageList();
   renderTemplateMenu();
+  renderAttachments();
   renderLastRun();
   renderStatus();
 }
@@ -884,18 +895,121 @@ async function restoreData(file) {
   }
 }
 
+// ─────────────── attachments ───────────────
+const saveAttachments = () => chrome.storage.local.set({ attachments: state.attachments });
+
+function formatBytes(n) {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+const readAsDataURL = (file) =>
+  new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = () => reject(r.error || new Error('Could not read the file'));
+    r.readAsDataURL(file);
+  });
+
+async function addAttachments(fileList) {
+  const files = [...(fileList || [])];
+  if (!files.length) return;
+  const problems = [];
+  let total = state.attachments.reduce((s, a) => s + (a.size || 0), 0);
+  let added = 0;
+  for (const f of files) {
+    if (state.attachments.length >= MAX_FILES) {
+      problems.push(`Only ${MAX_FILES} files can be attached.`);
+      break;
+    }
+    if (!f.size) {
+      problems.push(`${f.name} is empty.`);
+      continue;
+    }
+    if (f.size > MAX_FILE_BYTES) {
+      problems.push(`${f.name} is larger than 16 MB.`);
+      continue;
+    }
+    if (total + f.size > MAX_TOTAL_BYTES) {
+      problems.push('Attachments are limited to 64 MB in total.');
+      break;
+    }
+    try {
+      const data = await readAsDataURL(f);
+      state.attachments.push({ id: uid(), name: f.name, type: f.type || 'application/octet-stream', size: f.size, data });
+      total += f.size;
+      added++;
+    } catch {
+      problems.push(`${f.name} couldn’t be read.`);
+    }
+  }
+  if (added) {
+    try {
+      await saveAttachments();
+    } catch (e) {
+      state.attachments.splice(-added, added);
+      problems.push(`Couldn’t save the attachments: ${e?.message || e}`);
+      added = 0;
+    }
+  }
+  renderAttachments();
+  renderCounts();
+  if (problems.length) toast(problems[0], true);
+  else if (added) toast(`${plural(added, 'file')} attached`);
+}
+
+function removeAttachment(id) {
+  state.attachments = state.attachments.filter((a) => a.id !== id);
+  saveAttachments();
+  renderAttachments();
+  renderCounts();
+}
+
+const PLAY_SVG = '<svg viewBox="0 0 20 20" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M6 4.5v11l9-5.5-9-5.5Z"/></svg>';
+
+function renderAttachments() {
+  const list = $('attachList');
+  list.replaceChildren(
+    ...state.attachments.map((a) => {
+      const ext = (a.name.includes('.') ? a.name.split('.').pop() : 'FILE').slice(0, 4).toUpperCase();
+      let thumb;
+      if (a.type.startsWith('image/')) thumb = h('span', { class: 'attach-thumb' }, h('img', { src: a.data, alt: '' }));
+      else if (a.type.startsWith('video/')) thumb = h('span', { class: 'attach-thumb video', html: PLAY_SVG });
+      else thumb = h('span', { class: 'attach-thumb' }, ext);
+      return h(
+        'li',
+        { class: 'attach-item' },
+        thumb,
+        h('span', { class: 'attach-meta' }, h('span', { class: 'attach-name', title: a.name }, a.name), h('span', { class: 'attach-size' }, formatBytes(a.size))),
+        h('button', { type: 'button', class: 'attach-remove', title: 'Remove', 'aria-label': `Remove ${a.name}`, onclick: () => removeAttachment(a.id) }, '✕')
+      );
+    })
+  );
+  const n = state.attachments.length;
+  list.hidden = !n;
+  $('attachNote').hidden = !n;
+  $('attachNote').textContent = state.message.trim()
+    ? 'Your message is sent as the caption.'
+    : 'Files will be sent without a caption. Write a message above to add one.';
+  $('attachHint').textContent = n
+    ? `${plural(n, 'file')} · ${formatBytes(state.attachments.reduce((s, a) => s + a.size, 0))}`
+    : 'Up to 10 files · 16 MB each';
+}
+
 // ─────────────── start ───────────────
 async function start() {
   const message = state.message.trim();
+  const attachments = state.attachments.map((a) => a.id);
   const items = state.groups
     .filter((g) => state.selected.has(g.id))
     .map((g) => ({ name: g.name, text: message.replaceAll('{group}', g.name) }));
-  if (!items.length || !message) return;
+  if (!items.length || (!message && !attachments.length)) return;
 
   $('startBtn').disabled = true;
   $('startLabel').textContent = 'Opening WhatsApp Web…';
 
-  const res = await bg('BG_START', { run: { items, settings: state.settings } });
+  const res = await bg('BG_START', { run: { items, settings: state.settings, attachments } });
   if (res?.ok) {
     state.status = { ...state.status, open: true, running: true, paused: false };
     renderStatus();
@@ -1026,6 +1140,29 @@ function bind() {
         return true;
       },
     });
+  });
+
+  $('attachBtn').addEventListener('click', () => $('attachInput').click());
+  $('attachInput').addEventListener('change', (e) => {
+    addAttachments(e.target.files);
+    e.target.value = '';
+  });
+  // Files can also be dragged onto the message area.
+  const attachWrap = document.querySelector('.attach');
+  const attachZone = attachWrap.closest('.field');
+  attachZone.addEventListener('dragover', (e) => {
+    if (![...(e.dataTransfer?.types || [])].includes('Files')) return;
+    e.preventDefault();
+    attachWrap.classList.add('dragover');
+  });
+  attachZone.addEventListener('dragleave', (e) => {
+    if (!attachZone.contains(e.relatedTarget)) attachWrap.classList.remove('dragover');
+  });
+  attachZone.addEventListener('drop', (e) => {
+    if (!e.dataTransfer?.files?.length) return;
+    e.preventDefault();
+    attachWrap.classList.remove('dragover');
+    addAttachments(e.dataTransfer.files);
   });
 
   $('conn').addEventListener('click', () => bg('BG_OPEN'));

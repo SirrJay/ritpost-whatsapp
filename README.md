@@ -22,6 +22,7 @@ When you update, click the reload icon on the RitPost card. Already-open WhatsAp
    - **Import groups from WhatsApp Web** reads your chat list and shows **only groups** by default. Individual contacts sit under a separate tab. If any contacts were saved before, RitPost offers to remove them.
    - Or type a group name by hand and click **Add**.
 3. In the **Compose** tab, write your message. Type `{group}` anywhere to insert each group's name.
+   To send photos, videos or documents too, click **Attach photos, videos or files**, or drag files onto the message area.
 4. Tick the groups to send to and click **Start sending**.
 5. A RitPost panel appears in WhatsApp Web. For each group:
    - the chat opens and your message is filled in
@@ -55,6 +56,15 @@ Choose the mode in the switch above the Start button.
   - You can switch between Manual and Automatic during a session from the panel inside WhatsApp Web.
 
 > **Important:** WhatsApp's terms don't allow automated or bulk messaging. No interval makes automatic sending compliant, and any interval can lead to your account being restricted or banned. Longer intervals, smaller batches and posting only to groups that expect your messages lower the risk. Manual mode is the safe choice.
+
+## Attachments
+
+- Attach up to 10 files, each up to 16 MB (64 MB in total): photos, videos or documents.
+- For each group, RitPost hands the files to WhatsApp, which opens its attachment preview. Your message goes in as the **caption**, with `{group}` filled in.
+- **Manual mode**: check the preview and press **Enter** (or click Send).
+- **Automatic mode**: RitPost clicks Send in the preview after the countdown. If the caption couldn't be added, it holds and lets you send that group yourself.
+- Attachments stay in the panel until you remove them, so you can reuse them for the next post. They're stored only in your browser, and aren't included in backups.
+- If the preview doesn't open in a chat, click **Retry**. WhatsApp sometimes changes how it accepts files.
 
 ## Premium features
 

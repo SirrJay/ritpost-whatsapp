@@ -10,7 +10,12 @@ RitPost helps a user post one message to several of their own WhatsApp groups in
 
 **storage**
 ```
-Saves the user's group list, saved selections, message templates, draft message, settings and last-session summary locally in the browser. Nothing is sent off the device.
+Saves the user's group list, saved selections, message templates, draft message, attachments chosen for the next post, settings and last-session summary locally in the browser. Nothing is sent off the device.
+```
+
+**unlimitedStorage**
+```
+The user can attach photos, videos and documents (up to 16 MB each) to the post. They are kept in local extension storage until the user removes them, which can exceed the default 10 MB storage quota. Nothing is sent off the device.
 ```
 
 **scripting**
@@ -30,7 +35,7 @@ Lets the user export a backup file (JSON) of their saved groups, lists and templ
 
 **Host permission: https://web.whatsapp.com/***
 ```
-RitPost works only on WhatsApp Web. It reads the chat list to import group names, opens the chats the user selected, and fills in the user's message. It runs on no other site.
+RitPost works only on WhatsApp Web. It reads the chat list to import group names, opens the chats the user selected, and fills in the user's message and any files the user attached. It runs on no other site.
 ```
 
 ## Remote code
@@ -39,11 +44,11 @@ RitPost works only on WhatsApp Web. It reads the chat list to import group names
 
 ## Data usage
 
-RitPost reads **website content** (chat names and the message being written) on WhatsApp Web. Everything is processed and stored **only on the user's device**. Nothing is transmitted to the developer or anyone else.
+RitPost reads **website content** (chat names and the message being written) on WhatsApp Web, and keeps any files the user attaches. Everything is processed and stored **only on the user's device**. Nothing is transmitted to the developer or anyone else.
 
 Tick in the dashboard:
 
-- [x] **Website content**: handled locally only (group names, message text)
+- [x] **Website content**: handled locally only (group names, message text, attached files)
 - [ ] Personally identifiable information
 - [ ] Health information
 - [ ] Financial and payment information
