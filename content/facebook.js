@@ -118,13 +118,18 @@
     return boxes.find((b) => b.closest('[role="dialog"]') && postButton(b.closest('[role="dialog"]'))) || boxes[0] || null;
   }
 
-  /** A post dialog is on screen, even while Facebook re-renders its text box (e.g. building a link preview). */
-  function composerOpen() {
-    if (composerBox()) return true;
-    return $$('[role="dialog"]').some(
-      (d) => visible(d) && !d.closest('#ritpost-fb') && postButton(d) && d.querySelector('[contenteditable], [data-lexical-editor]')
+  /** The post dialog, also on Facebook's second step ("Next" → "Post settings") where the text box is hidden. */
+  function postDialog() {
+    const box = composerBox();
+    if (box) return composerScope(box);
+    return (
+      $$('[role="dialog"]').find(
+        (d) => visible(d) && !d.closest('#ritpost-fb') && postButton(d) && d.querySelector('[contenteditable], [data-lexical-editor]')
+      ) || null
     );
   }
+  /** A post dialog is on screen, even while Facebook re-renders its text box (e.g. building a link preview). */
+  const composerOpen = () => !!postDialog();
   const dialogCount = () => $$('[role="dialog"]').filter((d) => visible(d) && !d.closest('#ritpost-fb')).length;
 
   /** Candidates for the "Write something…" / "What's on your mind?" prompt, best first. */
@@ -178,8 +183,8 @@
           /* try the next way */
         }
         if (await waitFor(appeared, 3500, 200)) {
-          // Something opened: give the text box time to appear instead of clicking again.
-          return !!(await waitFor(composerBox, 8000, 250));
+          // Something opened: give the text box time to appear (Pages take several seconds) instead of clicking again.
+          return !!(await waitFor(composerBox, 15000, 250));
         }
       }
     }
@@ -193,10 +198,15 @@
       .replace(/[\u200e\u200f\u202a-\u202e]/g, '')
       .trim();
   function sameName(a, b) {
+    // Exact match, ignoring spacing/case. A name Facebook cut short with "…" may match its beginning.
     const x = loose(cleanName(a));
     const y = loose(cleanName(b));
     if (!x || !y) return false;
-    return x === y || (Math.min(x.length, y.length) >= 6 && (x.startsWith(y) || y.startsWith(x)));
+    if (x === y) return true;
+    const cut = (v) => v.endsWith('…') || v.endsWith('...');
+    if (cut(x)) return y.startsWith(x.replace(/(…|\.\.\.)$/, ''));
+    if (cut(y)) return x.startsWith(y.replace(/(…|\.\.\.)$/, ''));
+    return false;
   }
   const clickableOf = (el) =>
     el.closest('[role="button"], [role="menuitem"], [role="menuitemradio"], [role="radio"], [role="option"], [role="link"], a, button, [tabindex="0"]') || el;
@@ -204,14 +214,20 @@
 
   /** A switch button Facebook shows on a Page you manage ("Switch now", "Switch to <Page>", the sidebar switch icon). */
   function switchButton(name) {
+    const found = $$('[role="button"], button, a, [role="link"]').filter((b) => {
+      if (!visible(b) || b.closest('#ritpost-fb') || b.closest('[role="banner"]')) return false;
+      const l = (b.getAttribute('aria-label') || textOf(b)).trim();
+      if (SWITCH_WORD_RE.test(l)) return true;
+      const m = l.match(/^switch (?:to|into) (.{2,90}?)(?:['’]s page| page)?$/i);
+      return !!(m && name && sameName(m[1], name));
+    });
+    // Prefer the "Switch Now" banner on the Page itself, then any other switch button (e.g. the sidebar).
+    const label = (b) => (b.getAttribute('aria-label') || textOf(b)).trim();
     return (
-      $$('[role="button"], button, a, [role="link"]').find((b) => {
-        if (!visible(b) || b.closest('#ritpost-fb') || b.closest('[role="banner"]')) return false;
-        const l = (b.getAttribute('aria-label') || textOf(b)).trim();
-        if (SWITCH_WORD_RE.test(l)) return true;
-        const m = l.match(/^switch (?:to|into) (.{2,90}?)(?:['’]s page| page)?$/i);
-        return !!(m && name && sameName(m[1], name));
-      }) || null
+      found.find((b) => b.closest('[role="main"]') && /^switch now$/i.test(label(b))) ||
+      found.find((b) => b.closest('[role="main"]')) ||
+      found[0] ||
+      null
     );
   }
 
@@ -219,7 +235,7 @@
   function accountButton() {
     const bar = document.querySelector('[role="banner"]') || document.body;
     const labelled = $$('[role="button"], [role="link"], a, button', bar).filter(
-      (b) => visible(b) && /^(your profile|account|accounts|account controls and settings|profile|your profiles)$/i.test((b.getAttribute('aria-label') || '').trim())
+      (b) => visible(b) && /(^account\b|your profile|^profile$|account controls)/i.test((b.getAttribute('aria-label') || '').trim())
     );
     if (labelled.length) return labelled.at(-1);
     const withPic = $$('image, img', bar)
@@ -257,10 +273,53 @@
     if (ok) ok.click();
   }
 
+  /** "Switch to <name>" buttons in the open profile menu: [{ name, el }]. */
+  function switchOptions() {
+    const out = [];
+    for (const root of menuRoots()) {
+      for (const b of $$('[role="button"], [role="menuitem"], [role="radio"], [role="link"], a', root)) {
+        if (!visible(b)) continue;
+        const m = (b.getAttribute('aria-label') || '').trim().match(/^switch to\s+(.+)$/i);
+        if (m && !/^a different profile/i.test(m[1])) out.push({ name: m[1].trim(), el: b });
+      }
+    }
+    return out;
+  }
+  /** The profile you are currently using (top of the profile menu). */
+  function currentProfileName() {
+    const root = menuRoots().find((r) => /your profile/i.test(r.getAttribute('aria-label') || '')) || menuRoots()[0];
+    const first = root && $$('[role="link"], a', root).find((a) => visible(a) && textOf(a));
+    return first ? cleanName(textOf(first)) : '';
+  }
+  async function knownPageNames() {
+    const { fbTargets, fbPageNames } = await chrome.storage.local.get(['fbTargets', 'fbPageNames']);
+    return [...(fbTargets || []).filter((t) => t.kind === 'page').map((t) => cleanName(t.name)), ...(fbPageNames || [])].filter(Boolean);
+  }
+  /** Remember which profile is the user's own (anything that isn't one of their Pages). */
+  async function rememberPersonal() {
+    const cur = currentProfileName();
+    if (!cur) return;
+    const pages = await knownPageNames();
+    if (!pages.some((n) => sameName(n, cur))) await chrome.storage.local.set({ fbPersonalName: cur });
+  }
+
   /** Use Facebook's profile menu: pick the profile `test` matches (opening "See all profiles" if needed). */
   async function switchViaMenu(test) {
     if (!(await openAccountMenu())) return false;
-    let item = findInMenus(test);
+    await rememberPersonal();
+    const pick = () => {
+      const opts = switchOptions();
+      return (opts.find((o) => test(o.name, o.el, true)) || {}).el || null;
+    };
+    let item = pick();
+    if (!item) {
+      const seeAll = findInMenus((t) => /^see all profiles$/i.test(t));
+      if (seeAll) {
+        seeAll.click();
+        item = await waitFor(pick, 5000, 250);
+      }
+    }
+    if (!item) item = findInMenus(test);
     if (!item) {
       const seeAll = findInMenus((t) => /^see all profiles$/i.test(t));
       if (seeAll) {
@@ -285,12 +344,17 @@
       await confirmSwitch();
       return true;
     }
-    return switchViaMenu((t) => sameName(t, name) || sameName(t.replace(/^switch to\s+/i, ''), name));
+    return switchViaMenu((t) => sameName(t.replace(/^switch to\s+/i, ''), name));
   }
 
-  /** Start switching back to your own profile (anything in the profile menu that isn't one of your Pages). */
+  /** Start switching back to your own profile (the remembered one, or the only profile that isn't one of your Pages). */
   async function switchToPersonal(pageNames) {
-    const isPage = (n) => pageNames.some((p) => sameName(n, p));
+    const { fbPersonalName } = await chrome.storage.local.get('fbPersonalName');
+    const allPages = [...pageNames, ...(await knownPageNames())];
+    const isPage = (n) => allPages.some((p) => sameName(n, p));
+    if (fbPersonalName) {
+      if (await switchViaMenu((t) => sameName(t.replace(/^switch to\s+/i, ''), fbPersonalName))) return true;
+    }
     // On a group, Facebook may offer a plain "Switch" button to go back to your profile.
     const main = document.querySelector('[role="main"]');
     const direct = main && $$('[role="button"], button', main).find((b) => visible(b) && SWITCH_WORD_RE.test((b.getAttribute('aria-label') || textOf(b)).trim()));
@@ -300,16 +364,25 @@
       return true;
     }
     const SKIP = /(see all profiles|settings|privacy|help|support|display|accessibility|feedback|log ?out|create|business suite|ads manager|professional dashboard|page|switch$)/i;
-    const byLabel = await switchViaMenu((t) => {
-      const m = t.match(/^switch to\s+(.+)$/i);
-      return !!(m && !isPage(m[1]));
-    });
-    if (byLabel) return true;
-    return switchViaMenu((t, el) => {
-      if (SKIP.test(t) || isPage(t) || t.length > 60) return false;
-      const box = clickableOf(el);
-      return !!box.querySelector('image, img, svg image') && /^[\p{L}][\p{L}\p{M}.'’ -]{1,58}$/u.test(t);
-    });
+    void SKIP;
+    if (!(await openAccountMenu())) return false;
+    let opts = switchOptions().filter((o) => !isPage(o.name));
+    if (!opts.length) {
+      const seeAll = findInMenus((t) => /^see all profiles$/i.test(t));
+      if (seeAll) {
+        seeAll.click();
+        await waitFor(() => switchOptions().filter((o) => !isPage(o.name)).length, 5000, 250);
+        opts = switchOptions().filter((o) => !isPage(o.name));
+      }
+    }
+    if (opts.length !== 1) {
+      closeMenus();
+      return false; // unsure which profile is yours: don't guess
+    }
+    await chrome.storage.local.set({ fbPersonalName: cleanName(opts[0].name) });
+    opts[0].el.click();
+    await confirmSwitch();
+    return true;
   }
 
   // Facebook messages that mean "stop posting now".
@@ -354,6 +427,21 @@
     let box = await waitFor(composerBox, 5000, 200);
     if (!box) return false;
     if (hasText(box, text)) return true;
+    if (loose(textOf(box))) {
+      // Facebook kept an old draft in the box: clear it so the post isn't mixed with old text.
+      for (let i = 0; i < 3 && loose(textOf(composerBox() || box)); i++) {
+        const b = composerBox() || box;
+        b.focus();
+        const sel = window.getSelection();
+        const r = document.createRange();
+        r.selectNodeContents(b);
+        sel.removeAllRanges();
+        sel.addRange(r);
+        b.dispatchEvent(new InputEvent('beforeinput', { inputType: 'deleteContentBackward', bubbles: true, cancelable: true, composed: true }));
+        await sleep(300);
+      }
+      box = composerBox() || box;
+    }
     const before = loose(textOf(box)).length;
     insertText(box, text);
     // Facebook may re-render the box while it fetches a link preview: keep checking for a few seconds.
@@ -450,7 +538,7 @@
       const b = e.target.closest?.('[role="button"], button');
       if (!b) return;
       const l = (b.getAttribute('aria-label') || textOf(b)).trim();
-      if (POST_RE.test(l) && composerScope(composerBox())?.contains(b)) lastPostClick = Date.now();
+      if (POST_RE.test(l) && b.closest('[role="dialog"]')?.querySelector('[contenteditable], [data-lexical-editor]')) lastPostClick = Date.now();
     },
     true
   );
@@ -592,7 +680,11 @@
     await setRun(run);
   }
 
+  let leaving = false; // this page has started navigating away; it must not act any more
   async function goToCurrent(run) {
+    leaving = true;
+    session++;
+    clearTimers();
     run.status = 'running';
     run.navigatedFor = run.index;
     run.navAt = Date.now();
@@ -643,7 +735,7 @@
     const my = ++session;
     const alive = () => my === session;
     const item = run.items[run.index];
-    const base = { meta: meta(run), mode: modeTag(run), name: item.name, progress: progress(run) };
+    const base = { meta: meta(run), mode: modeTag(run), name: cleanName(item.name), progress: progress(run) };
     const stopBtn = { label: 'Stop', kind: 'danger', run: () => stopRun() };
     const skipBtn = { label: 'Skip', run: () => record('skipped') };
     const retry = () => {
@@ -797,7 +889,7 @@
 
     ui.update({ ...base, msg: 'Waiting for uploads to finish, then posting…', buttons: [skipBtn, stopBtn] });
     const ready = () => {
-      const b = postButton(composerScope(composerBox()));
+      const b = postButton(postDialog());
       return b && b.getAttribute('aria-disabled') !== 'true' && !b.disabled ? b : null;
     };
     let btn = await waitFor(() => !alive() || ready(), 180000, 500);
@@ -815,7 +907,7 @@
         btn.getAttribute('aria-disabled') === 'true' ||
         (ready() && ready() !== btn) ||
         facebookMessage(BLOCK_RE) ||
-        /\b(posting|sharing|publishing)\b/i.test(textOf(composerScope(composerBox())).slice(0, 3000));
+        /\b(posting|publishing)…?$/im.test(textOf(postDialog()).slice(0, 3000));
       for (const click of CLICKS.slice(0, 3)) {
         click(btn);
         if (await waitFor(reacted, 8000, 250)) break;
@@ -829,7 +921,7 @@
       if (!alive() || !composerOpen() || facebookMessage(BLOCK_RE)) return;
       // "Next" leads to another step with the real Post button.
       if (NEXT_RE.test(label)) {
-        btn = await waitFor(ready, 8000, 300);
+        btn = await waitFor(ready, 15000, 300);
         if (!btn) break;
         continue;
       }
@@ -912,8 +1004,14 @@
     });
   }
 
+  // Only a real change of step (run, status, position, timer, dismissed) restarts the work on this page.
+  const runKey = (r) => (r ? `${r.id}|${r.status}|${r.index}|${r.nextAt || 0}|${r.dismissed ? 1 : 0}` : '');
+  let lastKey = null;
+
   async function tick(force = false) {
+    if (leaving) return;
     const run = await getRun();
+    lastKey = runKey(run);
     if (myTabId == null) myTabId = (await bg('BG_FB_TABID'))?.tabId ?? null;
     if (!run || run.tabId !== myTabId) {
       session++;
@@ -945,6 +1043,16 @@
     busy = true;
     clearTimers();
     try {
+      if (run.index === 0 && !run.learnedPersonal && run.items.some((i) => i.kind === 'page')) {
+        run.learnedPersonal = true;
+        await setRun(run);
+        const { fbPersonalName } = await chrome.storage.local.get('fbPersonalName');
+        if (!fbPersonalName && (await openAccountMenu())) {
+          await rememberPersonal();
+          closeMenus();
+          await sleep(500);
+        }
+      }
       await prepare(run);
     } catch (e) {
       ui.update({
@@ -961,12 +1069,10 @@
     }
   }
 
-  let lastKey = '';
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local' || !changes.fbRun) return;
-    const r = changes.fbRun.newValue;
-    const key = r ? `${r.id}|${r.status}|${r.index}|${r.nextAt || 0}|${r.dismissed ? 1 : 0}` : '';
-    if (key === lastKey) return;
+    const key = runKey(changes.fbRun.newValue);
+    if (key === lastKey) return; // e.g. RitPost noting a switch attempt: not a new step
     lastKey = key;
     busy = false;
     tick();
@@ -1048,7 +1154,9 @@
       last = n;
     }
     window.scrollTo(0, 0);
-    return collect().map(({ name, url }) => ({ name, url }));
+    const items = collect().map(({ name, url }) => ({ name, url }));
+    if (kind === 'pages' && items.length) await chrome.storage.local.set({ fbPageNames: items.map((i) => i.name) });
+    return items;
   }
 
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
