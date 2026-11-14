@@ -38,10 +38,10 @@ HOW IT WORKS (WHATSAPP)
 4. Send each message with Enter, or turn on Automatic mode to send after a countdown you control.
 
 FACEBOOK GROUPS AND PAGES
-1. Import the Facebook groups you've joined, or paste a group or Page link.
-2. Tick where to post and press Post to Facebook.
-3. RitPost opens each one, fills in your message and attaches your photos and videos. You check it and click Post yourself.
-4. RitPost waits between posts (60 seconds by default) so they aren't flagged as spam.
+1. Import the Facebook groups you've joined and the Pages you manage (kept in separate lists), or paste a link.
+2. Tick where to post and choose Manual or Automatic.
+3. RitPost opens each one, fills in your message and attaches your photos and videos.
+4. Manual: you click Post. Automatic: RitPost posts after a review countdown, waits at least 2 minutes between posts (5 by default), stops at a daily limit and stops at once if Facebook shows a posting limit.
 
 FEATURES
 • One-click import of your groups from WhatsApp Web (groups only, no individual contacts)
@@ -53,7 +53,7 @@ FEATURES
 • Progress panel with Skip, Pause, Stop and Retry
 • Optional Automatic mode with an adjustable interval (5–600 s) and a visible countdown you can hold or cancel
 • Session summary with one-click "Retry unsent"
-• Post the same message to Facebook groups and your own Facebook Pages (you click Post)
+• Post the same message to Facebook groups and the Pages you manage, manually or automatically with safe pacing
 • Backup and restore of groups, lists, templates and Facebook groups
 • Light and dark mode
 
@@ -62,7 +62,7 @@ Everything stays in your browser. RitPost has no servers, no accounts, no analyt
 
 PLEASE NOTE
 • Manual mode, where you press Enter for each message, is the default.
-• On Facebook, RitPost never clicks Post. Posting the same thing to many groups quickly can still get posts held or your account limited by Facebook.
+• Facebook's terms don't allow automated posting. Automatic Facebook posting is optional; even with long intervals it can lead to posts being held or your account being limited. Manual is the default.
 • WhatsApp's terms don't allow automated or bulk messaging. Automatic mode is optional, and using it can lead to WhatsApp restricting your account. Only post to groups that expect your messages.
 • RitPost is an independent tool. It is not affiliated with, endorsed by or sponsored by WhatsApp, Facebook or Meta. WhatsApp and Facebook are trademarks of their respective owners.
 ```

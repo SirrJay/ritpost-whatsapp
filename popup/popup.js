@@ -1622,8 +1622,10 @@ async function start() {
 }
 
 // ─────────────── Facebook ───────────────
-const FB_MIN_GAP = 30;
-const fb = { targets: [], selected: new Set(), gapSec: 60, run: null, filter: '' };
+const FB_MIN_GAP = 30; // seconds, manual mode
+const FB_MIN_INTERVAL_MIN = 2; // minutes, automatic mode
+const FB_DEFAULTS = { mode: 'manual', gapSec: 60, intervalMin: 5, dailyLimit: 20, reviewSec: 10 };
+const fb = { targets: [], selected: new Set(), settings: { ...FB_DEFAULTS }, run: null, filter: '', kind: 'group', daily: 0 };
 const isMedia = (a) => /^(image|video)\//.test(a?.type || '');
 
 /** Normalise a Facebook link; returns { url, kind, slug } or null. */
@@ -1644,20 +1646,32 @@ function parseFbUrl(raw) {
   if (/^\/profile\.php$/i.test(path) && u.searchParams.get('id'))
     return { url: `https://www.facebook.com/profile.php?id=${u.searchParams.get('id')}`, kind: 'page', slug: u.searchParams.get('id') };
   const p = path.match(/^\/(?:pg\/)?([^/]+)/);
-  if (!p || /^(home\.php|watch|marketplace|gaming|events|friends|messages|notifications|login|groups)$/i.test(p[1])) return null;
+  if (!p || /^(home\.php|watch|marketplace|gaming|events|friends|messages|notifications|login|groups|pages)$/i.test(p[1])) return null;
   return { url: `https://www.facebook.com/${p[1]}`, kind: 'page', slug: decodeURIComponent(p[1]) };
 }
 const fbKey = (url) => String(url).toLowerCase().replace(/\/+$/, '');
 
 async function fbLoad() {
-  const d = await chrome.storage.local.get(['fbTargets', 'fbSelected', 'fbSettings', 'fbRun']);
-  fb.targets = (Array.isArray(d.fbTargets) ? d.fbTargets : []).filter((t) => t?.id && t?.url && t?.name).sort(byName);
+  const d = await chrome.storage.local.get(['fbTargets', 'fbSelected', 'fbSettings', 'fbRun', 'fbDaily']);
+  fb.targets = (Array.isArray(d.fbTargets) ? d.fbTargets : [])
+    .filter((t) => t?.id && t?.url && t?.name)
+    .map((t) => ({ ...t, kind: t.kind === 'page' ? 'page' : 'group' }))
+    .sort(byName);
   const ids = new Set(fb.targets.map((t) => t.id));
   fb.selected = new Set((d.fbSelected || []).filter((id) => ids.has(id)));
-  fb.gapSec = Math.max(FB_MIN_GAP, Number(d.fbSettings?.gapSec) || 60);
+  const s = { ...FB_DEFAULTS, ...(d.fbSettings || {}) };
+  fb.settings = {
+    mode: s.mode === 'auto' ? 'auto' : 'manual',
+    gapSec: Math.min(900, Math.max(FB_MIN_GAP, Number(s.gapSec) || 60)),
+    intervalMin: Math.min(60, Math.max(FB_MIN_INTERVAL_MIN, Number(s.intervalMin) || 5)),
+    dailyLimit: Math.min(50, Math.max(1, Number(s.dailyLimit) || 20)),
+    reviewSec: Math.min(120, Math.max(5, Number(s.reviewSec) || 10)),
+  };
   fb.run = d.fbRun || null;
+  fb.daily = d.fbDaily?.day === new Date().toISOString().slice(0, 10) ? d.fbDaily.count : 0;
 }
 const fbSave = () => persist({ fbTargets: fb.targets, fbSelected: [...fb.selected] });
+const fbSaveSettings = () => persist({ fbSettings: fb.settings });
 
 /** WhatsApp marks (*bold*, _italic_, ~strike~, ```mono```) don't format on Facebook. */
 function fbText(text) {
@@ -1666,7 +1680,14 @@ function fbText(text) {
     .replace(/(^|[\s(])([*_~])(?=\S)([^\n]*?\S)\2(?=$|[\s).,!?:;])/gm, '$1$3');
 }
 
-const fbNoun = (n) => (n === 1 ? 'group/Page' : 'groups/Pages');
+const fbOf = (kind) => fb.targets.filter((t) => t.kind === kind);
+const fbSelOf = (kind) => fb.targets.filter((t) => t.kind === kind && fb.selected.has(t.id));
+function fbWhat(groups, pages) {
+  const parts = [];
+  if (groups) parts.push(plural(groups, 'group'));
+  if (pages) parts.push(`${pages} Page${pages === 1 ? '' : 's'}`);
+  return parts.join(' + ');
+}
 
 function fbAdd(entries) {
   const have = new Set(fb.targets.map((t) => fbKey(t.url)));
@@ -1674,7 +1695,7 @@ function fbAdd(entries) {
   for (const e of entries) {
     if (!e?.url || have.has(fbKey(e.url))) continue;
     have.add(fbKey(e.url));
-    fb.targets.push({ id: uid(), name: normName(e.name) || e.url, url: e.url, kind: e.kind || 'group', addedAt: Date.now() });
+    fb.targets.push({ id: uid(), name: normName(e.name) || e.url, url: e.url, kind: e.kind === 'page' ? 'page' : 'group', addedAt: Date.now() });
     added++;
   }
   fb.targets.sort(byName);
@@ -1706,10 +1727,26 @@ function fbActive() {
   return !!fb.run && (fb.run.status === 'running' || fb.run.status === 'waiting');
 }
 
+function renderFbKind() {
+  const isPage = fb.kind === 'page';
+  document.querySelectorAll('#fbKindSeg button').forEach((b) => {
+    const on = b.dataset.kind === fb.kind;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-selected', String(on));
+  });
+  $('fbGroupCount').textContent = String(fbOf('group').length);
+  $('fbPageCount').textContent = String(fbOf('page').length);
+  $('fbImportLabel').textContent = isPage ? 'Import Pages I manage' : 'Import my Facebook groups';
+  $('fbUrl').placeholder = isPage ? 'Paste a Page link (facebook.com/YourPage)' : 'Paste a group link (facebook.com/groups/…)';
+  $('fbListTitle').textContent = isPage ? 'Pages' : 'Groups';
+  $('fbFilter').placeholder = isPage ? 'Filter Pages' : 'Filter groups';
+}
+
 function renderFbList() {
   const list = $('fbList');
   const q = keyOf(fb.filter);
-  const shown = fb.targets.filter((t) => !q || keyOf(t.name).includes(q) || t.url.toLowerCase().includes(q));
+  const ofKind = fbOf(fb.kind);
+  const shown = ofKind.filter((t) => !q || keyOf(t.name).includes(q) || t.url.toLowerCase().includes(q));
   const results = new Map((fb.run?.results || []).map((r) => [r.id, r.status]));
   list.replaceChildren(
     ...shown.map((t) => {
@@ -1719,7 +1756,7 @@ function renderFbList() {
           ? h('span', { class: 'kind-tag ok' }, 'Posted')
           : st === 'failed' || st === 'skipped'
           ? h('span', { class: 'kind-tag fail' }, st === 'failed' ? 'Failed' : 'Skipped')
-          : h('span', { class: `kind-tag ${t.kind}` }, t.kind === 'page' ? 'Page' : 'Group');
+          : null;
       const del = h(
         'button',
         {
@@ -1750,10 +1787,19 @@ function renderFbList() {
       return row;
     })
   );
-  if (!shown.length && fb.targets.length) list.append(h('li', { class: 'note' }, 'No matches'));
-  list.hidden = !fb.targets.length;
-  $('fbFilterWrap').hidden = fb.targets.length < 8;
-  $('fbEmpty').hidden = !!fb.targets.length;
+  if (!shown.length && ofKind.length) list.append(h('li', { class: 'note' }, 'No matches'));
+  list.hidden = !ofKind.length;
+  $('fbFilterWrap').hidden = ofKind.length < 8;
+  const empty = $('fbEmpty');
+  empty.hidden = !!ofKind.length;
+  empty.replaceChildren(
+    ...(fb.kind === 'page'
+      ? [
+          h('p', {}, h('strong', {}, 'No Pages yet')),
+          h('p', { class: 'muted' }, 'Import the Pages you manage, or paste a Page link above. When it’s a Page’s turn, RitPost switches to the Page’s profile so the post comes from your Page.'),
+        ]
+      : [h('p', {}, h('strong', {}, 'No Facebook groups yet')), h('p', { class: 'muted' }, 'Import the groups you’ve joined, or paste a group link above.')])
+  );
 }
 
 function renderFbMessage() {
@@ -1765,10 +1811,37 @@ function renderFbMessage() {
   el.classList.toggle('empty-msg', !text && !media);
 }
 
+function renderFbMode() {
+  const auto = fb.settings.mode === 'auto';
+  document.querySelectorAll('#fbModeSeg button').forEach((b) => {
+    const on = b.dataset.mode === fb.settings.mode;
+    b.classList.toggle('on', on);
+    b.classList.toggle('auto', on && auto);
+    b.setAttribute('aria-checked', String(on));
+  });
+  $('fbGapRow').hidden = auto;
+  $('fbAutoRows').hidden = !auto;
+  $('fbGap').value = String(fb.settings.gapSec);
+  $('fbInterval').value = String(fb.settings.intervalMin);
+  $('fbDailyLimit').value = String(fb.settings.dailyLimit);
+  $('fbReview').value = String(fb.settings.reviewSec);
+  $('fbTodayCount').textContent = `Posted today: ${fb.daily}.`;
+  $('fbModeHint').textContent = auto
+    ? `RitPost fills in each post, gives you ${fb.settings.reviewSec} s to check it, then clicks Post. It waits ${fb.settings.intervalMin}–${Math.round(fb.settings.intervalMin * 1.3)} minutes between posts, stops at ${fb.settings.dailyLimit} posts a day, and stops at once if Facebook shows a posting limit.`
+    : 'RitPost fills in each post; you check it and click Post yourself.';
+}
+
 function renderFbCounts() {
-  const n = fb.selected.size;
+  const g = fbSelOf('group').length;
+  const p = fbSelOf('page').length;
+  const n = g + p;
+  const ofKind = fbOf(fb.kind);
+  const selKind = fbSelOf(fb.kind).length;
   $('fbCount').textContent = String(fb.targets.length);
-  $('fbSelCount').textContent = fb.targets.length ? `(${n} of ${fb.targets.length})` : '';
+  $('fbGroupCount').textContent = String(fbOf('group').length);
+  $('fbPageCount').textContent = String(fbOf('page').length);
+  $('fbSelCount').textContent = ofKind.length ? `(${selKind} of ${ofKind.length})` : '';
+  $('fbSelSummary').textContent = n ? `Selected: ${fbWhat(g, p)}${g && p ? ' (groups first, then Pages)' : ''}` : '';
   const hasContent = !!state.message.trim() || state.attachments.some(isMedia);
   $('fbStartBtn').disabled = !n || !hasContent || fbActive();
   $('fbStartLabel').textContent = fbActive()
@@ -1776,7 +1849,7 @@ function renderFbCounts() {
     : !hasContent
     ? 'Write a message first'
     : n
-    ? `Post to ${n} Facebook ${fbNoun(n)}`
+    ? `${fb.settings.mode === 'auto' ? 'Auto-post' : 'Post'} to ${fbWhat(g, p)}`
     : 'Pick groups or Pages';
 }
 
@@ -1787,7 +1860,7 @@ function renderFbRun() {
   if (active) {
     $('fbRunTitle').textContent =
       r.status === 'waiting' ? 'Waiting before the next post…' : `Posting: ${short(r.items[r.index]?.name || '', 30)}`;
-    $('fbRunMeta').textContent = `${Math.min(r.index + 1, r.items.length)} of ${r.items.length}`;
+    $('fbRunMeta').textContent = `${Math.min(r.index + 1, r.items.length)} of ${r.items.length}${r.mode === 'auto' ? ' · Automatic' : ''}`;
     $('fbRunFill').style.width = `${Math.round((r.index / r.items.length) * 100)}%`;
   }
   const last = $('fbLastRun');
@@ -1797,18 +1870,18 @@ function renderFbRun() {
     last.hidden = false;
     last.replaceChildren(
       h('span', {}, `${r.status === 'stopped' ? 'Stopped' : 'Last Facebook session'}: ${okIds.size} of ${r.items.length} posted · ${timeAgo(r.finishedAt || r.startedAt)}`),
+      r.stopReason ? h('div', { class: 'stop-reason' }, r.stopReason) : null,
       notDone
         ? h(
             'button',
             {
               type: 'button',
               class: 'link',
-              style: 'margin-left:8px',
               onclick: () => {
                 fb.selected = new Set(r.items.map((x) => x.id).filter((id) => !okIds.has(id) && fb.targets.some((t) => t.id === id)));
                 persist({ fbSelected: [...fb.selected] });
                 renderFb();
-                toast(`Selected ${fb.selected.size} unposted ${fbNoun(fb.selected.size)}`);
+                toast(`Selected ${fbWhat(fbSelOf('group').length, fbSelOf('page').length)} not posted yet`);
               },
             },
             'Select unposted'
@@ -1820,47 +1893,103 @@ function renderFbRun() {
 }
 
 function renderFb() {
-  $('fbGap').value = String(fb.gapSec);
+  renderFbKind();
   renderFbMessage();
+  renderFbMode();
   renderFbList();
   renderFbRun();
 }
 
 async function fbImport() {
+  const kind = fb.kind;
   const btn = $('fbImportBtn');
   const label = $('fbImportLabel');
   const old = label.textContent;
   btn.disabled = true;
-  label.textContent = 'Reading your groups on Facebook…';
+  label.textContent = kind === 'page' ? 'Reading your Pages on Facebook…' : 'Reading your groups on Facebook…';
   try {
-    const res = await bg('BG_FB_SCAN');
-    if (!res?.ok) return toast(res?.error || 'Couldn’t read your Facebook groups.', true);
-    if (!res.groups?.length) return toast('No groups found. Make sure you’re signed in to Facebook and have joined some groups.', true);
-    const added = fbAdd(res.groups.map((g) => ({ ...g, kind: 'group' })));
-    toast(added ? `Imported ${plural(added, 'group')} (${res.groups.length} found)` : `All ${res.groups.length} groups were already saved`);
+    const res = await bg('BG_FB_SCAN', { kind: kind === 'page' ? 'pages' : 'groups' });
+    const items = res?.items || res?.groups || [];
+    if (!res?.ok) return toast(res?.error || 'Couldn’t read Facebook.', true);
+    if (!items.length)
+      return toast(
+        kind === 'page'
+          ? 'No Pages found. Make sure you’re signed in as yourself (not as a Page) and manage at least one Page.'
+          : 'No groups found. Make sure you’re signed in to Facebook and have joined some groups.',
+        true
+      );
+    const added = fbAdd(items.map((g) => ({ ...g, kind })));
+    const noun = kind === 'page' ? 'Page' : 'group';
+    toast(added ? `Imported ${added} ${noun}${added === 1 ? '' : 's'} (${items.length} found)` : `All ${items.length} ${noun}s were already saved`);
   } finally {
     btn.disabled = false;
     label.textContent = old;
   }
 }
 
+function confirmFbAuto() {
+  return new Promise((resolve) => {
+    openDialog({
+      title: 'Turn on automatic Facebook posting?',
+      confirmText: 'Turn on automatic',
+      body: [
+        h('p', {}, 'RitPost will click Post for you after a review countdown on each group or Page.'),
+        h(
+          'ul',
+          { class: 'risk' },
+          h('li', {}, 'Facebook’s terms don’t allow automated posting, and no interval is guaranteed to be safe. Facebook can hold posts for review, limit your posting or restrict your account.'),
+          h('li', {}, `To keep the risk low, RitPost waits at least ${FB_MIN_INTERVAL_MIN} minutes between posts (5 by default, randomised), stops at your daily limit (20 by default), and stops at once if Facebook shows a “temporarily blocked” or posting-limit message.`),
+          h('li', {}, 'Post only to groups that welcome your posts and follow each group’s rules. Repeating the same post in many groups is what Facebook flags most.')
+        ),
+        h('p', { class: 'muted' }, 'Every post shows a countdown with Post now, Hold, Skip and Stop. You can switch back to Manual at any time.'),
+      ],
+      onConfirm: () => {
+        resolve(true);
+        return true;
+      },
+      onCancel: () => resolve(false),
+    });
+  });
+}
+
+async function fbSetMode(mode) {
+  if (mode === fb.settings.mode) return;
+  if (mode === 'auto' && !(await confirmFbAuto())) return;
+  fb.settings.mode = mode;
+  fbSaveSettings();
+  renderFbMode();
+  renderFbCounts();
+  toast(mode === 'auto' ? 'Automatic Facebook posting on' : 'Manual Facebook posting');
+}
+
 function fbConfirmStart() {
-  const items = fb.targets.filter((t) => fb.selected.has(t.id));
-  if (!items.length || fbActive()) return;
+  if (fbActive()) return;
+  // Groups first (posted as you), then Pages (RitPost switches to each Page's profile).
+  const items = [...fbSelOf('group'), ...fbSelOf('page')];
+  if (!items.length) return;
   const message = state.message.trim();
   const media = state.attachments.filter(isMedia);
   if (!message && !media.length) return;
-  const pages = items.filter((t) => t.kind === 'page').length;
+  const g = fbSelOf('group').length;
+  const p = fbSelOf('page').length;
   const docs = state.attachments.length - media.length;
+  const auto = fb.settings.mode === 'auto';
+  const remainingToday = Math.max(0, fb.settings.dailyLimit - fb.daily);
+  if (auto && !remainingToday) return toast(`Today’s limit of ${fb.settings.dailyLimit} Facebook posts is reached. Continue tomorrow, or raise the limit.`, true);
   openDialog({
-    title: `Post to ${items.length} Facebook ${fbNoun(items.length)}`,
+    title: `${auto ? 'Auto-post' : 'Post'} to ${fbWhat(g, p)}`,
     confirmText: 'Start',
     body: h(
       'div',
       {},
-      h('p', {}, 'RitPost opens each one on Facebook, fills in your message and attaches your photos and videos. ', h('b', {}, 'You check the post and click Post yourself.')),
-      h('p', { class: 'muted' }, `After each post RitPost waits about ${fb.gapSec} seconds before the next one. Posting the same thing to many groups quickly can still get posts held for review or your account temporarily limited by Facebook.`),
-      pages ? h('p', { class: 'muted' }, 'Posting on your own Page: switch to the Page’s profile on Facebook first, otherwise Facebook shows no post box or posts as you.') : null,
+      auto
+        ? h('p', {}, `RitPost opens each one, fills in your message and photos/videos, gives you ${fb.settings.reviewSec} s to check it, then clicks Post. It waits about ${fb.settings.intervalMin}–${Math.round(fb.settings.intervalMin * 1.3)} minutes between posts.`)
+        : h('p', {}, 'RitPost opens each one, fills in your message and photos/videos. ', h('b', {}, 'You check the post and click Post yourself.'), ` RitPost then waits about ${fb.settings.gapSec} s before the next one.`),
+      auto && items.length > remainingToday
+        ? h('p', { class: 'muted' }, `Only ${remainingToday} more post${remainingToday === 1 ? '' : 's'} fit today’s limit; RitPost stops there and you can continue tomorrow with “Select unposted”.`)
+        : null,
+      auto ? h('p', { class: 'muted' }, `This takes roughly ${Math.round((Math.min(items.length, remainingToday) - 1) * fb.settings.intervalMin * 1.15)} minutes. Keep the Facebook tab open; you can use other tabs meanwhile.`) : null,
+      p ? h('p', { class: 'muted' }, 'Pages come after groups. When it’s a Page’s turn, RitPost clicks Facebook’s “Switch now” so the post comes from the Page. Afterwards you’ll still be using Facebook as the last Page; switch back from your profile picture.') : null,
       docs ? h('p', { class: 'muted' }, `${plural(docs, 'document')} will be left out (Facebook gets photos and videos only).`) : null
     ),
     onConfirm: () => {
@@ -1868,11 +1997,15 @@ function fbConfirmStart() {
         const run = {
           items: items.map((t) => ({ id: t.id, name: t.name, url: t.url, kind: t.kind, text: fbText(message.replaceAll('{group}', t.name)) })),
           attachmentIds: media.map((a) => a.id),
-          gapSec: fb.gapSec,
+          mode: fb.settings.mode,
+          gapSec: fb.settings.gapSec,
+          intervalSec: fb.settings.intervalMin * 60,
+          dailyLimit: fb.settings.dailyLimit,
+          reviewSec: fb.settings.reviewSec,
         };
         $('fbStartBtn').disabled = true;
         const res = await bg('BG_FB_START', { run });
-        if (res?.ok) toast(`Facebook posting started: ${plural(items.length, 'post')}. Click Post on Facebook for each one.`);
+        if (res?.ok) toast(auto ? `Automatic Facebook posting started: ${fbWhat(g, p)}.` : `Facebook posting started: ${fbWhat(g, p)}. Click Post on Facebook for each one.`);
         else {
           toast(res?.error || 'Couldn’t open Facebook.', true);
           renderFbCounts();
@@ -1883,7 +2016,28 @@ function fbConfirmStart() {
   });
 }
 
+function fbNumber(id, key, min, max, fallback, label, unit) {
+  $(id).addEventListener('change', (e) => {
+    fb.settings[key] = Math.min(max, Math.max(min, Math.round(Number(e.target.value) || fallback)));
+    e.target.value = String(fb.settings[key]);
+    fbSaveSettings();
+    renderFbMode();
+    toast(`${label}: ${fb.settings[key]} ${unit}`);
+  });
+}
+
 function fbBind() {
+  document.querySelectorAll('#fbKindSeg button').forEach((b) =>
+    b.addEventListener('click', () => {
+      fb.kind = b.dataset.kind;
+      fb.filter = '';
+      $('fbFilter').value = '';
+      renderFbKind();
+      renderFbList();
+      renderFbCounts();
+    })
+  );
+  document.querySelectorAll('#fbModeSeg button').forEach((b) => b.addEventListener('click', () => fbSetMode(b.dataset.mode)));
   $('fbImportBtn').addEventListener('click', fbImport);
   $('fbAddForm').addEventListener('submit', (e) => {
     e.preventDefault();
@@ -1893,34 +2047,33 @@ function fbBind() {
     if (!fbAdd([{ ...parsed, name }])) return toast('That link is already saved.', true);
     const t = fb.targets.find((x) => fbKey(x.url) === fbKey(parsed.url));
     if (t) fb.selected.add(t.id);
+    fb.kind = parsed.kind;
     fbSave();
     renderFb();
     $('fbUrl').value = '';
     $('fbName').value = '';
-    toast(`Added ${short(name)}`);
+    toast(`Added ${parsed.kind === 'page' ? 'Page' : 'group'}: ${short(name)}`);
   });
   $('fbFilter').addEventListener('input', (e) => {
     fb.filter = e.target.value;
     renderFbList();
   });
   $('fbSelAll').addEventListener('click', () => {
-    fb.targets.forEach((t) => fb.selected.add(t.id));
+    fbOf(fb.kind).forEach((t) => fb.selected.add(t.id));
     persist({ fbSelected: [...fb.selected] });
     renderFbList();
     renderFbCounts();
   });
   $('fbSelNone').addEventListener('click', () => {
-    fb.selected.clear();
-    persist({ fbSelected: [] });
+    fbOf(fb.kind).forEach((t) => fb.selected.delete(t.id));
+    persist({ fbSelected: [...fb.selected] });
     renderFbList();
     renderFbCounts();
   });
-  $('fbGap').addEventListener('change', (e) => {
-    fb.gapSec = Math.min(900, Math.max(FB_MIN_GAP, Math.round(Number(e.target.value) || 60)));
-    e.target.value = String(fb.gapSec);
-    persist({ fbSettings: { gapSec: fb.gapSec } });
-    toast(`Facebook wait set to ${fb.gapSec} s`);
-  });
+  fbNumber('fbGap', 'gapSec', FB_MIN_GAP, 900, 60, 'Wait between posts', 's');
+  fbNumber('fbInterval', 'intervalMin', FB_MIN_INTERVAL_MIN, 60, 5, 'Interval between posts', 'min');
+  fbNumber('fbDailyLimit', 'dailyLimit', 1, 50, 20, 'Daily limit', 'posts');
+  fbNumber('fbReview', 'reviewSec', 5, 120, 10, 'Review time', 's');
   $('fbStartBtn').addEventListener('click', fbConfirmStart);
   $('fbRunFocus').addEventListener('click', () => bg('BG_FB_OPEN'));
   $('fbRunStop').addEventListener('click', async () => {
@@ -1937,6 +2090,11 @@ function fbBind() {
       fb.run = changes.fbRun.newValue || null;
       renderFbRun();
       renderFbList();
+    }
+    if (changes.fbDaily) {
+      const d = changes.fbDaily.newValue;
+      fb.daily = d?.day === new Date().toISOString().slice(0, 10) ? d.count : 0;
+      renderFbMode();
     }
     if (changes.attachments || changes.message) {
       renderFbMessage();

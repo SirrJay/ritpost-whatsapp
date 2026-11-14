@@ -172,7 +172,7 @@
         <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 1.5a8.5 8.5 0 0 0-1.33 16.9v-5.94H6.51V10h2.16V8.13c0-2.13 1.27-3.31 3.21-3.31.93 0 1.9.17 1.9.17v2.09h-1.07c-1.05 0-1.38.65-1.38 1.33V10h2.35l-.38 2.46h-1.97v5.94A8.5 8.5 0 0 0 10 1.5Z"/></svg>
         <div>
           <b>Post the same message to Facebook</b>
-          <p class="muted">RitPost opens each group or Page, fills in your message and attaches your photos and videos. <b>You click Post</b> each time, and RitPost waits between posts so Facebook doesn’t treat them as spam.</p>
+          <p class="muted">RitPost opens each group or Page, fills in your message and attaches your photos and videos. In <b>Manual</b> mode you click Post; in <b>Automatic</b> mode RitPost posts after a review countdown, with long pauses and a daily limit.</p>
         </div>
       </div>
 
@@ -185,19 +185,24 @@
         <p class="hint">WhatsApp formatting marks (*bold*, _italic_) are removed for Facebook. Documents are only sent to WhatsApp.</p>
       </div>
 
+      <div class="seg fb-kind" id="fbKindSeg" role="tablist" aria-label="Groups or Pages">
+        <button type="button" data-kind="group" role="tab" class="active">Groups <span id="fbGroupCount" class="badge">0</span></button>
+        <button type="button" data-kind="page" role="tab">Pages <span id="fbPageCount" class="badge">0</span></button>
+      </div>
+
       <button id="fbImportBtn" type="button" class="btn secondary block">
         <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2.5a.75.75 0 0 1 .75.75v8.69l2.72-2.72 1.06 1.06-4.53 4.53-4.53-4.53 1.06-1.06 2.72 2.72V3.25A.75.75 0 0 1 10 2.5ZM3.5 15h13v1.5h-13z"/></svg>
         <span id="fbImportLabel">Import my Facebook groups</span>
       </button>
       <form id="fbAddForm" class="fb-add" autocomplete="off">
-        <input id="fbUrl" type="url" placeholder="Paste a group or Page link (facebook.com/…)" required>
+        <input id="fbUrl" type="url" placeholder="Paste a group link (facebook.com/groups/…)" required>
         <input id="fbName" type="text" placeholder="Name (optional)" maxlength="120">
         <button class="btn secondary" type="submit">Add</button>
       </form>
 
       <div class="field">
         <div class="field-head">
-          <label>Post to <span id="fbSelCount" class="muted"></span></label>
+          <label><span id="fbListTitle">Groups</span> <span id="fbSelCount" class="muted"></span></label>
           <div class="links">
             <button type="button" class="link" id="fbSelAll">All</button>
             <span class="sep">·</span>
@@ -206,21 +211,52 @@
         </div>
         <div class="search" id="fbFilterWrap">
           <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M8.5 3a5.5 5.5 0 0 1 4.38 8.83l3.65 3.64-1.06 1.06-3.64-3.65A5.5 5.5 0 1 1 8.5 3Zm0 1.5a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z"/></svg>
-          <input id="fbFilter" type="search" placeholder="Filter groups and Pages">
+          <input id="fbFilter" type="search" placeholder="Filter">
         </div>
         <ul id="fbList" class="list"></ul>
-        <div id="fbEmpty" class="empty" hidden>
-          <p><strong>No Facebook groups or Pages yet</strong></p>
-          <p class="muted">Import the groups you’ve joined, or paste a link above. To post on your own Page, add its link and switch to the Page’s profile on Facebook first.</p>
-        </div>
+        <div id="fbEmpty" class="empty" hidden></div>
+        <p id="fbSelSummary" class="hint"></p>
       </div>
 
-      <div class="setting">
-        <div>
-          <div class="s-title">Wait between Facebook posts</div>
-          <div class="muted">After each post, RitPost waits this long before opening the next one. At least 30 seconds; 60 or more is safer.</div>
+      <div class="field fb-mode">
+        <div class="field-head"><label>How to post</label></div>
+        <div class="seg" id="fbModeSeg" role="radiogroup" aria-label="Facebook posting mode">
+          <button type="button" data-mode="manual" role="radio">Manual</button>
+          <button type="button" data-mode="auto" role="radio">Automatic</button>
         </div>
-        <div class="num-field"><input id="fbGap" type="number" min="30" max="900" step="5"> <span class="muted">s</span></div>
+        <p class="hint" id="fbModeHint"></p>
+
+        <div class="setting" id="fbGapRow">
+          <div>
+            <div class="s-title">Wait between posts</div>
+            <div class="muted">After you post, RitPost waits this long before opening the next one. At least 30 s.</div>
+          </div>
+          <div class="num-field"><input id="fbGap" type="number" min="30" max="900" step="5"> <span class="muted">s</span></div>
+        </div>
+
+        <div id="fbAutoRows" hidden>
+          <div class="setting">
+            <div>
+              <div class="s-title">Interval between posts</div>
+              <div class="muted">At least 2 minutes; 5 minutes or more is safer. Each wait is randomly made up to 30% longer so posts aren’t perfectly regular.</div>
+            </div>
+            <div class="num-field"><input id="fbInterval" type="number" min="2" max="60" step="1"> <span class="muted">min</span></div>
+          </div>
+          <div class="setting">
+            <div>
+              <div class="s-title">Daily limit</div>
+              <div class="muted">RitPost stops after this many Facebook posts in a day. <span id="fbTodayCount"></span></div>
+            </div>
+            <div class="num-field"><input id="fbDailyLimit" type="number" min="1" max="50" step="1"> <span class="muted">posts</span></div>
+          </div>
+          <div class="setting">
+            <div>
+              <div class="s-title">Review time before posting</div>
+              <div class="muted">Countdown on each post so you can check it, hold it or skip it before RitPost clicks Post.</div>
+            </div>
+            <div class="num-field"><input id="fbReview" type="number" min="5" max="120" step="1"> <span class="muted">s</span></div>
+          </div>
+        </div>
       </div>
 
       <div id="fbRunBox" class="run-box" hidden>

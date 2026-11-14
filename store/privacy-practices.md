@@ -3,7 +3,7 @@
 ## Single purpose
 
 ```
-RitPost helps a user post one message to several of their own groups: WhatsApp groups in WhatsApp Web, and Facebook groups and Pages on facebook.com. It opens each selected group, fills in the message and attachments, and lets the user send or post it (on WhatsApp it can optionally send after a user-controlled countdown; on Facebook the user always clicks Post).
+RitPost helps a user post one message to several of their own groups: WhatsApp groups in WhatsApp Web, and Facebook groups and Pages on facebook.com. It opens each selected group, fills in the message and attachments, and lets the user send or post it (on WhatsApp it can optionally send after a user-controlled countdown; on Facebook the user clicks Post, or in optional Automatic mode RitPost posts after a review countdown with long pauses and a daily limit).
 ```
 
 ## Permission justifications
@@ -40,7 +40,7 @@ RitPost works only on WhatsApp Web. It reads the chat list to import group names
 
 **Host permission: https://*.facebook.com/***
 ```
-Used only when the user posts to Facebook from RitPost. RitPost opens the Facebook groups and Pages the user selected, opens the post box, fills in the user's message and attaches the photos/videos the user chose; the user then clicks Post. When the user clicks "Import my Facebook groups", it reads the names and links of the groups listed on Facebook's "Your groups" page. Nothing is sent anywhere else.
+Used only when the user posts to Facebook from RitPost. RitPost opens the Facebook groups and Pages the user selected, opens the post box, fills in the user's message and attaches the photos/videos the user chose; the user clicks Post (or, in optional Automatic mode, RitPost clicks Post after a countdown the user can cancel). For a Page, it clicks Facebook's "Switch now" so the post comes from the Page. When the user clicks "Import my Facebook groups" or "Import Pages I manage", it reads the names and links listed on Facebook's "Your groups" or "Your Pages" page. Nothing is sent anywhere else.
 ```
 
 ## Remote code

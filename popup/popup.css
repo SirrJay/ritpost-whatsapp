@@ -489,3 +489,11 @@ body[data-tab="facebook"] #lastRun { display: none !important; }
 #tab-facebook .run-box { margin-top: 12px; }
 #tab-facebook .last-run { margin-top: 10px; }
 .row-extra { display: flex; align-items: center; gap: 4px; margin-left: auto; flex: none; }
+.fb-kind { margin-bottom: 10px; }
+.fb-kind button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px; font-size: 13px; }
+.fb-mode { margin-top: 4px; }
+.fb-mode .seg { margin-bottom: 6px; }
+.fb-mode .setting { padding-left: 0; padding-right: 0; }
+#fbSelSummary { margin-top: 6px; }
+.stop-reason { color: var(--danger); margin: 4px 0; }
+#fbLastRun .link { margin-left: 0; }

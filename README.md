@@ -71,23 +71,37 @@ Choose the mode in the switch above the Start button.
 
 ## Facebook groups and Pages
 
-RitPost can post the same message to your Facebook groups and your own Facebook Pages.
+RitPost can post the same message to your Facebook groups and the Facebook Pages you manage.
 
-1. Open the **Facebook** tab in the side panel.
+1. Open the **Facebook** tab in the side panel. Groups and Pages have separate lists: switch with **Groups | Pages**.
 2. Add where to post:
-   - **Import my Facebook groups** opens Facebook's "Your groups" page and reads the groups you've joined.
-   - Or paste a group or Page link (for example `facebook.com/groups/…` or `facebook.com/YourPage`) and click **Add**.
-3. Tick the groups and Pages, then click **Post to … Facebook groups/Pages**. The message and photos/videos come from the **Compose** tab.
-4. For each one, RitPost opens it on Facebook, opens the "Write something…" box, fills in your message and attaches your photos and videos. **You check the post and click Post yourself.** RitPost never clicks Post on Facebook.
-5. After each post RitPost waits (60 seconds by default, at least 30) before opening the next one. A panel in the corner of Facebook shows the countdown, with **Skip** and **Stop**.
+   - **Import my Facebook groups** reads the groups you've joined (Facebook's "Your groups" page).
+   - **Import Pages I manage** (on the Pages list) reads your Pages (Facebook's "Your Pages" page).
+   - Or paste a group or Page link and click **Add**.
+3. Tick groups and Pages, choose **Manual** or **Automatic**, then click **Post to …** (for example "Post to 3 groups + 1 Page"). The message and photos/videos come from the **Compose** tab.
+4. For each one, RitPost opens it, opens the post box ("Write something…" / "What's on your mind?"), fills in your message and attaches your photos and videos. If Facebook ignores RitPost's click on the post box, the panel asks you to click it once and RitPost carries on by itself.
+5. A panel in the corner of Facebook shows progress, with **Skip** and **Stop**.
 
-Good to know:
+### Manual and Automatic
 
-- **Your own Page:** to post *as* the Page, switch to the Page's profile on Facebook first (profile picture → the Page). Otherwise Facebook shows no post box, or posts as you.
+- **Manual** (default): you check each post and click **Post**. RitPost then waits at least 30 seconds (60 by default) before the next one.
+- **Automatic**: RitPost gives you a review countdown (10 seconds by default) with **Post now**, **Hold**, **Skip** and **Stop**, then clicks Post itself. To keep the risk low:
+  - it waits at least **2 minutes** between posts (**5 minutes** by default), and makes each wait randomly up to 30% longer;
+  - it stops at a **daily limit** (20 posts by default, up to 50);
+  - it **stops at once** if Facebook shows a "temporarily blocked", "going too fast" or similar limit message.
+
+Facebook's terms don't allow automated posting, and no interval is guaranteed to be safe; a long interval and a low daily limit only lower the risk. Post only where your post is welcome.
+
+### Pages
+
+Pages are posted after groups. When it's a Page's turn, RitPost clicks Facebook's **Switch now** so the post comes from the Page. Afterwards you are still using Facebook as the last Page; switch back from your profile picture.
+
+### Good to know
+
 - WhatsApp formatting marks (`*bold*`, `_italic_`, `~strike~`) are removed, because Facebook doesn't use them. `{group}` works the same as on WhatsApp.
 - Facebook gets photos and videos only; documents are sent to WhatsApp only.
 - If you close the post box without posting, RitPost doesn't count it and offers **Fill again**.
-- Posting the same thing to many groups in a short time can get posts held for review or your account temporarily limited by Facebook, even when you click Post yourself. Keep the wait long and post only where your post is welcome.
+- **Select unposted** (under the list after a session) picks everything that wasn't posted, for example to continue the next day.
 
 ## Premium features
 

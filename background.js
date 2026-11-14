@@ -152,15 +152,19 @@ async function sendToFb(tabId, msg, timeoutMs = 60000) {
   }
 }
 
-/** Open (or reuse) a Facebook tab on the "Your groups" page and read the groups listed there. */
-async function fbScan(windowId) {
+const FB_PAGES_URL = 'https://www.facebook.com/pages/?category=your_pages';
+
+/** Open (or reuse) a Facebook tab on "Your groups" or "Your Pages" and read what is listed there. */
+async function fbScan(windowId, kind = 'groups') {
+  const url = kind === 'pages' ? FB_PAGES_URL : FB_GROUPS_URL;
   let tab = await findFbTab(windowId);
-  if (tab) tab = await chrome.tabs.update(tab.id, { url: FB_GROUPS_URL, active: true });
-  else tab = await chrome.tabs.create({ url: FB_GROUPS_URL, active: true, ...(windowId ? { windowId } : {}) });
+  if (tab) tab = await chrome.tabs.update(tab.id, { url, active: true });
+  else tab = await chrome.tabs.create({ url, active: true, ...(windowId ? { windowId } : {}) });
   await chrome.windows.update(tab.windowId, { focused: true }).catch(() => {});
   await sleep(500);
   await waitTabComplete(tab.id);
-  return sendToFb(tab.id, { type: 'FB_SCAN' }, 90000);
+  await sleep(1500);
+  return sendToFb(tab.id, { type: 'FB_SCAN', kind }, 90000);
 }
 
 async function fbStart(run, windowId) {
@@ -253,7 +257,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     BG_START: () => startRun(p.run, windowId),
     BG_CONTROL: () => controlRun(p.action, windowId),
     BG_DOWNLOAD: () => downloadFile(p),
-    BG_FB_SCAN: () => fbScan(windowId),
+    BG_FB_SCAN: () => fbScan(windowId, p.kind),
     BG_FB_START: () => fbStart(p.run, windowId),
     BG_FB_STOP: () => fbStop(),
     BG_FB_OPEN: () => fbFocus(windowId),
