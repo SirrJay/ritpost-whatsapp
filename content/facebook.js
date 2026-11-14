@@ -108,15 +108,24 @@
   /** The open post box (Facebook uses a Lexical editor), not a comment or chat box. */
   function composerBox() {
     const boxes = $$('[contenteditable="true"]').filter((b) => {
-      if (!(b.getAttribute('role') === 'textbox' || b.hasAttribute('data-lexical-editor'))) return false;
       if (!visible(b) || b.closest('#ritpost-fb')) return false;
       const label = boxLabel(b);
       if (NOT_POSTBOX_RE.test(label) && !POSTBOX_RE.test(label)) return false;
-      if (b.closest('[role="dialog"]')) return true;
-      return POSTBOX_RE.test(label);
+      const dlg = b.closest('[role="dialog"]');
+      if (dlg) return b.getAttribute('role') === 'textbox' || b.hasAttribute('data-lexical-editor') || !!postButton(dlg);
+      return (b.getAttribute('role') === 'textbox' || b.hasAttribute('data-lexical-editor')) && POSTBOX_RE.test(label);
     });
     return boxes.find((b) => b.closest('[role="dialog"]') && postButton(b.closest('[role="dialog"]'))) || boxes[0] || null;
   }
+
+  /** A post dialog is on screen, even while Facebook re-renders its text box (e.g. building a link preview). */
+  function composerOpen() {
+    if (composerBox()) return true;
+    return $$('[role="dialog"]').some(
+      (d) => visible(d) && !d.closest('#ritpost-fb') && postButton(d) && d.querySelector('[contenteditable], [data-lexical-editor]')
+    );
+  }
+  const dialogCount = () => $$('[role="dialog"]').filter((d) => visible(d) && !d.closest('#ritpost-fb')).length;
 
   /** Candidates for the "Write something…" / "What's on your mind?" prompt, best first. */
   function triggerCandidates() {
@@ -152,6 +161,8 @@
       return c.length ? c : null;
     }, 15000, 400);
     if (!cands) return false;
+    const dialogsBefore = dialogCount();
+    const appeared = () => composerBox() || dialogCount() > dialogsBefore;
     for (const el of cands.slice(0, 3)) {
       el.scrollIntoView({ block: 'center' });
       await sleep(300);
@@ -162,7 +173,10 @@
         } catch {
           /* try the next way */
         }
-        if (await waitFor(composerBox, 3500, 200)) return true;
+        if (await waitFor(appeared, 3500, 200)) {
+          // Something opened: give the text box time to appear instead of clicking again.
+          return !!(await waitFor(composerBox, 8000, 250));
+        }
       }
     }
     return !!composerBox();
@@ -208,16 +222,31 @@
     box.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
   }
 
+  const noUrls = (s) => loose(String(s || '').replace(/https?:\/\/\S+/gi, ''));
+  /** True when the box already holds the text (ignoring links, which Facebook may turn into a preview). */
+  function hasText(box, text) {
+    const want = loose(text).slice(0, 40);
+    if (want && loose(textOf(box)).includes(want)) return true;
+    const core = noUrls(text).slice(0, 40);
+    return !!core && noUrls(textOf(box)).includes(core);
+  }
+
   async function fillText(text) {
     if (!text) return true;
-    const want = loose(text).slice(0, 40);
-    let box = composerBox();
+    let box = await waitFor(composerBox, 5000, 200);
     if (!box) return false;
-    if (loose(textOf(box)).includes(want)) return true;
+    if (hasText(box, text)) return true;
+    const before = loose(textOf(box)).length;
     insertText(box, text);
-    await sleep(500);
+    // Facebook may re-render the box while it fetches a link preview: keep checking for a few seconds.
+    const filled = () => {
+      const b = composerBox();
+      return b && hasText(b, text);
+    };
+    if (await waitFor(filled, 3000, 250)) return true;
     box = composerBox() || box;
-    if (loose(textOf(box)).includes(want)) return true;
+    // Something was inserted (the link may have become a preview): don't type it a second time.
+    if (loose(textOf(box)).length - before >= Math.min(20, noUrls(text).length * 0.5)) return true;
     // Fallback: type it, one line at a time.
     box.focus();
     const lines = text.split('\n');
@@ -225,8 +254,8 @@
       if (line) document.execCommand('insertText', false, line);
       if (i < lines.length - 1) document.execCommand('insertParagraph', false, null);
     });
-    await sleep(500);
-    return loose(textOf(composerBox() || box)).includes(want);
+    await sleep(600);
+    return hasText(composerBox() || box, text);
   }
 
   /** Thumbnails of attached media in the composer. */
@@ -455,19 +484,29 @@
   }
 
   /** Watches for the composer closing after a Post click, and for Facebook block messages. */
+  let watchTimer = null;
   function watchForPost(base, my, onClosedWithoutPost) {
-    let sawOpen = !!composerBox();
-    every(async () => {
-      if (my !== session) return;
+    clearInterval(watchTimer);
+    timers.delete(watchTimer);
+    let sawOpen = composerOpen();
+    let misses = 0;
+    let checking = false;
+    watchTimer = every(async () => {
+      if (my !== session || checking) return;
       const block = facebookMessage(BLOCK_RE);
       if (block) return stopRun(`Facebook limited posting: “${block}”. RitPost stopped so your account isn’t restricted further. Wait a day before posting again.`);
-      const open = !!composerBox();
-      if (open) {
+      if (composerOpen()) {
         sawOpen = true;
+        misses = 0;
         return;
       }
       if (!sawOpen) return;
+      // Only treat it as closed when it stays gone for about 3 s (Facebook briefly re-renders the box).
+      if (++misses < 4) return;
       sawOpen = false;
+      misses = 0;
+      checking = true;
+      clearInterval(watchTimer);
       if (Date.now() - lastPostClick < 180000) {
         await sleep(1500);
         const block2 = facebookMessage(BLOCK_RE);
@@ -479,6 +518,8 @@
       onClosedWithoutPost();
     }, 700);
   }
+
+  const reopenCount = new Map(); // automatic re-opens per run item
 
   async function prepare(run) {
     const my = ++session;
@@ -561,13 +602,22 @@
     if (skippedDocs) note += `\n${skippedDocs} document(s) left out (Facebook gets photos and videos only).`;
 
     lastPostClick = 0;
-    const closedWithoutPost = () =>
+    const closedWithoutPost = () => {
+      const k = `${run.id}|${run.index}`;
+      const n = reopenCount.get(k) || 0;
+      if (run.mode === 'auto' && n < 2) {
+        reopenCount.set(k, n + 1);
+        ui.update({ ...base, msg: 'The post box closed before posting. Opening it again…', buttons: [skipBtn, stopBtn] });
+        setTimeout(() => alive() && retry(), 1500);
+        return;
+      }
       ui.update({
         ...base,
-        msg: 'The post box was closed without posting.',
+        msg: 'The post box was closed without posting. Facebook usually keeps your text as a draft: click Fill again to reopen it.',
         error: true,
         buttons: [{ label: 'Fill again', kind: 'primary', run: retry }, skipBtn, stopBtn],
       });
+    };
 
     const manualWait = (extra = '') => {
       ui.update({ ...base, msg: `Check the post, then click Post on Facebook.${extra}${note}`, buttons: [skipBtn, stopBtn] });
@@ -596,7 +646,11 @@
     while (left > 0) {
       await sleep(1000);
       if (!alive() || held) return;
-      if (!composerBox()) return; // the user posted or closed it; the watcher handles it
+      if (!composerOpen()) {
+        // Possibly a brief re-render; the watcher decides whether it was really closed.
+        const back = await waitFor(() => !alive() || held || composerOpen(), 4000, 250);
+        if (!alive() || held || !back) return;
+      }
       left = Math.max(0, left - 1);
       draw();
     }
@@ -616,12 +670,26 @@
     for (let step = 0; step < 3 && alive(); step++) {
       const label = (btn.getAttribute('aria-label') || textOf(btn)).trim();
       lastPostClick = POST_RE.test(label) ? Date.now() : lastPostClick;
+      // Click once, then wait for Facebook to react. Only if nothing at all happened (button still enabled
+      // and unchanged, box still open) try another way of clicking, so a post is never sent twice.
+      const reacted = () =>
+        !composerOpen() ||
+        !btn.isConnected ||
+        btn.getAttribute('aria-disabled') === 'true' ||
+        (ready() && ready() !== btn) ||
+        facebookMessage(BLOCK_RE) ||
+        /\b(posting|sharing|publishing)\b/i.test(textOf(composerScope(composerBox())).slice(0, 3000));
       for (const click of CLICKS.slice(0, 3)) {
         click(btn);
-        const moved = await waitFor(() => !composerBox() || (ready() && ready() !== btn) || facebookMessage(BLOCK_RE), 4000, 250);
-        if (moved) break;
+        if (await waitFor(reacted, 8000, 250)) break;
       }
-      if (!composerBox() || facebookMessage(BLOCK_RE)) return; // the watcher records the result
+      // Wait for the result (uploads can take a while); the watcher records it.
+      await waitFor(
+        () => !alive() || !composerOpen() || facebookMessage(BLOCK_RE) || (NEXT_RE.test(label) && ready() && ready() !== btn),
+        60000,
+        400
+      );
+      if (!alive() || !composerOpen() || facebookMessage(BLOCK_RE)) return;
       // "Next" leads to another step with the real Post button.
       if (NEXT_RE.test(label)) {
         btn = await waitFor(ready, 8000, 300);
@@ -630,7 +698,7 @@
       }
       break;
     }
-    if (alive() && composerBox()) manualWait('\nRitPost couldn’t click Post here. Click it yourself, or Skip.');
+    if (alive() && composerOpen()) manualWait('\nRitPost couldn’t click Post here. Click it yourself, or Skip.');
   }
 
   function showCountdown(run) {
