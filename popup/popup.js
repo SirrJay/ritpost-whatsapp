@@ -1650,13 +1650,19 @@ function parseFbUrl(raw) {
   return { url: `https://www.facebook.com/${p[1]}`, kind: 'page', slug: decodeURIComponent(p[1]) };
 }
 const fbKey = (url) => String(url).toLowerCase().replace(/\/+$/, '');
+/** Strip labels Facebook puts on pictures ("Profile picture for …") from imported names. */
+const cleanFbName = (s) =>
+  normName(String(s || '').replace(/^(profile picture|profile photo|cover photo|picture|photo|avatar)\s+(for|of)\s+/i, ''));
 
 async function fbLoad() {
   const d = await chrome.storage.local.get(['fbTargets', 'fbSelected', 'fbSettings', 'fbRun', 'fbDaily']);
-  fb.targets = (Array.isArray(d.fbTargets) ? d.fbTargets : [])
+  const raw = Array.isArray(d.fbTargets) ? d.fbTargets : [];
+  fb.targets = raw
     .filter((t) => t?.id && t?.url && t?.name)
-    .map((t) => ({ ...t, kind: t.kind === 'page' ? 'page' : 'group' }))
+    .map((t) => ({ ...t, name: cleanFbName(t.name) || t.name, kind: t.kind === 'page' ? 'page' : 'group' }))
     .sort(byName);
+  // Repair names saved by 1.7.x ("Profile picture for …").
+  if (raw.some((t) => t?.name && cleanFbName(t.name) !== t.name)) persist({ fbTargets: fb.targets });
   const ids = new Set(fb.targets.map((t) => t.id));
   fb.selected = new Set((d.fbSelected || []).filter((id) => ids.has(id)));
   const s = { ...FB_DEFAULTS, ...(d.fbSettings || {}) };
@@ -1695,7 +1701,7 @@ function fbAdd(entries) {
   for (const e of entries) {
     if (!e?.url || have.has(fbKey(e.url))) continue;
     have.add(fbKey(e.url));
-    fb.targets.push({ id: uid(), name: normName(e.name) || e.url, url: e.url, kind: e.kind === 'page' ? 'page' : 'group', addedAt: Date.now() });
+    fb.targets.push({ id: uid(), name: cleanFbName(e.name) || e.url, url: e.url, kind: e.kind === 'page' ? 'page' : 'group', addedAt: Date.now() });
     added++;
   }
   fb.targets.sort(byName);
@@ -1989,7 +1995,7 @@ function fbConfirmStart() {
         ? h('p', { class: 'muted' }, `Only ${remainingToday} more post${remainingToday === 1 ? '' : 's'} fit today’s limit; RitPost stops there and you can continue tomorrow with “Select unposted”.`)
         : null,
       auto ? h('p', { class: 'muted' }, `This takes roughly ${Math.round((Math.min(items.length, remainingToday) - 1) * fb.settings.intervalMin * 1.15)} minutes. Keep the Facebook tab open; you can use other tabs meanwhile.`) : null,
-      p ? h('p', { class: 'muted' }, 'Pages come after groups. When it’s a Page’s turn, RitPost clicks Facebook’s “Switch now” so the post comes from the Page. Afterwards you’ll still be using Facebook as the last Page; switch back from your profile picture.') : null,
+      p ? h('p', { class: 'muted' }, 'Pages come after groups. When it’s a Page’s turn, RitPost switches to that Page’s profile by itself so the post comes from the Page, and switches back to your profile for any group that follows. At the end, the Facebook panel offers “Switch back to my profile”.') : null,
       docs ? h('p', { class: 'muted' }, `${plural(docs, 'document')} will be left out (Facebook gets photos and videos only).`) : null
     ),
     onConfirm: () => {

@@ -94,7 +94,14 @@ Facebook's terms don't allow automated posting, and no interval is guaranteed to
 
 ### Pages
 
-Pages are posted after groups. When it's a Page's turn, RitPost clicks Facebook's **Switch now** so the post comes from the Page. Afterwards you are still using Facebook as the last Page; switch back from your profile picture.
+Pages are posted after groups, and RitPost switches profiles by itself, in both Manual and Automatic mode:
+
+- When it's a Page's turn, RitPost switches to that Page's profile so the post comes from the Page. It uses a switch button on the Page if Facebook shows one, otherwise your profile picture (top right) → **See all profiles** → the Page.
+- It never posts in the visitor box ("Write something to <Page>…"), which would post as you.
+- If a group comes after a Page, RitPost switches back to your own profile first.
+- At the end, the Facebook panel offers **Switch back to my profile**.
+
+If switching fails twice, RitPost asks you to switch yourself and click **Try again**.
 
 ### Good to know
 

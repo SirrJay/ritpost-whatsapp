@@ -128,9 +128,11 @@
   const dialogCount = () => $$('[role="dialog"]').filter((d) => visible(d) && !d.closest('#ritpost-fb')).length;
 
   /** Candidates for the "Write something…" / "What's on your mind?" prompt, best first. */
-  function triggerCandidates() {
+  const VISITOR_RE = /^write something to\b/i;
+  function triggerCandidates(kind = currentKind) {
     const main = document.querySelector('[role="main"]') || document.body;
     const out = [];
+    const okText = (t) => !(kind === 'page' && VISITOR_RE.test(t.trim()));
     const walker = document.createTreeWalker(main, NodeFilter.SHOW_TEXT, {
       acceptNode: (n) => (PROMPT_RE.test(n.nodeValue.trim()) && n.nodeValue.trim().length < 80 ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT),
     });
@@ -138,13 +140,13 @@
       const host = n.parentElement;
       if (!host || host.closest('#ritpost-fb') || host.closest('[contenteditable="true"]')) continue;
       const btn = host.closest('[role="button"], button, a[role="link"]') || host;
-      if (!visible(btn) || out.includes(btn)) continue;
+      if (!visible(btn) || out.includes(btn) || !okText(n.nodeValue)) continue;
       out.push(btn);
     }
     // Inputs that act as the prompt (older layouts).
     for (const el of $$('[aria-label], [placeholder]', main)) {
       const l = el.getAttribute('aria-label') || el.getAttribute('placeholder') || '';
-      if (PROMPT_RE.test(l.trim()) && visible(el) && !out.includes(el) && el.getAttribute('contenteditable') !== 'true') out.push(el);
+      if (PROMPT_RE.test(l.trim()) && okText(l) && visible(el) && !out.includes(el) && el.getAttribute('contenteditable') !== 'true') out.push(el);
     }
     const inView = (el) => {
       const r = el.getBoundingClientRect();
@@ -152,6 +154,8 @@
     };
     return out.sort((a, b) => Number(inView(b)) - Number(inView(a)) || a.getBoundingClientRect().top - b.getBoundingClientRect().top);
   }
+
+  let currentKind = 'group';
 
   /** Try to open the post box. Returns true when it is open. */
   async function openComposer() {
@@ -182,16 +186,130 @@
     return !!composerBox();
   }
 
-  /** Admins viewing their Page get a "Switch now" prompt; clicking it switches to the Page's profile. */
-  function switchButton() {
-    const main = document.querySelector('[role="main"]') || document.body;
+  // ─────────────── switching profiles (you <-> your Pages) ───────────────
+  const cleanName = (s) =>
+    String(s || '')
+      .replace(/^(profile picture|profile photo|cover photo|picture|photo|avatar)\s+(for|of)\s+/i, '')
+      .replace(/[\u200e\u200f\u202a-\u202e]/g, '')
+      .trim();
+  function sameName(a, b) {
+    const x = loose(cleanName(a));
+    const y = loose(cleanName(b));
+    if (!x || !y) return false;
+    return x === y || (Math.min(x.length, y.length) >= 6 && (x.startsWith(y) || y.startsWith(x)));
+  }
+  const clickableOf = (el) =>
+    el.closest('[role="button"], [role="menuitem"], [role="menuitemradio"], [role="radio"], [role="option"], [role="link"], a, button, [tabindex="0"]') || el;
+  const SWITCH_WORD_RE = /^(switch|switch now|switch profile|switch profiles|switch to page|switch into page)$/i;
+
+  /** A switch button Facebook shows on a Page you manage ("Switch now", "Switch to <Page>", the sidebar switch icon). */
+  function switchButton(name) {
     return (
-      $$('[role="button"], button, a', main).find((b) => {
-        if (!visible(b)) return false;
+      $$('[role="button"], button, a, [role="link"]').find((b) => {
+        if (!visible(b) || b.closest('#ritpost-fb') || b.closest('[role="banner"]')) return false;
         const l = (b.getAttribute('aria-label') || textOf(b)).trim();
-        return /^(switch( now)?|switch to page|switch profile|switch into .{1,60})$/i.test(l);
+        if (SWITCH_WORD_RE.test(l)) return true;
+        const m = l.match(/^switch (?:to|into) (.{2,90}?)(?:['’]s page| page)?$/i);
+        return !!(m && name && sameName(m[1], name));
       }) || null
     );
+  }
+
+  /** The account button at the top right (your profile picture). */
+  function accountButton() {
+    const bar = document.querySelector('[role="banner"]') || document.body;
+    const labelled = $$('[role="button"], [role="link"], a, button', bar).filter(
+      (b) => visible(b) && /^(your profile|account|accounts|account controls and settings|profile|your profiles)$/i.test((b.getAttribute('aria-label') || '').trim())
+    );
+    if (labelled.length) return labelled.at(-1);
+    const withPic = $$('image, img', bar)
+      .map((i) => i.closest('[role="button"], [role="link"]'))
+      .filter((b) => b && visible(b));
+    return withPic.sort((a, b) => b.getBoundingClientRect().right - a.getBoundingClientRect().right)[0] || null;
+  }
+  const menuRoots = () => $$('[role="dialog"], [role="menu"], [role="listbox"]').filter((d) => visible(d) && !d.closest('#ritpost-fb'));
+  function findInMenus(test) {
+    for (const root of menuRoots()) {
+      for (const el of $$('[role="button"], [role="menuitem"], [role="menuitemradio"], [role="radio"], [role="option"], [role="link"], a, span', root)) {
+        if (!visible(el)) continue;
+        const t = textOf(el);
+        if (!t || t.length > 120) continue;
+        if (test(t, el)) return clickableOf(el);
+      }
+    }
+    return null;
+  }
+  const ACCOUNT_MENU_RE = /^(see all profiles|log ?out|settings (&|and) privacy|help (&|and) support|display (&|and) accessibility)$/i;
+  async function openAccountMenu() {
+    if (findInMenus((t) => ACCOUNT_MENU_RE.test(t))) return true;
+    const btn = accountButton();
+    if (!btn) return false;
+    btn.click();
+    if (await waitFor(() => findInMenus((t) => ACCOUNT_MENU_RE.test(t)), 4000, 250)) return true;
+    fireClick(btn);
+    return !!(await waitFor(() => findInMenus((t) => ACCOUNT_MENU_RE.test(t)), 4000, 250));
+  }
+  const closeMenus = () =>
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true }));
+  async function confirmSwitch() {
+    await sleep(1300);
+    const ok = findInMenus((t) => SWITCH_WORD_RE.test(t));
+    if (ok) ok.click();
+  }
+
+  /** Use Facebook's profile menu: pick the profile `test` matches (opening "See all profiles" if needed). */
+  async function switchViaMenu(test) {
+    if (!(await openAccountMenu())) return false;
+    let item = findInMenus(test);
+    if (!item) {
+      const seeAll = findInMenus((t) => /^see all profiles$/i.test(t));
+      if (seeAll) {
+        seeAll.click();
+        item = await waitFor(() => findInMenus(test), 5000, 250);
+      }
+    }
+    if (!item) {
+      closeMenus();
+      return false;
+    }
+    item.click();
+    await confirmSwitch();
+    return true;
+  }
+
+  /** Start switching to the Page called `name`. Facebook then reloads the page. */
+  async function switchToPage(name) {
+    const direct = switchButton(name);
+    if (direct) {
+      direct.click();
+      await confirmSwitch();
+      return true;
+    }
+    return switchViaMenu((t) => sameName(t, name) || sameName(t.replace(/^switch to\s+/i, ''), name));
+  }
+
+  /** Start switching back to your own profile (anything in the profile menu that isn't one of your Pages). */
+  async function switchToPersonal(pageNames) {
+    const isPage = (n) => pageNames.some((p) => sameName(n, p));
+    // On a group, Facebook may offer a plain "Switch" button to go back to your profile.
+    const main = document.querySelector('[role="main"]');
+    const direct = main && $$('[role="button"], button', main).find((b) => visible(b) && SWITCH_WORD_RE.test((b.getAttribute('aria-label') || textOf(b)).trim()));
+    if (direct) {
+      direct.click();
+      await confirmSwitch();
+      return true;
+    }
+    const SKIP = /(see all profiles|settings|privacy|help|support|display|accessibility|feedback|log ?out|create|business suite|ads manager|professional dashboard|page|switch$)/i;
+    const byLabel = await switchViaMenu((t) => {
+      const m = t.match(/^switch to\s+(.+)$/i);
+      return !!(m && !isPage(m[1]));
+    });
+    if (byLabel) return true;
+    return switchViaMenu((t, el) => {
+      if (SKIP.test(t) || isPage(t) || t.length > 60) return false;
+      const box = clickableOf(el);
+      return !!box.querySelector('image, img, svg image') && /^[\p{L}][\p{L}\p{M}.'’ -]{1,58}$/u.test(t);
+    });
   }
 
   // Facebook messages that mean "stop posting now".
@@ -545,29 +663,48 @@
     const media = files.filter((f) => /^(image|video)\//.test(f.type));
     const skippedDocs = files.length - media.length;
 
-    // Pages: switch into the Page's profile first when Facebook offers it.
+    currentKind = item.kind;
+    const pageName = cleanName(item.name);
+
+    /** Records the switch attempt, starts it, and reopens this group/Page once Facebook has switched. */
+    const switchProfile = async (key, msg, start) => {
+      const tries = run[key]?.[run.index] || 0;
+      if (tries >= 2) return false;
+      ui.update({ ...base, msg, buttons: [skipBtn, stopBtn] });
+      run[key] = { ...(run[key] || {}), [run.index]: tries + 1 };
+      if (key === 'pageSwitchTries') run.switchedToPage = true;
+      run.navigatedFor = -1; // after Facebook's reload, come back to this group/Page
+      run.navAt = Date.now();
+      await setRun(run);
+      if (!(await start())) return false;
+      // Facebook reloads after switching and this script starts again there.
+      await sleep(15000);
+      if (alive()) await goToCurrent(await getRun()); // it switched without reloading
+      return true;
+    };
+
+    // Pages: post as the Page. Switch to the Page's profile automatically when needed.
     if (item.kind === 'page' && !composerBox()) {
-      const sw = await waitFor(() => switchButton() || (triggerCandidates().length ? 'has-prompt' : null), 12000, 400);
+      await waitFor(() => triggerCandidates().length || switchButton(pageName), 12000, 400);
       if (!alive()) return;
-      if (sw && sw !== 'has-prompt' && run.switchedFor !== run.index) {
-        ui.update({ ...base, msg: 'Switching to the Page’s profile so the post comes from your Page…', buttons: [skipBtn, stopBtn] });
-        run.switchedFor = run.index;
-        run.switchedToPage = true;
-        run.navAt = Date.now();
-        await setRun(run);
-        sw.click();
-        await sleep(1200);
-        if (switchButton()) fireClick(switchButton());
-        // Facebook reloads the page after switching; this script then starts again.
-        await sleep(12000);
+      if (!triggerCandidates().length) {
+        if (await switchProfile('pageSwitchTries', `Switching to “${pageName}” so the post comes from your Page…`, () => switchToPage(pageName))) return;
         if (!alive()) return;
-        // No reload happened (e.g. Facebook switched in place): reload so the Page's post box shows.
-        if (!composerBox() && !triggerCandidates().length) location.reload();
-        else {
-          busy = false;
-          tick(true);
-        }
-        return;
+        return fail(
+          `RitPost couldn’t switch to “${pageName}”. Switch to the Page yourself (your profile picture → See all profiles → the Page), then click Try again.`
+        );
+      }
+    }
+
+    // Groups: if there's no post box (e.g. you're still using Facebook as a Page), switch back to your profile once.
+    if (item.kind === 'group' && !composerBox()) {
+      await waitFor(() => triggerCandidates().length, 12000, 400);
+      if (!alive()) return;
+      if (!triggerCandidates().length) {
+        const { fbTargets } = await chrome.storage.local.get('fbTargets');
+        const pageNames = [...run.items, ...(fbTargets || [])].filter((t) => t.kind === 'page').map((t) => cleanName(t.name));
+        if (await switchProfile('personalSwitchTries', 'Switching back to your own profile to post in this group…', () => switchToPersonal(pageNames))) return;
+        if (!alive()) return;
       }
     }
 
@@ -732,7 +869,28 @@
     const posted = run.results.filter((r) => r.status === 'posted').length;
     const head = run.status === 'done' ? `Finished: ${posted} of ${run.items.length} posted.` : `Stopped: ${posted} of ${run.items.length} posted.`;
     let msg = run.stopReason || 'You can close this.';
-    if (run.switchedToPage) msg += '\nYou’re now using Facebook as your Page. To switch back: profile picture → your name.';
+    if (run.switchedToPage) msg += '\nYou may still be using Facebook as your Page.';
+    const back = {
+      label: 'Switch back to my profile',
+      run: async () => {
+        const { fbTargets } = await chrome.storage.local.get('fbTargets');
+        const names = [...run.items, ...(fbTargets || [])].filter((t) => t.kind === 'page').map((t) => cleanName(t.name));
+        ui.update({ mode: modeTag(run), name: 'Switching back to your profile…', msg: '', buttons: [] });
+        const ok = await switchToPersonal(names);
+        if (ok) {
+          const r = await getRun();
+          if (r) await setRun({ ...r, dismissed: true, switchedToPage: false });
+          return ui.unmount();
+        }
+        ui.update({
+          mode: modeTag(run),
+          name: 'Couldn’t find your profile in Facebook’s menu.',
+          msg: 'Click your profile picture (top right), then choose your name.',
+          error: true,
+          buttons: [{ label: 'Close', kind: 'primary', run: () => ui.unmount() }],
+        });
+      },
+    };
     ui.update({
       mode: modeTag(run),
       name: head,
@@ -740,6 +898,7 @@
       error: !!run.stopReason,
       progress: run.status === 'done' ? 1 : progress(run),
       buttons: [
+        ...(run.switchedToPage ? [back] : []),
         {
           label: 'Close',
           kind: 'primary',
@@ -864,10 +1023,14 @@
         key = m[1].toLowerCase();
         url = `https://www.facebook.com/${m[1]}`;
       }
-      const name = (textOf(a) || a.getAttribute('aria-label') || '').trim();
+      const text = cleanName(textOf(a));
+      const name = text || cleanName(a.getAttribute('aria-label'));
       if (!name || name.length > 100 || NOT_A_NAME.test(name)) continue;
+      const fromText = !!text;
       const prev = found.get(key);
-      if (!prev || (name.length > prev.name.length && name.length < 80)) found.set(key, { name, url });
+      // Prefer a visible link text over a picture's label, then the longer (fuller) name.
+      if (!prev || (fromText && !prev.fromText) || (fromText === prev.fromText && name.length > prev.name.length && name.length < 80))
+        found.set(key, { name, url, fromText });
     }
     return [...found.values()];
   }
@@ -885,7 +1048,7 @@
       last = n;
     }
     window.scrollTo(0, 0);
-    return collect();
+    return collect().map(({ name, url }) => ({ name, url }));
   }
 
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
