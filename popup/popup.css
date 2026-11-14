@@ -230,7 +230,7 @@ input:focus, select:focus { border-color: var(--brand-2); box-shadow: 0 0 0 3px 
 .status-dot.bad { background: var(--danger-soft); color: var(--danger); }
 
 .manage li { display: flex; align-items: center; gap: 8px; padding: 7px 8px 7px 12px; }
-.manage li input { height: 30px; flex: 1; }
+.manage li input[type="text"] { height: 30px; flex: 1; }
 .icon-btn {
   flex: none; width: 28px; height: 28px; border-radius: 7px; border: 0; background: none;
   color: var(--muted); cursor: pointer; display: grid; place-items: center; font-size: 13px;
@@ -396,3 +396,96 @@ kbd {
 .attach-remove:hover { background: var(--danger-soft); color: var(--danger); }
 .attach.dragover .attach-list, .attach.dragover .attach-head { outline: 2px dashed var(--brand-2); outline-offset: 3px; border-radius: var(--radius); }
 #attachNote { margin: 6px 0 0; }
+
+/* ── Group & list management ── */
+.pick { position: relative; }
+.name-wrap { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.3; }
+.name-wrap .name { flex: none; }
+.sub { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sub .plus { color: var(--brand-ink); font-weight: 600; }
+
+.manage .pick { flex: 1; min-width: 0; padding: 0; background: none; }
+.manage li { transition: background .12s; }
+.manage li:hover { background: var(--surface); }
+.manage li:has(> .pick input:checked) { background: var(--brand-soft); }
+.manage li.editing { background: var(--surface); }
+.manage li .icon-btn { opacity: .75; }
+.manage li:hover .icon-btn, .manage li .icon-btn:focus-visible { opacity: 1; }
+.icon-btn.ok { color: var(--brand-ink); }
+.icon-btn.ok svg { width: 13px; height: 13px; }
+.lists-manage { max-height: 210px; }
+
+.list-icon {
+  flex: none; width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center;
+  background: var(--brand-soft); color: var(--brand-ink);
+}
+.list-icon svg { width: 15px; height: 15px; }
+
+/* Radio rows (choose a list) */
+.pick.radio .check { border-radius: 50%; }
+.pick.radio input:checked + .check { background: var(--bg); border-color: var(--brand-2); box-shadow: inset 0 0 0 4px var(--brand-2); }
+.pick.disabled { opacity: .5; cursor: not-allowed; }
+.pick.disabled:hover { background: none; }
+
+/* Bulk action bar */
+.bulk-bar {
+  position: sticky; top: 0; z-index: 5;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px;
+  padding: 7px 6px 7px 12px; border: 1px solid var(--brand-2); border-radius: var(--radius);
+  background: color-mix(in srgb, var(--brand-2) 10%, var(--bg));
+  animation: pop .14s ease-out;
+}
+.bulk-count { flex: 1; min-width: 90px; font-size: 12.5px; color: var(--ink-2); }
+.bulk-count b { color: var(--brand-ink); }
+.bulk-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.bulk-bar .btn.sm { height: 28px; padding: 0 10px; }
+.bulk-bar .btn svg { width: 14px; height: 14px; }
+.bulk-bar .icon-btn { width: 26px; height: 26px; }
+
+/* Dialog bits */
+.stack { display: flex; flex-direction: column; gap: 8px; }
+.field-error { margin: -4px 0 0 !important; color: var(--danger); font-size: 11.5px; }
+.names-preview { margin: 0; padding: 8px 12px 8px 28px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--line); font-size: 12.5px; color: var(--ink-2); }
+.names-preview li { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.link.danger { color: var(--danger); }
+.btn.danger-solid { background: var(--danger); color: #fff; border-color: transparent; }
+.btn.danger-solid:hover:not(:disabled) { filter: brightness(1.08); }
+
+/* Toast with an action (Undo) */
+.toast { display: flex; align-items: center; gap: 12px; }
+.toast-text { flex: 1; min-width: 0; }
+.toast.show.has-action { pointer-events: auto; }
+.toast-action {
+  flex: none; border: 0; background: none; padding: 2px 4px; margin: -2px -4px -2px 0; border-radius: 6px;
+  color: #6ee7b7; font-weight: 700; font-size: 12.5px; cursor: pointer; text-transform: uppercase; letter-spacing: .04em;
+}
+.toast-action:hover { background: rgba(255,255,255,.12); }
+@media (prefers-color-scheme: dark) { .toast-action { color: var(--brand); } .toast-action:hover { background: rgba(15,23,42,.08); } }
+.toast.error .toast-action { color: #fff; }
+/* Keep toasts clear of an open dialog's list and buttons. */
+.modal:not([hidden]) ~ .toast { bottom: auto; top: 12px; }
+
+/* ── Facebook ── */
+.fb-intro { display: flex; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); margin-bottom: 12px; }
+.fb-intro svg { width: 22px; height: 22px; color: #1877f2; margin-top: 2px; }
+.fb-intro p { margin: 2px 0 0; }
+.fb-msg { white-space: pre-wrap; word-break: break-word; max-height: 110px; overflow: auto; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--ink-2); }
+.fb-msg.empty-msg { color: var(--muted); font-style: italic; }
+.fb-add { display: flex; gap: 6px; margin: 8px 0 12px; flex-wrap: wrap; }
+.fb-add input { flex: 1 1 140px; min-width: 0; padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+.fb-add input#fbUrl { flex-basis: 100%; }
+.kind-tag { font-size: 11px; padding: 1px 6px; border-radius: 999px; background: var(--soft); color: var(--muted); margin-left: auto; flex: none; }
+.kind-tag.page { background: rgba(24, 119, 242, 0.12); color: #1877f2; }
+.kind-tag.fail { background: var(--danger-soft); color: var(--danger); }
+.kind-tag.ok { background: var(--brand-soft); color: var(--brand-ink); }
+.row-del { border: 0; background: none; color: var(--muted); cursor: pointer; padding: 2px 6px; border-radius: 6px; flex: none; }
+.row-del:hover { color: var(--danger); background: var(--danger-soft); }
+.btn.fb { background: #1877f2; border-color: #1877f2; color: #fff; }
+.btn.fb:hover:not(:disabled) { background: #166fe0; }
+body[data-tab="facebook"] #modeBar,
+body[data-tab="facebook"] #startBtn,
+body[data-tab="facebook"] #runBox,
+body[data-tab="facebook"] #lastRun { display: none !important; }
+#tab-facebook .run-box { margin-top: 12px; }
+#tab-facebook .last-run { margin-top: 10px; }
+.row-extra { display: flex; align-items: center; gap: 4px; margin-left: auto; flex: none; }

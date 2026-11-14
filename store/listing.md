@@ -6,14 +6,14 @@ Copy each section into the matching field in the Developer Dashboard.
 
 ## Item name (comes from `manifest.json`)
 
-**RitPost – Group Posting for WhatsApp Web** (already set in `manifest.json`; the dashboard fills it in automatically)
+**RitPost – Group Posting for WhatsApp Web & Facebook** (already set in `manifest.json`; the dashboard fills it in automatically)
 
-> The name ends with "…for WhatsApp Web", which is the accepted pattern for tools that work with another brand, so it isn't mistaken for an official WhatsApp product. Short name (toolbar): **RitPost**.
+> The name ends with "…for WhatsApp Web & Facebook", which is the accepted pattern for tools that work with another brand, so it isn't mistaken for an official WhatsApp product. Short name (toolbar): **RitPost**.
 
 ## Summary (max 132 characters)
 
 ```
-Write once, attach photos or videos, pick your WhatsApp Web groups, and post to each with a keypress or optional timed auto-send.
+Write once, attach photos or videos, and post to your WhatsApp Web groups and Facebook groups or Pages, one click at a time.
 ```
 
 ## Category
@@ -27,15 +27,21 @@ English
 ## Description
 
 ```
-RitPost makes posting the same announcement to many WhatsApp groups fast and organised.
+RitPost makes posting the same announcement to many WhatsApp groups, Facebook groups and Facebook Pages fast and organised.
 
 Write your message once, pick groups from your saved list, and RitPost walks through them for you in WhatsApp Web. For each group it opens the chat and fills in your message, with any photos, videos or documents you attached. You press Enter, and the next group opens on its own.
 
-HOW IT WORKS
+HOW IT WORKS (WHATSAPP)
 1. Open RitPost beside WhatsApp Web (side panel).
 2. Import your groups from WhatsApp Web in one click. Only groups are imported, not individual contacts.
 3. Write your message, tick the groups and press Start.
 4. Send each message with Enter, or turn on Automatic mode to send after a countdown you control.
+
+FACEBOOK GROUPS AND PAGES
+1. Import the Facebook groups you've joined, or paste a group or Page link.
+2. Tick where to post and press Post to Facebook.
+3. RitPost opens each one, fills in your message and attaches your photos and videos. You check it and click Post yourself.
+4. RitPost waits between posts (60 seconds by default) so they aren't flagged as spam.
 
 FEATURES
 • One-click import of your groups from WhatsApp Web (groups only, no individual contacts)
@@ -47,7 +53,8 @@ FEATURES
 • Progress panel with Skip, Pause, Stop and Retry
 • Optional Automatic mode with an adjustable interval (5–600 s) and a visible countdown you can hold or cancel
 • Session summary with one-click "Retry unsent"
-• Backup and restore of groups, lists and templates
+• Post the same message to Facebook groups and your own Facebook Pages (you click Post)
+• Backup and restore of groups, lists, templates and Facebook groups
 • Light and dark mode
 
 PRIVACY
@@ -55,8 +62,9 @@ Everything stays in your browser. RitPost has no servers, no accounts, no analyt
 
 PLEASE NOTE
 • Manual mode, where you press Enter for each message, is the default.
+• On Facebook, RitPost never clicks Post. Posting the same thing to many groups quickly can still get posts held or your account limited by Facebook.
 • WhatsApp's terms don't allow automated or bulk messaging. Automatic mode is optional, and using it can lead to WhatsApp restricting your account. Only post to groups that expect your messages.
-• RitPost is an independent tool. It is not affiliated with, endorsed by or sponsored by WhatsApp or Meta. WhatsApp is a trademark of its respective owner.
+• RitPost is an independent tool. It is not affiliated with, endorsed by or sponsored by WhatsApp, Facebook or Meta. WhatsApp and Facebook are trademarks of their respective owners.
 ```
 
 ## Graphic assets
@@ -76,7 +84,7 @@ Use a test account or blur the names and messages of real groups.
 2. The progress panel in WhatsApp Web ("Group 3 of 12").
 3. The import dialog showing the Groups tab.
 4. The end-of-session summary.
-5. The Templates menu or the formatting preview.
+5. The Facebook tab with groups ticked, or the RitPost panel on a Facebook group.
 
 Tip: set the Chrome window to 1280×800 and press Win+Shift+S to capture it.
 

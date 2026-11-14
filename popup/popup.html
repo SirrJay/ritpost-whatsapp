@@ -11,7 +11,7 @@
       <img src="../icons/icon48.png" alt="">
       <div>
         <h1>RitPost <span class="pro">PRO</span></h1>
-        <span>Group posting for WhatsApp Web</span>
+        <span>Group posting for WhatsApp Web &amp; Facebook</span>
       </div>
     </div>
     <button id="conn" class="pill" type="button" title="WhatsApp Web status">
@@ -22,6 +22,7 @@
   <nav class="tabs" role="tablist">
     <button class="tab active" data-tab="compose" role="tab">Compose</button>
     <button class="tab" data-tab="groups" role="tab">Groups <span id="groupCount" class="badge">0</span></button>
+    <button class="tab" data-tab="facebook" role="tab">Facebook <span id="fbCount" class="badge">0</span></button>
     <button class="tab" data-tab="settings" role="tab">Settings</button>
   </nav>
 
@@ -114,15 +115,126 @@
         <input id="newGroup" type="text" placeholder="Or type a group name exactly as in WhatsApp" maxlength="120">
         <button class="btn secondary" type="submit">Add</button>
       </form>
-      <div class="search" id="manageFilterWrap">
-        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M8.5 3a5.5 5.5 0 0 1 4.38 8.83l3.65 3.64-1.06 1.06-3.64-3.65A5.5 5.5 0 1 1 8.5 3Zm0 1.5a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z"/></svg>
-        <input id="manageFilter" type="search" placeholder="Search saved groups">
+      <!-- Saved lists -->
+      <div class="field" id="listsSection">
+        <div class="field-head">
+          <label>Saved lists <span id="listCount" class="muted"></span></label>
+          <div class="links">
+            <button type="button" class="link" id="listSelAll">Select all</button>
+            <span class="sep" id="listSelAllSep">·</span>
+            <button type="button" class="link" id="newListBtn">+ New list</button>
+          </div>
+        </div>
+        <div id="listBulk" class="bulk-bar" hidden>
+          <span id="listBulkCount" class="bulk-count"></span>
+          <button type="button" id="listBulkDelete" class="btn danger sm">Delete</button>
+          <button type="button" id="listBulkClear" class="icon-btn" title="Clear selection (Esc)" aria-label="Clear selection">✕</button>
+        </div>
+        <ul id="listManage" class="list manage lists-manage"></ul>
+        <p id="listsEmpty" class="hint" hidden>Lists let you pick many groups in one click. Tick groups below and choose <b>Add to list</b>, or create a <b>New list</b>.</p>
       </div>
-      <ul id="manageList" class="list manage"></ul>
-      <div id="manageEmpty" class="empty" hidden>
-        <p><strong>Your group list is empty</strong></p>
-        <p class="muted">Importing is the most reliable way to add groups, because names must match WhatsApp exactly.</p>
+
+      <!-- Saved groups -->
+      <div class="field">
+        <div class="field-head" id="groupsHead">
+          <label>Saved groups <span id="manageCount" class="muted"></span></label>
+          <div class="links">
+            <button type="button" class="link" id="mSelAll">Select all</button>
+          </div>
+        </div>
+        <div class="search" id="manageFilterWrap">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M8.5 3a5.5 5.5 0 0 1 4.38 8.83l3.65 3.64-1.06 1.06-3.64-3.65A5.5 5.5 0 1 1 8.5 3Zm0 1.5a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z"/></svg>
+          <input id="manageFilter" type="search" placeholder="Search saved groups">
+        </div>
+        <div id="bulkBar" class="bulk-bar" hidden>
+          <span id="bulkCount" class="bulk-count"></span>
+          <div class="bulk-actions">
+            <button type="button" id="bulkAddList" class="btn secondary sm" title="Add the ticked groups to a new or existing list">
+              <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 4.5h2v2H3v-2Zm4 .25h10v1.5H7v-1.5ZM3 9h2v2H3V9Zm4 .25h6v1.5H7v-1.5Zm8 1.75h1.5v2.25h2.25v1.5H16.5v2.25H15v-2.25h-2.25v-1.5H15V11ZM3 13.5h2v2H3v-2Zm4 .25h4v1.5H7v-1.5Z"/></svg>
+              Add to list
+            </button>
+            <button type="button" id="bulkUse" class="btn secondary sm" title="Select the ticked groups for sending in Compose">Send to</button>
+            <button type="button" id="bulkDelete" class="btn danger sm" title="Delete the ticked groups (Del)">Delete</button>
+            <button type="button" id="bulkClear" class="icon-btn" title="Clear selection (Esc)" aria-label="Clear selection">✕</button>
+          </div>
+        </div>
+        <ul id="manageList" class="list manage"></ul>
+        <div id="manageEmpty" class="empty" hidden>
+          <p><strong>Your group list is empty</strong></p>
+          <p class="muted">Importing is the most reliable way to add groups, because names must match WhatsApp exactly.</p>
+        </div>
       </div>
+    </section>
+
+    <!-- ── Facebook ────────────────────────────── -->
+    <section id="tab-facebook" class="panel" hidden>
+      <div class="fb-intro">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 1.5a8.5 8.5 0 0 0-1.33 16.9v-5.94H6.51V10h2.16V8.13c0-2.13 1.27-3.31 3.21-3.31.93 0 1.9.17 1.9.17v2.09h-1.07c-1.05 0-1.38.65-1.38 1.33V10h2.35l-.38 2.46h-1.97v5.94A8.5 8.5 0 0 0 10 1.5Z"/></svg>
+        <div>
+          <b>Post the same message to Facebook</b>
+          <p class="muted">RitPost opens each group or Page, fills in your message and attaches your photos and videos. <b>You click Post</b> each time, and RitPost waits between posts so Facebook doesn’t treat them as spam.</p>
+        </div>
+      </div>
+
+      <div class="field">
+        <div class="field-head">
+          <label>Message</label>
+          <button type="button" class="link" data-goto="compose">Edit in Compose</button>
+        </div>
+        <div id="fbMsgPreview" class="fb-msg"></div>
+        <p class="hint">WhatsApp formatting marks (*bold*, _italic_) are removed for Facebook. Documents are only sent to WhatsApp.</p>
+      </div>
+
+      <button id="fbImportBtn" type="button" class="btn secondary block">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2.5a.75.75 0 0 1 .75.75v8.69l2.72-2.72 1.06 1.06-4.53 4.53-4.53-4.53 1.06-1.06 2.72 2.72V3.25A.75.75 0 0 1 10 2.5ZM3.5 15h13v1.5h-13z"/></svg>
+        <span id="fbImportLabel">Import my Facebook groups</span>
+      </button>
+      <form id="fbAddForm" class="fb-add" autocomplete="off">
+        <input id="fbUrl" type="url" placeholder="Paste a group or Page link (facebook.com/…)" required>
+        <input id="fbName" type="text" placeholder="Name (optional)" maxlength="120">
+        <button class="btn secondary" type="submit">Add</button>
+      </form>
+
+      <div class="field">
+        <div class="field-head">
+          <label>Post to <span id="fbSelCount" class="muted"></span></label>
+          <div class="links">
+            <button type="button" class="link" id="fbSelAll">All</button>
+            <span class="sep">·</span>
+            <button type="button" class="link" id="fbSelNone">None</button>
+          </div>
+        </div>
+        <div class="search" id="fbFilterWrap">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M8.5 3a5.5 5.5 0 0 1 4.38 8.83l3.65 3.64-1.06 1.06-3.64-3.65A5.5 5.5 0 1 1 8.5 3Zm0 1.5a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z"/></svg>
+          <input id="fbFilter" type="search" placeholder="Filter groups and Pages">
+        </div>
+        <ul id="fbList" class="list"></ul>
+        <div id="fbEmpty" class="empty" hidden>
+          <p><strong>No Facebook groups or Pages yet</strong></p>
+          <p class="muted">Import the groups you’ve joined, or paste a link above. To post on your own Page, add its link and switch to the Page’s profile on Facebook first.</p>
+        </div>
+      </div>
+
+      <div class="setting">
+        <div>
+          <div class="s-title">Wait between Facebook posts</div>
+          <div class="muted">After each post, RitPost waits this long before opening the next one. At least 30 seconds; 60 or more is safer.</div>
+        </div>
+        <div class="num-field"><input id="fbGap" type="number" min="30" max="900" step="5"> <span class="muted">s</span></div>
+      </div>
+
+      <div id="fbRunBox" class="run-box" hidden>
+        <div class="run-top">
+          <span class="run-title"><span class="live-dot"></span><b id="fbRunTitle">Posting…</b></span>
+          <span id="fbRunMeta" class="muted"></span>
+        </div>
+        <div class="run-bar"><div id="fbRunFill"></div></div>
+        <div class="run-actions">
+          <button type="button" id="fbRunFocus" class="btn secondary sm">Show Facebook</button>
+          <button type="button" id="fbRunStop" class="btn danger sm">Stop</button>
+        </div>
+      </div>
+      <div id="fbLastRun" class="last-run" hidden></div>
     </section>
 
     <!-- ── Settings ────────────────────────────── -->
@@ -160,7 +272,7 @@
       <div class="setting">
         <div>
           <div class="s-title">Backup</div>
-          <div class="muted">Export or restore groups, lists and templates.</div>
+          <div class="muted">Export or restore groups, lists, templates and Facebook groups.</div>
         </div>
         <div class="btn-group">
           <button type="button" id="exportBtn" class="btn secondary sm">Export</button>
@@ -216,6 +328,10 @@
     <button id="startBtn" class="btn primary block lg" type="button" disabled>
       <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2.9 2.7a.75.75 0 0 1 .82-.1l13.5 6.75a.75.75 0 0 1 0 1.34L3.72 17.44a.75.75 0 0 1-1.05-.87L4.38 10 2.67 3.43a.75.75 0 0 1 .23-.73ZM5.6 10.75l-1.07 4.13L14.57 10 4.53 5.12l1.07 4.13H10v1.5H5.6Z"/></svg>
       <span id="startLabel">Start sending</span>
+    </button>
+    <button id="fbStartBtn" class="btn fb block lg" type="button" hidden disabled>
+      <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 1.5a8.5 8.5 0 0 0-1.33 16.9v-5.94H6.51V10h2.16V8.13c0-2.13 1.27-3.31 3.21-3.31.93 0 1.9.17 1.9.17v2.09h-1.07c-1.05 0-1.38.65-1.38 1.33V10h2.35l-.38 2.46h-1.97v5.94A8.5 8.5 0 0 0 10 1.5Z"/></svg>
+      <span id="fbStartLabel">Post to Facebook</span>
     </button>
   </footer>
 

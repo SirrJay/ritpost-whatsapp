@@ -1,6 +1,8 @@
-# RitPost – Group Posting for WhatsApp Web
+# RitPost – Group Posting for WhatsApp Web & Facebook
 
 A Chrome extension for WhatsApp Web. Write a message once, pick your groups from a saved list, and RitPost goes through them one by one. It opens each group and fills in the message. You press **Enter**, and the next group opens on its own.
+
+It can also post the same message to your **Facebook groups and Pages**; see [Facebook groups and Pages](#facebook-groups-and-pages).
 
 In **Manual** mode (the default) RitPost never presses Send. You send every message yourself. An optional **Automatic** mode can send after a countdown; see [Send modes](#send-modes).
 
@@ -21,6 +23,7 @@ When you update, click the reload icon on the RitPost card. Already-open WhatsAp
 2. Sign in to WhatsApp Web if needed, then open the **Groups** tab:
    - **Import groups from WhatsApp Web** reads your chat list and shows **only groups** by default. Individual contacts sit under a separate tab. If any contacts were saved before, RitPost offers to remove them.
    - Or type a group name by hand and click **Add**.
+   - Tick groups to act on several at once: **Add to list**, **Send to**, or **Delete** (or press <kbd>Del</kbd>). Every delete can be undone from the message that appears.
 3. In the **Compose** tab, write your message. Type `{group}` anywhere to insert each group's name.
    To send photos, videos or documents too, click **Attach photos, videos or files**, or drag files onto the message area.
 4. Tick the groups to send to and click **Start sending**.
@@ -66,10 +69,30 @@ Choose the mode in the switch above the Start button.
 - Attachments stay in the panel until you remove them, so you can reuse them for the next post. They're stored only in your browser, and aren't included in backups.
 - If the preview doesn't open in a chat, click **Retry**. WhatsApp sometimes changes how it accepts files.
 
+## Facebook groups and Pages
+
+RitPost can post the same message to your Facebook groups and your own Facebook Pages.
+
+1. Open the **Facebook** tab in the side panel.
+2. Add where to post:
+   - **Import my Facebook groups** opens Facebook's "Your groups" page and reads the groups you've joined.
+   - Or paste a group or Page link (for example `facebook.com/groups/…` or `facebook.com/YourPage`) and click **Add**.
+3. Tick the groups and Pages, then click **Post to … Facebook groups/Pages**. The message and photos/videos come from the **Compose** tab.
+4. For each one, RitPost opens it on Facebook, opens the "Write something…" box, fills in your message and attaches your photos and videos. **You check the post and click Post yourself.** RitPost never clicks Post on Facebook.
+5. After each post RitPost waits (60 seconds by default, at least 30) before opening the next one. A panel in the corner of Facebook shows the countdown, with **Skip** and **Stop**.
+
+Good to know:
+
+- **Your own Page:** to post *as* the Page, switch to the Page's profile on Facebook first (profile picture → the Page). Otherwise Facebook shows no post box, or posts as you.
+- WhatsApp formatting marks (`*bold*`, `_italic_`, `~strike~`) are removed, because Facebook doesn't use them. `{group}` works the same as on WhatsApp.
+- Facebook gets photos and videos only; documents are sent to WhatsApp only.
+- If you close the post box without posting, RitPost doesn't count it and offers **Fill again**.
+- Posting the same thing to many groups in a short time can get posts held for review or your account temporarily limited by Facebook, even when you click Post yourself. Keep the wait long and post only where your post is welcome.
+
 ## Premium features
 
 - **Templates**: save messages you send often and load them in one click (Compose → Templates).
-- **Group lists**: save a selection, such as "Church groups", and reselect it with one chip.
+- **Group lists**: save a selection, such as "Church groups", and reselect it with one chip. Add more groups to an existing list at any time (saving under an existing name adds to that list and never removes anything). In the Groups tab you can rename a list, tick or untick its groups, and delete lists one at a time or several at once. Deleting a list keeps its groups.
 - **Formatting toolbar and live preview**: bold, italic, strikethrough and monospace, shown the way WhatsApp will display them.
 - **Smart group finding**: emoji names are handled. If the group isn't on screen, RitPost searches WhatsApp using the name without emojis. If that fails too, it scrolls through your whole chat list.
 - **Failure reasons and recovery**: groups that failed are marked. You can rename them in place, then use **Select unsent** or **Retry unsent** to send to the rest.
@@ -101,9 +124,10 @@ Everything stays on your computer in `chrome.storage.local`. RitPost has no serv
 
 ```
 manifest.json            Manifest V3 config
-background.js            Side panel, finds or opens the WhatsApp tab, relays commands, saves backups
+background.js            Side panel, finds or opens the WhatsApp/Facebook tab, relays commands, saves backups
 content/content.js       Opens chats, fills messages, notices sends, shows the progress panel
 content/page-bridge.js   Tells groups apart from contacts when importing
+content/facebook.js      Facebook: opens each group/Page, fills the post box, waits for you to click Post
 popup/                   Compose, group manager and settings UI (shown in the side panel)
 icons/                   Extension icons
 store/                   Chrome Web Store listing text, privacy policy and promo images

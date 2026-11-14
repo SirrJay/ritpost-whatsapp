@@ -3,6 +3,7 @@
  * - Opens RitPost as a side panel docked beside WhatsApp Web.
  * - Locates / opens the WhatsApp Web tab and relays commands to the content script
  *   (injecting it if the tab was open before the extension was installed or reloaded).
+ * - Starts Facebook posting runs (content/facebook.js does the work in the Facebook tab).
  * - Saves backup files through the downloads API.
  */
 
@@ -112,6 +113,109 @@ async function controlRun(action, windowId) {
   return sendToContent(tab.id, { type: 'RITPOST_CONTROL', action }, 2000);
 }
 
+// ─────────────── Facebook ───────────────
+const FB_MATCH = 'https://*.facebook.com/*';
+const FB_GROUPS_URL = 'https://www.facebook.com/groups/joins/?nav_source=tab';
+
+async function findFbTab(preferWindowId) {
+  const tabs = await chrome.tabs.query({ url: FB_MATCH });
+  return tabs.find((t) => t.active && t.windowId === preferWindowId) || tabs.find((t) => t.windowId === preferWindowId) || tabs[0] || null;
+}
+
+function waitTabComplete(tabId, timeoutMs = 30000) {
+  return new Promise((resolve) => {
+    const done = (ok) => {
+      clearTimeout(timer);
+      chrome.tabs.onUpdated.removeListener(listener);
+      resolve(ok);
+    };
+    const listener = (id, info) => id === tabId && info.status === 'complete' && done(true);
+    const timer = setTimeout(() => done(false), timeoutMs);
+    chrome.tabs.onUpdated.addListener(listener);
+    chrome.tabs.get(tabId).then((t) => t.status === 'complete' && !t.pendingUrl && done(true)).catch(() => done(false));
+  });
+}
+
+async function sendToFb(tabId, msg, timeoutMs = 60000) {
+  const end = Date.now() + timeoutMs;
+  let injected = false;
+  for (;;) {
+    const res = await trySend(tabId, msg);
+    if (res !== undefined) return res;
+    if (!injected) {
+      injected = true;
+      await chrome.scripting.executeScript({ target: { tabId }, files: ['content/facebook.js'] }).catch(() => {});
+      continue;
+    }
+    if (Date.now() > end) throw new Error('Could not connect to the Facebook tab. Reload it and try again.');
+    await sleep(800);
+  }
+}
+
+/** Open (or reuse) a Facebook tab on the "Your groups" page and read the groups listed there. */
+async function fbScan(windowId) {
+  let tab = await findFbTab(windowId);
+  if (tab) tab = await chrome.tabs.update(tab.id, { url: FB_GROUPS_URL, active: true });
+  else tab = await chrome.tabs.create({ url: FB_GROUPS_URL, active: true, ...(windowId ? { windowId } : {}) });
+  await chrome.windows.update(tab.windowId, { focused: true }).catch(() => {});
+  await sleep(500);
+  await waitTabComplete(tab.id);
+  return sendToFb(tab.id, { type: 'FB_SCAN' }, 90000);
+}
+
+async function fbStart(run, windowId) {
+  if (!run?.items?.length) return { ok: false, error: 'Pick at least one Facebook group or Page.' };
+  const first = run.items[0].url;
+  let tab = await findFbTab(windowId);
+  const fbRun = {
+    ...run,
+    id: Date.now().toString(36),
+    index: 0,
+    results: [],
+    status: 'running',
+    navigatedFor: 0,
+    navAt: Date.now(),
+    startedAt: Date.now(),
+  };
+  if (tab) {
+    fbRun.tabId = tab.id;
+    await chrome.storage.local.set({ fbRun });
+    await chrome.tabs.update(tab.id, { url: first, active: true });
+  } else {
+    tab = await chrome.tabs.create({ url: first, active: true, ...(windowId ? { windowId } : {}) });
+    fbRun.tabId = tab.id;
+    await chrome.storage.local.set({ fbRun });
+  }
+  await chrome.windows.update(tab.windowId, { focused: true }).catch(() => {});
+  return { ok: true };
+}
+
+async function fbStop() {
+  const { fbRun } = await chrome.storage.local.get('fbRun');
+  if (fbRun && (fbRun.status === 'running' || fbRun.status === 'waiting')) {
+    await chrome.storage.local.set({ fbRun: { ...fbRun, status: 'stopped', finishedAt: Date.now() } });
+  }
+  return { ok: true };
+}
+
+async function fbFocus(windowId) {
+  const { fbRun } = await chrome.storage.local.get('fbRun');
+  let tab = null;
+  if (fbRun?.tabId) tab = await chrome.tabs.get(fbRun.tabId).catch(() => null);
+  tab = tab || (await findFbTab(windowId));
+  if (tab) await focusTab(tab);
+  else await chrome.tabs.create({ url: 'https://www.facebook.com/', active: true, ...(windowId ? { windowId } : {}) });
+  return { ok: true };
+}
+
+// A closed Facebook tab ends its run.
+chrome.tabs.onRemoved.addListener(async (tabId) => {
+  const { fbRun } = await chrome.storage.local.get('fbRun');
+  if (fbRun?.tabId === tabId && (fbRun.status === 'running' || fbRun.status === 'waiting')) {
+    await chrome.storage.local.set({ fbRun: { ...fbRun, status: 'stopped', finishedAt: Date.now(), dismissed: true } });
+  }
+});
+
 async function downloadFile({ filename, json }) {
   const url = `data:application/json;charset=utf-8,${encodeURIComponent(json)}`;
   try {
@@ -149,6 +253,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     BG_START: () => startRun(p.run, windowId),
     BG_CONTROL: () => controlRun(p.action, windowId),
     BG_DOWNLOAD: () => downloadFile(p),
+    BG_FB_SCAN: () => fbScan(windowId),
+    BG_FB_START: () => fbStart(p.run, windowId),
+    BG_FB_STOP: () => fbStop(),
+    BG_FB_OPEN: () => fbFocus(windowId),
+    BG_FB_TABID: async () => ({ ok: true, tabId: sender.tab?.id ?? null }),
   };
   const handler = handlers[msg?.type];
   if (!handler) return false;
@@ -168,4 +277,7 @@ chrome.runtime.onInstalled.addListener(async ({ reason }) => {
   // Make sure already-open WhatsApp tabs get the latest scripts.
   const tabs = await chrome.tabs.query({ url: WA_MATCH });
   for (const t of tabs) if (t.status === 'complete') injectScripts(t.id).catch(() => {});
+  const fbTabs = await chrome.tabs.query({ url: FB_MATCH }).catch(() => []);
+  for (const t of fbTabs)
+    if (t.status === 'complete') chrome.scripting.executeScript({ target: { tabId: t.id }, files: ['content/facebook.js'] }).catch(() => {});
 });

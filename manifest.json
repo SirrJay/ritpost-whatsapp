@@ -1,10 +1,10 @@
 {
   "manifest_version": 3,
-  "name": "RitPost – Group Posting for WhatsApp Web",
+  "name": "RitPost – Group Posting for WhatsApp Web & Facebook",
   "short_name": "RitPost",
-  "version": "1.4.2",
+  "version": "1.6.0",
   "minimum_chrome_version": "116",
-  "description": "Write once, pick groups from your saved list, and post to each WhatsApp Web group with a single keypress.",
+  "description": "Write once, pick your WhatsApp groups and Facebook groups or Pages, and post to each one with a single click.",
   "icons": {
     "16": "icons/icon16.png",
     "32": "icons/icon32.png",
@@ -12,7 +12,7 @@
     "128": "icons/icon128.png"
   },
   "action": {
-    "default_title": "Open RitPost beside WhatsApp Web",
+    "default_title": "Open RitPost",
     "default_icon": {
       "16": "icons/icon16.png",
       "32": "icons/icon32.png",
@@ -32,7 +32,7 @@
     "service_worker": "background.js"
   },
   "permissions": ["storage", "unlimitedStorage", "scripting", "sidePanel", "downloads"],
-  "host_permissions": ["https://web.whatsapp.com/*"],
+  "host_permissions": ["https://web.whatsapp.com/*", "https://*.facebook.com/*"],
   "content_scripts": [
     {
       "matches": ["https://web.whatsapp.com/*"],
@@ -43,6 +43,11 @@
     {
       "matches": ["https://web.whatsapp.com/*"],
       "js": ["content/content.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://*.facebook.com/*"],
+      "js": ["content/facebook.js"],
       "run_at": "document_idle"
     }
   ],

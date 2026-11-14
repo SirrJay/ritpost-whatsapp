@@ -6,6 +6,8 @@ const clampInterval = (v) => Math.min(600, Math.max(5, Math.round(Number(v) || 6
 const AVATAR_COLORS = ['#0e7c66', '#2563eb', '#7c3aed', '#db2777', '#ea580c', '#0891b2', '#4d7c0f', '#9333ea'];
 const CHECK_SVG = '<svg viewBox="0 0 12 12"><path d="M4.6 8.6 2.3 6.3l-.9.9 3.2 3.2 6-6-.9-.9z"/></svg>';
 const PENCIL_SVG = '<svg viewBox="0 0 20 20"><path d="M13.6 2.9a1.8 1.8 0 0 1 2.5 0l1 1a1.8 1.8 0 0 1 0 2.5L7.4 16.1 3 17l.9-4.4 9.7-9.7Zm1.4 1.1-1 1 1 1 1-1-1-1Zm-2 2L5.2 13.4l-.4 1.8 1.8-.4L14 7l-1-1Z"/></svg>';
+const LIST_SVG = '<svg viewBox="0 0 20 20"><path d="M3 4.5h2v2H3v-2Zm4 .25h10v1.5H7v-1.5ZM3 9h2v2H3V9Zm4 .25h10v1.5H7v-1.5ZM3 13.5h2v2H3v-2Zm4 .25h10v1.5H7v-1.5Z"/></svg>';
+const USE_SVG = '<svg viewBox="0 0 20 20"><path d="M2.9 2.7a.75.75 0 0 1 .82-.1l13.5 6.75a.75.75 0 0 1 0 1.34L3.72 17.44a.75.75 0 0 1-1.05-.87L4.38 10 2.67 3.43a.75.75 0 0 1 .23-.73ZM5.6 10.75l-1.07 4.13L14.57 10 4.53 5.12l1.07 4.13H10v1.5H5.6Z"/></svg>';
 const FAILED = new Set(['notfound', 'failed', 'readonly']);
 const MAX_FILES = 10;
 const MAX_FILE_BYTES = 16 * 1024 * 1024;
@@ -22,6 +24,8 @@ const state = {
   lastRun: null,
   filter: '',
   manageFilter: '',
+  manageSel: new Set(), // groups ticked in the Groups tab (for bulk actions)
+  listSel: new Set(), // lists ticked in the Groups tab
   editingId: null,
   preview: false,
   status: { open: false },
@@ -29,8 +33,12 @@ const state = {
 
 const $ = (id) => document.getElementById(id);
 const uid = () => Math.random().toString(36).slice(2, 9) + Date.now().toString(36);
-const normName = (s) => String(s || '').replace(/\s+/g, ' ').trim();
-const keyOf = (s) => normName(s).toLowerCase();
+// Invisible / formatting characters WhatsApp sprinkles into chat names (same set as content.js).
+const INVISIBLE = /[­​-‏‪-‮⁠-⁤﻿︎️]/g;
+const normName = (s) => String(s || '').replace(INVISIBLE, '').replace(/\s+/g, ' ').trim();
+const keyOf = (s) => normName(s).normalize('NFKC').toLowerCase();
+const byName = (a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true });
+const short = (s, n = 26) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 const escapeHtml = (s) =>
   String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -43,23 +51,103 @@ function bg(type, payload = {}) {
 }
 
 // ─────────────── storage ───────────────
+const GROUP_KEYS = ['groups', 'selected', 'lists', 'templates'];
+
+/**
+ * Clean up stored groups/lists: drop blank names, merge duplicates (names that only
+ * differ by spacing, case or invisible characters), give every entry an id, and point
+ * lists/selection at the surviving ids. Also repairs data saved by older versions.
+ */
+function sanitize(d) {
+  const groups = [];
+  const idByKey = new Map();
+  const remap = new Map();
+  const usedIds = new Set();
+  for (const raw of Array.isArray(d.groups) ? d.groups : []) {
+    const obj = raw && typeof raw === 'object' ? raw : {};
+    const name = normName(typeof raw === 'string' ? raw : obj.name);
+    if (!name) continue;
+    let id = obj.id ? String(obj.id) : uid();
+    const k = keyOf(name);
+    if (idByKey.has(k)) {
+      if (!remap.has(id)) remap.set(id, idByKey.get(k));
+      continue;
+    }
+    if (usedIds.has(id)) id = uid();
+    usedIds.add(id);
+    idByKey.set(k, id);
+    if (obj.id && !remap.has(String(obj.id))) remap.set(String(obj.id), id);
+    remap.set(id, id);
+    groups.push({ ...obj, id, name, addedAt: obj.addedAt || Date.now() });
+  }
+  groups.sort(byName);
+  const fix = (ids) => [...new Set((Array.isArray(ids) ? ids : []).map((id) => remap.get(String(id))).filter(Boolean))];
+
+  const lists = [];
+  for (const l of Array.isArray(d.lists) ? d.lists : []) {
+    const name = normName(l?.name);
+    if (!name) continue;
+    const ids = fix(l.groupIds);
+    const same = lists.find((x) => keyOf(x.name) === keyOf(name));
+    if (same) same.groupIds = [...new Set([...same.groupIds, ...ids])];
+    else lists.push({ id: l.id ? String(l.id) : uid(), name, groupIds: ids, createdAt: l.createdAt || Date.now() });
+  }
+  lists.sort(byName);
+
+  const templates = (Array.isArray(d.templates) ? d.templates : []).filter((t) => t?.name && typeof t.text === 'string');
+  return { groups, lists, templates, selected: fix(d.selected) };
+}
+
+function applyGroupData(clean) {
+  state.groups = clean.groups;
+  state.lists = clean.lists;
+  state.templates = clean.templates;
+  state.selected = new Set(clean.selected);
+}
+
 async function load() {
-  const d = await chrome.storage.local.get(['groups', 'selected', 'message', 'settings', 'lastRun', 'templates', 'lists', 'attachments']);
-  state.groups = Array.isArray(d.groups) ? d.groups : [];
-  const ids = new Set(state.groups.map((g) => g.id));
-  state.selected = new Set((d.selected || []).filter((id) => ids.has(id)));
+  const d = await chrome.storage.local.get([...GROUP_KEYS, 'message', 'settings', 'lastRun', 'attachments']);
+  const clean = sanitize(d);
+  applyGroupData(clean);
   state.message = d.message || '';
   state.settings = { ...DEFAULT_SETTINGS, ...(d.settings || {}) };
   state.lastRun = d.lastRun || null;
-  state.templates = Array.isArray(d.templates) ? d.templates : [];
-  state.lists = Array.isArray(d.lists) ? d.lists : [];
   state.attachments = Array.isArray(d.attachments) ? d.attachments.filter((a) => a?.id && a?.data) : [];
+  // Write back anything that had to be repaired.
+  const changed = GROUP_KEYS.some((k) => d[k] !== undefined && JSON.stringify(d[k]) !== JSON.stringify(clean[k]));
+  if (changed) await persist({ groups: clean.groups, lists: clean.lists, templates: clean.templates, selected: clean.selected });
 }
 
-const saveGroups = () => chrome.storage.local.set({ groups: state.groups, selected: [...state.selected], lists: state.lists });
-const saveSelected = () => chrome.storage.local.set({ selected: [...state.selected] });
-const saveTemplates = () => chrome.storage.local.set({ templates: state.templates });
-const saveLists = () => chrome.storage.local.set({ lists: state.lists });
+/** Save to chrome.storage and tell the user if it didn't work (instead of failing silently). */
+async function persist(data) {
+  try {
+    await chrome.storage.local.set(data);
+    return true;
+  } catch (e) {
+    toast(`Couldn’t save your changes: ${e?.message || e}`, true);
+    return false;
+  }
+}
+
+const saveGroups = () => persist({ groups: state.groups, selected: [...state.selected], lists: state.lists });
+const saveSelected = () => persist({ selected: [...state.selected] });
+const saveTemplates = () => persist({ templates: state.templates });
+const saveLists = () => persist({ lists: state.lists });
+
+/** Another RitPost panel (e.g. in a second window) changed the saved groups: pick up its changes. */
+let syncTimer;
+function syncFromStorageSoon() {
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(async () => {
+    const clean = sanitize(await chrome.storage.local.get(GROUP_KEYS));
+    const current = { groups: state.groups, lists: state.lists, templates: state.templates, selected: [...state.selected] };
+    if (JSON.stringify(clean) === JSON.stringify(current)) return; // our own write
+    applyGroupData(clean);
+    if (state.editingId && !state.groups.some((g) => g.id === state.editingId)) state.editingId = null;
+    refreshGroups();
+    renderTemplateMenu();
+  }, 120);
+}
 
 let msgTimer;
 function saveMessageSoon() {
@@ -69,13 +157,30 @@ function saveMessageSoon() {
 
 // ─────────────── UI helpers ───────────────
 let toastTimer;
-function toast(text, isError = false) {
+/** Short status message. `action` ({ label, run }) adds a button such as Undo. */
+function toast(text, isError = false, action = null) {
   const t = $('toast');
-  t.textContent = text;
+  t.replaceChildren(h('span', { class: 'toast-text' }, text));
+  if (action)
+    t.append(
+      h(
+        'button',
+        {
+          type: 'button',
+          class: 'toast-action',
+          onclick: () => {
+            t.classList.remove('show');
+            action.run();
+          },
+        },
+        action.label
+      )
+    );
   t.classList.toggle('error', isError);
+  t.classList.toggle('has-action', !!action);
   t.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.remove('show'), 2800);
+  toastTimer = setTimeout(() => t.classList.remove('show'), action ? 7000 : 2800);
 }
 
 function h(tag, props = {}, ...children) {
@@ -113,6 +218,8 @@ function checkRow(name, checked, onChange, extra) {
 }
 
 function switchTab(name) {
+  document.body.dataset.tab = name;
+  $('fbStartBtn').hidden = name !== 'facebook';
   document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.tab === name));
   document.querySelectorAll('.panel').forEach((p) => (p.hidden = p.id !== `tab-${name}`));
   closeMenu();
@@ -127,14 +234,19 @@ function failedNames() {
 
 // ─────────────── dialog ───────────────
 let dialogConfirm = null;
-function openDialog({ title, body, confirmText = 'Save', onConfirm, hideConfirm = false }) {
+let dialogCancel = null;
+function openDialog({ title, body, confirmText = 'Save', onConfirm, onCancel = null, hideConfirm = false, danger = false }) {
+  // Replacing an open dialog counts as cancelling it.
+  if (!$('modal').hidden) closeDialog();
   $('modalTitle').textContent = title;
   $('modalBody').replaceChildren(...(Array.isArray(body) ? body : [body]));
   const btn = $('modalConfirm');
   btn.textContent = confirmText;
   btn.hidden = hideConfirm;
   btn.disabled = false;
+  btn.className = `btn ${danger ? 'danger-solid' : 'primary'}`;
   dialogConfirm = onConfirm;
+  dialogCancel = onCancel;
   $('modal').hidden = false;
   closeMenu();
   return {
@@ -147,11 +259,15 @@ function openDialog({ title, body, confirmText = 'Save', onConfirm, hideConfirm 
     },
   };
 }
-function closeDialog() {
+function closeDialog(confirmed = false) {
+  const cancel = dialogCancel;
   $('modal').hidden = true;
   dialogConfirm = null;
+  dialogCancel = null;
+  if (!confirmed && cancel) cancel();
 }
 
+/** Resolves with the entered name, or null if the dialog is dismissed. */
 function askName({ title, label, placeholder, value = '', confirmText = 'Save' }) {
   return new Promise((resolve) => {
     const input = h('input', { type: 'text', placeholder, maxlength: 60, value });
@@ -165,6 +281,7 @@ function askName({ title, label, placeholder, value = '', confirmText = 'Save' }
         resolve(v);
         return true;
       },
+      onCancel: () => resolve(null),
     });
     const sync = () => d.setConfirm(!!normName(input.value));
     input.addEventListener('input', sync);
@@ -285,6 +402,7 @@ async function saveTemplate() {
   const text = state.message.trim();
   if (!text) return toast('Write a message first.', true);
   const name = await askName({ title: 'Save template', label: 'Template name', placeholder: 'e.g. Weekly announcement' });
+  if (!name) return;
   const existing = state.templates.find((t) => keyOf(t.name) === keyOf(name));
   if (existing) existing.text = text;
   else state.templates.push({ id: uid(), name, text, createdAt: Date.now() });
@@ -321,27 +439,43 @@ function renderPickList() {
   $('filterWrap').hidden = state.groups.length < 8;
 }
 
+/** Ids of a list's groups that still exist. */
+function listMembers(l) {
+  const ids = new Set(state.groups.map((g) => g.id));
+  return l.groupIds.filter((id) => ids.has(id));
+}
+
+/** Select a list's groups for sending (the chip in Compose / the send icon in Groups). */
+function useList(l, { goCompose = false } = {}) {
+  const members = listMembers(l);
+  if (!members.length) return toast(`“${l.name}” has no groups yet. Edit it to add some.`, true);
+  state.selected = new Set(members);
+  saveSelected();
+  if (goCompose) switchTab('compose');
+  refreshGroups();
+  if (goCompose) toast(`Selected ${plural(members.length, 'group')} from “${l.name}”`);
+}
+
 function renderLists() {
   const wrap = $('listChips');
   const sel = state.selected;
-  const ids = new Set(state.groups.map((g) => g.id));
   wrap.replaceChildren(
     ...state.lists.map((l) => {
-      const members = l.groupIds.filter((id) => ids.has(id));
-      const active = members.length && members.length === sel.size && members.every((id) => sel.has(id));
+      const members = listMembers(l);
+      const active = members.length > 0 && members.length === sel.size && members.every((id) => sel.has(id));
       return h(
         'button',
         {
           type: 'button',
           class: `chip-btn${active ? ' active' : ''}`,
-          title: `Select the ${plural(members.length, 'group')} in “${l.name}”`,
+          title: active ? `Click again to clear the selection` : `Select the ${plural(members.length, 'group')} in “${l.name}”`,
           onclick: (e) => {
             if (e.target.closest('.x')) return;
-            state.selected = new Set(members);
-            saveSelected();
-            renderPickList();
-            renderCounts();
-            renderLists();
+            if (active) {
+              state.selected.clear();
+              saveSelected();
+              refreshGroups();
+            } else useList(l);
           },
         },
         h('span', { class: 'lbl' }, l.name),
@@ -350,13 +484,8 @@ function renderLists() {
           'span',
           {
             class: 'x',
-            title: 'Delete list',
-            onclick: () => {
-              state.lists = state.lists.filter((x) => x.id !== l.id);
-              saveLists();
-              renderLists();
-              toast(`Deleted list “${l.name}”`);
-            },
+            title: 'Delete list (your groups stay saved)',
+            onclick: () => deleteLists([l.id]),
           },
           '✕'
         )
@@ -365,34 +494,89 @@ function renderLists() {
   );
   $('listsBar').hidden = state.groups.length === 0;
   $('saveListBtn').disabled = sel.size === 0;
+  $('saveListBtn').textContent = sel.size ? `+ Save ${sel.size} to list` : '+ Save selection';
 }
 
-async function saveList() {
+function saveList() {
   if (!state.selected.size) return toast('Select some groups first.', true);
-  const name = await askName({ title: 'Save group list', label: `List name (${plural(state.selected.size, 'group')})`, placeholder: 'e.g. Church groups' });
-  const existing = state.lists.find((l) => keyOf(l.name) === keyOf(name));
-  if (existing) existing.groupIds = [...state.selected];
-  else state.lists.push({ id: uid(), name, groupIds: [...state.selected] });
-  saveLists();
-  renderLists();
-  toast(existing ? `Updated list “${name}”` : `Saved list “${name}”`);
+  openAddToList([...state.selected], {
+    title: `Save ${plural(state.selected.size, 'selected group')}`,
+    prefer: 'new',
+  });
+}
+
+// ─────────────── Groups tab: saved lists ───────────────
+function renderListManager() {
+  const rows = state.lists.map((l) => {
+    const n = listMembers(l).length;
+    const input = h('input', { type: 'checkbox', 'aria-label': `Select list ${l.name}` });
+    input.checked = state.listSel.has(l.id);
+    input.addEventListener('change', () => {
+      input.checked ? state.listSel.add(l.id) : state.listSel.delete(l.id);
+      renderListBulk();
+    });
+    return h(
+      'li',
+      {},
+      h(
+        'label',
+        { class: 'pick' },
+        input,
+        h('span', { class: 'check', html: CHECK_SVG }),
+        h('span', { class: 'list-icon', html: LIST_SVG }),
+        h('span', { class: 'name-wrap' }, h('span', { class: 'name', title: l.name }, l.name), h('span', { class: 'sub' }, n ? plural(n, 'group') : 'Empty'))
+      ),
+      h('button', { type: 'button', class: 'icon-btn', title: 'Select these groups for sending', html: USE_SVG, onclick: () => useList(l, { goCompose: true }) }),
+      h('button', { type: 'button', class: 'icon-btn', title: 'Edit list: rename, add or remove groups', html: PENCIL_SVG, onclick: () => openListEditor(l.id) }),
+      h('button', { type: 'button', class: 'icon-btn del', title: 'Delete list (your groups stay saved)', onclick: () => deleteLists([l.id]) }, '✕')
+    );
+  });
+  $('listManage').replaceChildren(...rows);
+  $('listsEmpty').hidden = state.lists.length > 0 || state.groups.length === 0;
+  $('listsSection').hidden = state.groups.length === 0 && state.lists.length === 0;
+  $('listCount').textContent = state.lists.length ? `(${state.lists.length})` : '';
+  renderListBulk();
+}
+
+function renderListBulk() {
+  const n = state.listSel.size;
+  $('listBulk').hidden = !n;
+  $('listBulkCount').textContent = `${plural(n, 'list')} selected`;
+  $('listSelAll').textContent = state.lists.length && n === state.lists.length ? 'None' : 'Select all';
+  $('listSelAll').hidden = state.lists.length < 2;
+  $('listSelAllSep').hidden = state.lists.length < 2;
+}
+
+// ─────────────── Groups tab: saved groups ───────────────
+function manageVisible() {
+  const f = state.manageFilter.toLowerCase();
+  return f ? state.groups.filter((g) => g.name.toLowerCase().includes(f)) : state.groups;
 }
 
 function renderManageList() {
   const failed = failedNames();
-  const f = state.manageFilter.toLowerCase();
-  const groups = f ? state.groups.filter((g) => g.name.toLowerCase().includes(f)) : state.groups;
-  const rows = groups.map((g) => {
+  const listsOf = new Map();
+  for (const l of state.lists) for (const id of l.groupIds) listsOf.set(id, [...(listsOf.get(id) || []), l.name]);
+
+  const rows = manageVisible().map((g) => {
     if (state.editingId === g.id) {
-      const input = h('input', { type: 'text', value: g.name, maxlength: 120 });
-      const commit = () => renameGroup(g.id, input.value);
+      const input = h('input', { type: 'text', value: g.name, maxlength: 120, 'aria-label': 'Group name' });
+      const commit = () => state.editingId === g.id && renameGroup(g.id, input.value);
+      const cancel = () => {
+        state.editingId = null;
+        renderManageList();
+      };
       input.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') commit();
         if (e.key === 'Escape') {
           e.stopPropagation();
-          state.editingId = null;
-          renderManageList();
+          cancel();
         }
+      });
+      input.addEventListener('blur', (e) => {
+        // Leaving the field saves, unless the click went to this row's own buttons.
+        if (e.relatedTarget?.closest?.('.editing')) return;
+        commit();
       });
       setTimeout(() => {
         input.focus();
@@ -400,18 +584,38 @@ function renderManageList() {
       }, 0);
       return h(
         'li',
-        {},
+        { class: 'editing' },
         avatar(g.name),
         input,
-        h('button', { type: 'button', class: 'icon-btn', title: 'Save', onclick: commit, html: CHECK_SVG.replace('viewBox="0 0 12 12"', 'viewBox="0 0 12 12" style="fill:currentColor"') })
+        h('button', { type: 'button', class: 'icon-btn ok', title: 'Save (Enter)', onclick: commit, html: CHECK_SVG }),
+        h('button', { type: 'button', class: 'icon-btn', title: 'Cancel (Esc)', onclick: cancel }, '↺')
       );
     }
+
+    const input = h('input', { type: 'checkbox', 'aria-label': `Select ${g.name}` });
+    input.checked = state.manageSel.has(g.id);
+    input.addEventListener('change', () => {
+      input.checked ? state.manageSel.add(g.id) : state.manageSel.delete(g.id);
+      renderBulkBar();
+    });
+    const inLists = listsOf.get(g.id);
     return h(
       'li',
       {},
-      avatar(g.name),
-      h('span', { class: 'name', title: g.name }, g.name),
-      failed.has(keyOf(g.name)) ? h('span', { class: 'status-dot bad', title: 'Not found last time. Rename it to match WhatsApp exactly.' }, 'Failed') : null,
+      h(
+        'label',
+        { class: 'pick' },
+        input,
+        h('span', { class: 'check', html: CHECK_SVG }),
+        avatar(g.name),
+        h(
+          'span',
+          { class: 'name-wrap' },
+          h('span', { class: 'name', title: g.name }, g.name),
+          inLists ? h('span', { class: 'sub', title: `In: ${inLists.join(', ')}` }, inLists.join(' · ')) : null
+        ),
+        failed.has(keyOf(g.name)) ? h('span', { class: 'status-dot bad', title: 'Not found last time. Rename it to match WhatsApp exactly.' }, 'Failed') : null
+      ),
       h('button', {
         type: 'button',
         class: 'icon-btn',
@@ -422,13 +626,41 @@ function renderManageList() {
           renderManageList();
         },
       }),
-      h('button', { type: 'button', class: 'icon-btn del', title: 'Remove group', onclick: () => removeGroup(g.id) }, '✕')
+      h('button', { type: 'button', class: 'icon-btn del', title: 'Delete group', onclick: () => deleteGroups([g.id]) }, '✕')
     );
   });
   if (state.groups.length && !rows.length) rows.push(h('li', { class: 'note' }, 'No groups match your search.'));
   $('manageList').replaceChildren(...rows);
   $('manageEmpty').hidden = state.groups.length > 0;
   $('manageFilterWrap').hidden = state.groups.length < 8;
+  $('groupsHead').hidden = state.groups.length === 0;
+  $('manageCount').textContent = state.groups.length ? `(${state.groups.length})` : '';
+  renderBulkBar();
+}
+
+function renderBulkBar() {
+  const n = state.manageSel.size;
+  $('bulkBar').hidden = !n;
+  const shown = new Set(manageVisible().map((g) => g.id));
+  const hidden = [...state.manageSel].filter((id) => !shown.has(id)).length;
+  $('bulkCount').replaceChildren(h('b', {}, String(n)), ' selected', hidden ? h('span', { class: 'muted' }, ` · ${hidden} hidden by search`) : '');
+  const allShown = shown.size > 0 && [...shown].every((id) => state.manageSel.has(id));
+  $('mSelAll').textContent = allShown ? 'Clear' : state.manageFilter ? 'Select shown' : 'Select all';
+}
+
+/** Re-render everything that shows groups or lists. */
+function refreshGroups() {
+  const gids = new Set(state.groups.map((g) => g.id));
+  for (const id of state.manageSel) if (!gids.has(id)) state.manageSel.delete(id);
+  for (const id of state.selected) if (!gids.has(id)) state.selected.delete(id);
+  const lids = new Set(state.lists.map((l) => l.id));
+  for (const id of state.listSel) if (!lids.has(id)) state.listSel.delete(id);
+  renderPickList();
+  renderLists();
+  renderManageList();
+  renderListManager();
+  renderCounts();
+  if (state.preview) renderPreview();
 }
 
 function renderCounts() {
@@ -504,14 +736,8 @@ function confirmAutoMode() {
         resolve(true);
         return true;
       },
+      onCancel: () => resolve(false),
     });
-    // Resolve false if the dialog is dismissed.
-    const watch = setInterval(() => {
-      if ($('modal').hidden) {
-        clearInterval(watch);
-        resolve(false);
-      }
-    }, 200);
   });
 }
 
@@ -597,9 +823,7 @@ function renderLastRun() {
               state.selected = new Set(state.groups.filter((g) => names.has(keyOf(g.name))).map((g) => g.id));
               saveSelected();
               switchTab('compose');
-              renderPickList();
-              renderLists();
-              renderCounts();
+              refreshGroups();
               toast(`Selected ${plural(state.selected.size, 'unsent group')}`);
             },
           },
@@ -613,17 +837,16 @@ function renderAll() {
   $('message').value = state.message;
   $('delay').value = String(state.settings.delayMs);
   renderMode();
-  renderPickList();
-  renderLists();
-  renderManageList();
+  refreshGroups();
   renderTemplateMenu();
   renderAttachments();
   renderLastRun();
   renderStatus();
+  renderFb();
 }
 
 // ─────────────── group actions ───────────────
-function addGroups(names) {
+function addGroups(names, { select = true } = {}) {
   const existing = new Set(state.groups.map((g) => keyOf(g.name)));
   let added = 0;
   for (const raw of names) {
@@ -631,17 +854,14 @@ function addGroups(names) {
     if (!name || existing.has(keyOf(name))) continue;
     const g = { id: uid(), name, addedAt: Date.now() };
     state.groups.push(g);
-    state.selected.add(g.id);
+    if (select) state.selected.add(g.id);
     existing.add(keyOf(name));
     added++;
   }
   if (added) {
-    state.groups.sort((a, b) => a.name.localeCompare(b.name));
+    state.groups.sort(byName);
     saveGroups();
-    renderPickList();
-    renderLists();
-    renderManageList();
-    renderCounts();
+    refreshGroups();
   }
   return added;
 }
@@ -649,46 +869,411 @@ function addGroups(names) {
 function renameGroup(id, value) {
   const name = normName(value);
   const g = state.groups.find((x) => x.id === id);
-  if (!g || !name) return;
+  if (!g) return;
+  if (!name || name === g.name) {
+    state.editingId = null;
+    renderManageList();
+    return;
+  }
   if (state.groups.some((x) => x.id !== id && keyOf(x.name) === keyOf(name))) return toast('Another group already has that name.', true);
   g.name = name;
   state.editingId = null;
-  state.groups.sort((a, b) => a.name.localeCompare(b.name));
+  state.groups.sort(byName);
   saveGroups();
-  renderManageList();
-  renderPickList();
+  refreshGroups();
   toast('Group renamed');
 }
 
-function removeGroup(id) {
-  const g = state.groups.find((x) => x.id === id);
-  state.groups = state.groups.filter((x) => x.id !== id);
-  state.selected.delete(id);
-  state.lists.forEach((l) => (l.groupIds = l.groupIds.filter((x) => x !== id)));
-  saveGroups();
-  renderPickList();
-  renderLists();
-  renderManageList();
-  renderCounts();
-  if (g) toast(`Removed “${g.name}”`);
+/** Deep copy of everything a delete can touch, for Undo. */
+function snapshot() {
+  return {
+    groups: state.groups.map((g) => ({ ...g })),
+    selected: [...state.selected],
+    lists: state.lists.map((l) => ({ ...l, groupIds: [...l.groupIds] })),
+  };
+}
+
+function undoTo(snap) {
+  return {
+    label: 'Undo',
+    run: async () => {
+      state.groups = snap.groups;
+      state.selected = new Set(snap.selected);
+      state.lists = snap.lists;
+      await saveGroups();
+      refreshGroups();
+      toast('Restored');
+    },
+  };
+}
+
+/** A short "A, B, C and 4 more" preview for confirmation dialogs. */
+function namesPreview(names) {
+  const shown = names.slice(0, 5);
+  return h(
+    'ul',
+    { class: 'names-preview' },
+    ...shown.map((n) => h('li', {}, n)),
+    names.length > shown.length ? h('li', { class: 'muted' }, `and ${names.length - shown.length} more`) : null
+  );
+}
+
+/**
+ * Delete groups (and take them out of every list). One group is deleted straight away
+ * with Undo; several ask first when `confirm` is set.
+ */
+function deleteGroups(ids, { confirm = false, message } = {}) {
+  const drop = new Set(ids);
+  const victims = state.groups.filter((g) => drop.has(g.id));
+  if (!victims.length) return 0;
+  const go = () => {
+    const snap = snapshot();
+    state.groups = state.groups.filter((g) => !drop.has(g.id));
+    drop.forEach((id) => {
+      state.selected.delete(id);
+      state.manageSel.delete(id);
+    });
+    state.lists.forEach((l) => (l.groupIds = l.groupIds.filter((id) => !drop.has(id))));
+    if (drop.has(state.editingId)) state.editingId = null;
+    saveGroups();
+    refreshGroups();
+    toast(message || (victims.length === 1 ? `Deleted “${short(victims[0].name, 34)}”` : `Deleted ${plural(victims.length, 'group')}`), false, undoTo(snap));
+  };
+  if (!confirm || victims.length === 1) {
+    go();
+    return victims.length;
+  }
+  const affected = state.lists.filter((l) => l.groupIds.some((id) => drop.has(id)));
+  openDialog({
+    title: `Delete ${plural(victims.length, 'group')}?`,
+    confirmText: `Delete ${plural(victims.length, 'group')}`,
+    danger: true,
+    body: [
+      h('p', { class: 'muted' }, 'These groups will be removed from RitPost. Nothing changes in WhatsApp itself.'),
+      namesPreview(victims.map((g) => g.name)),
+      affected.length
+        ? h('p', { class: 'muted' }, `They will also be taken out of ${affected.length === 1 ? `the list “${affected[0].name}”` : plural(affected.length, 'list')}.`)
+        : null,
+    ].filter(Boolean),
+    onConfirm: () => {
+      go();
+      return true;
+    },
+  });
+  return 0;
+}
+
+// ─────────────── lists ───────────────
+const findListByName = (name, exceptId) => state.lists.find((l) => l.id !== exceptId && keyOf(l.name) === keyOf(name));
+
+/** Add groups to a list; returns how many were new to it. */
+function addToList(list, ids) {
+  const have = new Set(list.groupIds);
+  const fresh = ids.filter((id) => !have.has(id));
+  list.groupIds = [...list.groupIds, ...fresh];
+  return fresh.length;
+}
+
+function createList(name, ids) {
+  const list = { id: uid(), name: normName(name), groupIds: [...new Set(ids)], createdAt: Date.now() };
+  state.lists.push(list);
+  state.lists.sort(byName);
+  return list;
+}
+
+/** Delete lists. The groups in them stay saved. */
+function deleteLists(ids, { confirm = false } = {}) {
+  const drop = new Set(ids);
+  const victims = state.lists.filter((l) => drop.has(l.id));
+  if (!victims.length) return;
+  const go = () => {
+    const snapLists = state.lists.map((l) => ({ ...l, groupIds: [...l.groupIds] }));
+    state.lists = state.lists.filter((l) => !drop.has(l.id));
+    drop.forEach((id) => state.listSel.delete(id));
+    saveLists();
+    refreshGroups();
+    toast(victims.length === 1 ? `Deleted list “${short(victims[0].name, 30)}”` : `Deleted ${plural(victims.length, 'list')}`, false, {
+      label: 'Undo',
+      run: async () => {
+        // Restore the lists only, keeping any group changes made since.
+        const gids = new Set(state.groups.map((g) => g.id));
+        const keep = new Set(state.lists.map((l) => l.id));
+        for (const l of snapLists) if (drop.has(l.id) && !keep.has(l.id)) state.lists.push({ ...l, groupIds: l.groupIds.filter((id) => gids.has(id)) });
+        state.lists.sort(byName);
+        await saveLists();
+        refreshGroups();
+        toast('Restored');
+      },
+    });
+  };
+  if (!confirm || victims.length === 1) return go();
+  openDialog({
+    title: `Delete ${plural(victims.length, 'list')}?`,
+    confirmText: `Delete ${plural(victims.length, 'list')}`,
+    danger: true,
+    body: [h('p', { class: 'muted' }, 'Only the lists are removed. The groups in them stay saved.'), namesPreview(victims.map((l) => l.name))],
+    onConfirm: () => {
+      go();
+      return true;
+    },
+  });
+}
+
+/**
+ * Put groups into a list: an existing one (added to it, nothing removed) or a new one.
+ * Used by "Save selection" in Compose and "Add to list" in the Groups tab.
+ */
+function openAddToList(ids, { title, prefer = 'existing', onDone } = {}) {
+  ids = [...new Set(ids)];
+  if (!ids.length) return toast('Select some groups first.', true);
+  let mode = state.lists.length && prefer === 'existing' ? 'existing' : 'new';
+  let target = null;
+
+  const seg = h('div', { class: 'seg', role: 'tablist' });
+  const pane = h('div', { class: 'stack' });
+  const nameInput = h('input', { type: 'text', maxlength: 60, placeholder: 'e.g. Church groups' });
+  const hint = h('p', { class: 'hint' });
+  const freshIn = (l) => ids.filter((id) => !l.groupIds.includes(id)).length;
+
+  const d = openDialog({
+    title: title || `Add ${plural(ids.length, 'group')} to a list`,
+    confirmText: 'Add',
+    body: [seg, pane],
+    onConfirm: () => {
+      let list = mode === 'existing' ? target : findListByName(nameInput.value);
+      let msg;
+      if (list) {
+        const added = addToList(list, ids);
+        const already = ids.length - added;
+        msg = added
+          ? `Added ${plural(added, 'group')} to “${short(list.name)}”${already ? ` (${already} already in it)` : ''}`
+          : `All of them are already in “${short(list.name)}”`;
+      } else {
+        const name = normName(nameInput.value);
+        if (!name) return false;
+        list = createList(name, ids);
+        msg = `Saved list “${short(name)}” with ${plural(ids.length, 'group')}`;
+      }
+      saveLists();
+      refreshGroups();
+      toast(msg);
+      onDone?.(list);
+      return true;
+    },
+  });
+
+  const sync = () => {
+    if (mode === 'existing') {
+      d.setConfirm(!!target, target ? `Add to “${short(target.name, 20)}”` : 'Choose a list');
+      return;
+    }
+    const name = normName(nameInput.value);
+    const clash = name && findListByName(name);
+    hint.hidden = !clash;
+    hint.textContent = clash
+      ? `You already have a list called “${clash.name}”. These groups will be added to it, and nothing already in it is removed.`
+      : '';
+    d.setConfirm(!!name, clash ? `Add to “${short(clash.name, 20)}”` : 'Create list');
+  };
+
+  const drawPane = () => {
+    if (mode === 'new') {
+      pane.replaceChildren(h('label', {}, 'New list name'), nameInput, hint);
+      setTimeout(() => nameInput.focus(), 30);
+    } else {
+      const rows = state.lists.map((l) => {
+        const n = freshIn(l);
+        const total = listMembers(l).length;
+        const input = h('input', { type: 'radio', name: 'ritpost-target' });
+        input.checked = target?.id === l.id;
+        input.disabled = n === 0;
+        input.addEventListener('change', () => {
+          target = l;
+          sync();
+        });
+        return h(
+          'li',
+          {},
+          h(
+            'label',
+            { class: `pick radio${n === 0 ? ' disabled' : ''}` },
+            input,
+            h('span', { class: 'check' }),
+            h('span', { class: 'list-icon', html: LIST_SVG }),
+            h(
+              'span',
+              { class: 'name-wrap' },
+              h('span', { class: 'name', title: l.name }, l.name),
+              h('span', { class: 'sub' }, `${plural(total, 'group')} · `, n ? h('span', { class: 'plus' }, `+${n} new`) : 'all already in it')
+            )
+          )
+        );
+      });
+      pane.replaceChildren(h('ul', { class: 'list' }, ...rows));
+    }
+    sync();
+  };
+
+  const drawSeg = () => {
+    const opt = (key, label) =>
+      h(
+        'button',
+        {
+          type: 'button',
+          class: mode === key ? 'on' : '',
+          onclick: () => {
+            mode = key;
+            drawSeg();
+            drawPane();
+          },
+        },
+        label
+      );
+    seg.replaceChildren(...(state.lists.length ? [opt('existing', `Existing list (${state.lists.length})`)] : []), opt('new', 'New list'));
+  };
+
+  // Preselect the only sensible target.
+  const candidates = state.lists.filter((l) => freshIn(l) > 0);
+  if (candidates.length === 1) target = candidates[0];
+  nameInput.addEventListener('input', sync);
+  nameInput.addEventListener('keydown', (e) => e.key === 'Enter' && $('modalConfirm').click());
+  drawSeg();
+  drawPane();
+}
+
+/** Create a list, or edit one: rename it and tick/untick the groups in it. */
+function openListEditor(listId = null, { preselect = [] } = {}) {
+  const list = listId ? state.lists.find((l) => l.id === listId) : null;
+  if (listId && !list) return;
+  const members = new Set(list ? listMembers(list) : preselect);
+  const before = new Set(members);
+
+  const nameInput = h('input', { type: 'text', maxlength: 60, placeholder: 'e.g. Church groups', value: list?.name || '' });
+  const err = h('p', { class: 'field-error', hidden: true });
+  const search = h('input', { type: 'search', placeholder: 'Search groups' });
+  const count = h('span', { class: 'muted' });
+  const ul = h('ul', { class: 'list' });
+  let d;
+
+  const sync = () => {
+    const name = normName(nameInput.value);
+    const clash = name && findListByName(name, listId);
+    err.hidden = !clash;
+    err.textContent = clash ? `You already have a list called “${clash.name}”. Pick another name.` : '';
+    const added = [...members].filter((id) => !before.has(id)).length;
+    const removed = [...before].filter((id) => !members.has(id)).length;
+    const changes = list && (added || removed) ? ` · ${[added && `+${added}`, removed && `−${removed}`].filter(Boolean).join(' ')}` : '';
+    count.textContent = `${plural(members.size, 'group')} in this list${changes}`;
+    d.setConfirm(!!name && !clash, list ? 'Save changes' : `Create list${members.size ? ` · ${members.size}` : ''}`);
+  };
+
+  const draw = () => {
+    const f = search.value.trim().toLowerCase();
+    const shown = state.groups.filter((g) => g.name.toLowerCase().includes(f));
+    const rows = shown.map((g) =>
+      checkRow(g.name, members.has(g.id), (on) => {
+        on ? members.add(g.id) : members.delete(g.id);
+        sync();
+      })
+    );
+    if (!state.groups.length) rows.push(h('li', { class: 'note' }, 'You have no saved groups yet. Import them first.'));
+    else if (!rows.length) rows.push(h('li', { class: 'note' }, 'No groups match your search.'));
+    ul.replaceChildren(...rows);
+    return shown;
+  };
+
+  const body = [
+    h('label', {}, 'List name'),
+    nameInput,
+    err,
+    h(
+      'div',
+      { class: 'field-head' },
+      h('label', {}, 'Groups in this list'),
+      h(
+        'span',
+        { class: 'links' },
+        h(
+          'button',
+          {
+            type: 'button',
+            class: 'link',
+            onclick: () => {
+              draw().forEach((g) => members.add(g.id));
+              draw();
+              sync();
+            },
+          },
+          'Select shown'
+        ),
+        h('span', { class: 'sep' }, '·'),
+        h(
+          'button',
+          {
+            type: 'button',
+            class: 'link',
+            onclick: () => {
+              draw().forEach((g) => members.delete(g.id));
+              draw();
+              sync();
+            },
+          },
+          'Clear shown'
+        )
+      )
+    ),
+    state.groups.length >= 8 ? h('div', { class: 'search', html: $('filterWrap').querySelector('svg').outerHTML }, search) : null,
+    ul,
+    h(
+      'div',
+      { class: 'field-head' },
+      count,
+      list
+        ? h(
+            'button',
+            {
+              type: 'button',
+              class: 'link danger',
+              onclick: () => {
+                closeDialog();
+                deleteLists([list.id]);
+              },
+            },
+            'Delete list'
+          )
+        : null
+    ),
+  ].filter(Boolean);
+
+  d = openDialog({
+    title: list ? 'Edit list' : 'New list',
+    confirmText: list ? 'Save changes' : 'Create list',
+    body,
+    onConfirm: () => {
+      const name = normName(nameInput.value);
+      if (!name || findListByName(name, listId)) return false;
+      // Keep the list's order for groups that stay, append the new ones.
+      if (list) {
+        list.name = name;
+        list.groupIds = [...list.groupIds.filter((id) => members.has(id)), ...[...members].filter((id) => !list.groupIds.includes(id))];
+        state.lists.sort(byName);
+      } else createList(name, [...members]);
+      saveLists();
+      refreshGroups();
+      toast(list ? `Saved “${short(name)}” · ${plural(members.size, 'group')}` : `Created list “${short(name)}” · ${plural(members.size, 'group')}`);
+      return true;
+    },
+  });
+  nameInput.addEventListener('input', sync);
+  nameInput.addEventListener('keydown', (e) => e.key === 'Enter' && $('modalConfirm').click());
+  search.addEventListener('input', draw);
+  draw();
+  sync();
+  setTimeout(() => (list && search.isConnected ? search : nameInput).focus(), 30);
 }
 
 // ─────────────── import from WhatsApp ───────────────
 const KIND_LABEL = { group: 'Group', user: 'Contact', channel: 'Channel', broadcast: 'Broadcast', unknown: '' };
-
-function removeGroupsByKey(keys) {
-  const drop = new Set(state.groups.filter((g) => keys.has(keyOf(g.name))).map((g) => g.id));
-  if (!drop.size) return 0;
-  state.groups = state.groups.filter((g) => !drop.has(g.id));
-  drop.forEach((id) => state.selected.delete(id));
-  state.lists.forEach((l) => (l.groupIds = l.groupIds.filter((id) => !drop.has(id))));
-  saveGroups();
-  renderPickList();
-  renderLists();
-  renderManageList();
-  renderCounts();
-  return drop.size;
-}
 
 async function openImport() {
   const importSel = new Set();
@@ -803,9 +1388,9 @@ async function openImport() {
           type: 'button',
           class: 'btn secondary sm',
           onclick: () => {
-            const n = removeGroupsByKey(new Set(savedNonGroups.map((g) => keyOf(g.name))));
+            const ids = savedNonGroups.map((g) => g.id).filter((id) => state.groups.some((g) => g.id === id));
             banner.remove();
-            toast(`Removed ${plural(n, 'contact')} from your group list`);
+            deleteGroups(ids, { message: `Removed ${plural(ids.length, 'contact')} from your group list` });
           },
         },
         'Remove them'
@@ -856,6 +1441,7 @@ async function exportData() {
     groups: state.groups.map((g) => g.name),
     lists: state.lists.map((l) => ({ name: l.name, groups: l.groupIds.map((id) => nameById.get(id)).filter(Boolean) })),
     templates: state.templates.map((t) => ({ name: t.name, text: t.text })),
+    facebook: fb.targets.map((t) => ({ name: t.name, url: t.url, kind: t.kind })),
   };
   const res = await bg('BG_DOWNLOAD', {
     filename: `ritpost-backup-${new Date().toISOString().slice(0, 10)}.json`,
@@ -871,14 +1457,22 @@ async function restoreData(file) {
     const data = JSON.parse(await file.text());
     const names = Array.isArray(data) ? data : data.groups;
     if (!Array.isArray(names)) throw new Error();
-    const added = addGroups(names.map((n) => (typeof n === 'string' ? n : n?.name)).filter(Boolean));
+    const added = addGroups(names.map((n) => (typeof n === 'string' ? n : n?.name)).filter(Boolean), { select: false });
 
+    // Lists: new ones are created, lists you already have get the missing groups added.
     const idByKey = new Map(state.groups.map((g) => [keyOf(g.name), g.id]));
     let lists = 0;
-    for (const l of data.lists || []) {
-      if (!l?.name || state.lists.some((x) => keyOf(x.name) === keyOf(l.name))) continue;
-      state.lists.push({ id: uid(), name: l.name, groupIds: (l.groups || []).map((n) => idByKey.get(keyOf(n))).filter(Boolean) });
-      lists++;
+    for (const l of Array.isArray(data.lists) ? data.lists : []) {
+      const name = normName(l?.name);
+      if (!name) continue;
+      const ids = [...new Set((Array.isArray(l.groups) ? l.groups : []).map((n) => idByKey.get(keyOf(n))).filter(Boolean))];
+      const existing = findListByName(name);
+      if (existing) {
+        if (addToList(existing, ids)) lists++;
+      } else {
+        createList(name, ids);
+        lists++;
+      }
     }
     let tpls = 0;
     for (const t of data.templates || []) {
@@ -886,10 +1480,17 @@ async function restoreData(file) {
       state.templates.push({ id: uid(), name: t.name, text: t.text, createdAt: Date.now() });
       tpls++;
     }
+    const fbEntries = (Array.isArray(data.facebook) ? data.facebook : [])
+      .map((t) => {
+        const p = parseFbUrl(t?.url);
+        return p ? { ...p, name: t.name || p.slug, kind: t.kind === 'page' ? 'page' : p.kind } : null;
+      })
+      .filter(Boolean);
+    const fbAdded = fbEntries.length ? fbAdd(fbEntries) : 0;
     saveLists();
     saveTemplates();
     renderAll();
-    toast(`Restored ${plural(added, 'group')}, ${plural(lists, 'list')}, ${plural(tpls, 'template')}`);
+    toast(`Restored ${plural(added, 'group')}, ${plural(lists, 'list')}, ${plural(tpls, 'template')}${fbAdded ? `, ${fbAdded} Facebook` : ''}`);
   } catch {
     toast('That file is not a valid RitPost backup.', true);
   }
@@ -1020,6 +1621,331 @@ async function start() {
   }
 }
 
+// ─────────────── Facebook ───────────────
+const FB_MIN_GAP = 30;
+const fb = { targets: [], selected: new Set(), gapSec: 60, run: null, filter: '' };
+const isMedia = (a) => /^(image|video)\//.test(a?.type || '');
+
+/** Normalise a Facebook link; returns { url, kind, slug } or null. */
+function parseFbUrl(raw) {
+  let s = String(raw || '').trim();
+  if (!s) return null;
+  if (!/^https?:\/\//i.test(s)) s = `https://${s.replace(/^\/+/, '')}`;
+  let u;
+  try {
+    u = new URL(s);
+  } catch {
+    return null;
+  }
+  if (!/(^|\.)facebook\.com$|(^|\.)fb\.com$/i.test(u.hostname)) return null;
+  const path = u.pathname.replace(/\/+$/, '');
+  const g = path.match(/^\/groups\/([^/]+)/i);
+  if (g) return { url: `https://www.facebook.com/groups/${g[1]}/`, kind: 'group', slug: decodeURIComponent(g[1]) };
+  if (/^\/profile\.php$/i.test(path) && u.searchParams.get('id'))
+    return { url: `https://www.facebook.com/profile.php?id=${u.searchParams.get('id')}`, kind: 'page', slug: u.searchParams.get('id') };
+  const p = path.match(/^\/(?:pg\/)?([^/]+)/);
+  if (!p || /^(home\.php|watch|marketplace|gaming|events|friends|messages|notifications|login|groups)$/i.test(p[1])) return null;
+  return { url: `https://www.facebook.com/${p[1]}`, kind: 'page', slug: decodeURIComponent(p[1]) };
+}
+const fbKey = (url) => String(url).toLowerCase().replace(/\/+$/, '');
+
+async function fbLoad() {
+  const d = await chrome.storage.local.get(['fbTargets', 'fbSelected', 'fbSettings', 'fbRun']);
+  fb.targets = (Array.isArray(d.fbTargets) ? d.fbTargets : []).filter((t) => t?.id && t?.url && t?.name).sort(byName);
+  const ids = new Set(fb.targets.map((t) => t.id));
+  fb.selected = new Set((d.fbSelected || []).filter((id) => ids.has(id)));
+  fb.gapSec = Math.max(FB_MIN_GAP, Number(d.fbSettings?.gapSec) || 60);
+  fb.run = d.fbRun || null;
+}
+const fbSave = () => persist({ fbTargets: fb.targets, fbSelected: [...fb.selected] });
+
+/** WhatsApp marks (*bold*, _italic_, ~strike~, ```mono```) don't format on Facebook. */
+function fbText(text) {
+  return String(text || '')
+    .replace(/```([\s\S]+?)```/g, '$1')
+    .replace(/(^|[\s(])([*_~])(?=\S)([^\n]*?\S)\2(?=$|[\s).,!?:;])/gm, '$1$3');
+}
+
+const fbNoun = (n) => (n === 1 ? 'group/Page' : 'groups/Pages');
+
+function fbAdd(entries) {
+  const have = new Set(fb.targets.map((t) => fbKey(t.url)));
+  let added = 0;
+  for (const e of entries) {
+    if (!e?.url || have.has(fbKey(e.url))) continue;
+    have.add(fbKey(e.url));
+    fb.targets.push({ id: uid(), name: normName(e.name) || e.url, url: e.url, kind: e.kind || 'group', addedAt: Date.now() });
+    added++;
+  }
+  fb.targets.sort(byName);
+  fbSave();
+  renderFb();
+  return added;
+}
+
+function fbDelete(id) {
+  const t = fb.targets.find((x) => x.id === id);
+  if (!t) return;
+  const before = { targets: [...fb.targets], selected: new Set(fb.selected) };
+  fb.targets = fb.targets.filter((x) => x.id !== id);
+  fb.selected.delete(id);
+  fbSave();
+  renderFb();
+  toast(`Removed ${short(t.name)}`, false, {
+    label: 'Undo',
+    run: () => {
+      fb.targets = before.targets;
+      fb.selected = before.selected;
+      fbSave();
+      renderFb();
+    },
+  });
+}
+
+function fbActive() {
+  return !!fb.run && (fb.run.status === 'running' || fb.run.status === 'waiting');
+}
+
+function renderFbList() {
+  const list = $('fbList');
+  const q = keyOf(fb.filter);
+  const shown = fb.targets.filter((t) => !q || keyOf(t.name).includes(q) || t.url.toLowerCase().includes(q));
+  const results = new Map((fb.run?.results || []).map((r) => [r.id, r.status]));
+  list.replaceChildren(
+    ...shown.map((t) => {
+      const st = results.get(t.id);
+      const tag =
+        st === 'posted'
+          ? h('span', { class: 'kind-tag ok' }, 'Posted')
+          : st === 'failed' || st === 'skipped'
+          ? h('span', { class: 'kind-tag fail' }, st === 'failed' ? 'Failed' : 'Skipped')
+          : h('span', { class: `kind-tag ${t.kind}` }, t.kind === 'page' ? 'Page' : 'Group');
+      const del = h(
+        'button',
+        {
+          type: 'button',
+          class: 'row-del',
+          title: 'Remove',
+          'aria-label': `Remove ${t.name}`,
+          onclick: (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            fbDelete(t.id);
+          },
+        },
+        '✕'
+      );
+      const row = checkRow(
+        t.name,
+        fb.selected.has(t.id),
+        (on) => {
+          if (on) fb.selected.add(t.id);
+          else fb.selected.delete(t.id);
+          persist({ fbSelected: [...fb.selected] });
+          renderFbCounts();
+        },
+        h('span', { class: 'row-extra' }, tag, del)
+      );
+      row.querySelector('.name').title = `${t.name}\n${t.url}`;
+      return row;
+    })
+  );
+  if (!shown.length && fb.targets.length) list.append(h('li', { class: 'note' }, 'No matches'));
+  list.hidden = !fb.targets.length;
+  $('fbFilterWrap').hidden = fb.targets.length < 8;
+  $('fbEmpty').hidden = !!fb.targets.length;
+}
+
+function renderFbMessage() {
+  const el = $('fbMsgPreview');
+  const text = fbText(state.message.trim());
+  const media = state.attachments.filter(isMedia).length;
+  const extra = media ? `📎 ${plural(media, 'photo/video')}` : '';
+  el.textContent = text ? (extra ? `${text}\n\n${extra}` : text) : extra || 'Write your message in the Compose tab first.';
+  el.classList.toggle('empty-msg', !text && !media);
+}
+
+function renderFbCounts() {
+  const n = fb.selected.size;
+  $('fbCount').textContent = String(fb.targets.length);
+  $('fbSelCount').textContent = fb.targets.length ? `(${n} of ${fb.targets.length})` : '';
+  const hasContent = !!state.message.trim() || state.attachments.some(isMedia);
+  $('fbStartBtn').disabled = !n || !hasContent || fbActive();
+  $('fbStartLabel').textContent = fbActive()
+    ? 'Posting to Facebook…'
+    : !hasContent
+    ? 'Write a message first'
+    : n
+    ? `Post to ${n} Facebook ${fbNoun(n)}`
+    : 'Pick groups or Pages';
+}
+
+function renderFbRun() {
+  const r = fb.run;
+  const active = fbActive();
+  $('fbRunBox').hidden = !active;
+  if (active) {
+    $('fbRunTitle').textContent =
+      r.status === 'waiting' ? 'Waiting before the next post…' : `Posting: ${short(r.items[r.index]?.name || '', 30)}`;
+    $('fbRunMeta').textContent = `${Math.min(r.index + 1, r.items.length)} of ${r.items.length}`;
+    $('fbRunFill').style.width = `${Math.round((r.index / r.items.length) * 100)}%`;
+  }
+  const last = $('fbLastRun');
+  if (!active && r?.results?.length) {
+    const okIds = new Set(r.results.filter((x) => x.status === 'posted').map((x) => x.id));
+    const notDone = r.items.length - okIds.size;
+    last.hidden = false;
+    last.replaceChildren(
+      h('span', {}, `${r.status === 'stopped' ? 'Stopped' : 'Last Facebook session'}: ${okIds.size} of ${r.items.length} posted · ${timeAgo(r.finishedAt || r.startedAt)}`),
+      notDone
+        ? h(
+            'button',
+            {
+              type: 'button',
+              class: 'link',
+              style: 'margin-left:8px',
+              onclick: () => {
+                fb.selected = new Set(r.items.map((x) => x.id).filter((id) => !okIds.has(id) && fb.targets.some((t) => t.id === id)));
+                persist({ fbSelected: [...fb.selected] });
+                renderFb();
+                toast(`Selected ${fb.selected.size} unposted ${fbNoun(fb.selected.size)}`);
+              },
+            },
+            'Select unposted'
+          )
+        : null
+    );
+  } else last.hidden = true;
+  renderFbCounts();
+}
+
+function renderFb() {
+  $('fbGap').value = String(fb.gapSec);
+  renderFbMessage();
+  renderFbList();
+  renderFbRun();
+}
+
+async function fbImport() {
+  const btn = $('fbImportBtn');
+  const label = $('fbImportLabel');
+  const old = label.textContent;
+  btn.disabled = true;
+  label.textContent = 'Reading your groups on Facebook…';
+  try {
+    const res = await bg('BG_FB_SCAN');
+    if (!res?.ok) return toast(res?.error || 'Couldn’t read your Facebook groups.', true);
+    if (!res.groups?.length) return toast('No groups found. Make sure you’re signed in to Facebook and have joined some groups.', true);
+    const added = fbAdd(res.groups.map((g) => ({ ...g, kind: 'group' })));
+    toast(added ? `Imported ${plural(added, 'group')} (${res.groups.length} found)` : `All ${res.groups.length} groups were already saved`);
+  } finally {
+    btn.disabled = false;
+    label.textContent = old;
+  }
+}
+
+function fbConfirmStart() {
+  const items = fb.targets.filter((t) => fb.selected.has(t.id));
+  if (!items.length || fbActive()) return;
+  const message = state.message.trim();
+  const media = state.attachments.filter(isMedia);
+  if (!message && !media.length) return;
+  const pages = items.filter((t) => t.kind === 'page').length;
+  const docs = state.attachments.length - media.length;
+  openDialog({
+    title: `Post to ${items.length} Facebook ${fbNoun(items.length)}`,
+    confirmText: 'Start',
+    body: h(
+      'div',
+      {},
+      h('p', {}, 'RitPost opens each one on Facebook, fills in your message and attaches your photos and videos. ', h('b', {}, 'You check the post and click Post yourself.')),
+      h('p', { class: 'muted' }, `After each post RitPost waits about ${fb.gapSec} seconds before the next one. Posting the same thing to many groups quickly can still get posts held for review or your account temporarily limited by Facebook.`),
+      pages ? h('p', { class: 'muted' }, 'Posting on your own Page: switch to the Page’s profile on Facebook first, otherwise Facebook shows no post box or posts as you.') : null,
+      docs ? h('p', { class: 'muted' }, `${plural(docs, 'document')} will be left out (Facebook gets photos and videos only).`) : null
+    ),
+    onConfirm: () => {
+      (async () => {
+        const run = {
+          items: items.map((t) => ({ id: t.id, name: t.name, url: t.url, kind: t.kind, text: fbText(message.replaceAll('{group}', t.name)) })),
+          attachmentIds: media.map((a) => a.id),
+          gapSec: fb.gapSec,
+        };
+        $('fbStartBtn').disabled = true;
+        const res = await bg('BG_FB_START', { run });
+        if (res?.ok) toast(`Facebook posting started: ${plural(items.length, 'post')}. Click Post on Facebook for each one.`);
+        else {
+          toast(res?.error || 'Couldn’t open Facebook.', true);
+          renderFbCounts();
+        }
+      })();
+      return true;
+    },
+  });
+}
+
+function fbBind() {
+  $('fbImportBtn').addEventListener('click', fbImport);
+  $('fbAddForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const parsed = parseFbUrl($('fbUrl').value);
+    if (!parsed) return toast('That isn’t a Facebook group or Page link.', true);
+    const name = normName($('fbName').value) || parsed.slug.replace(/[-_.]+/g, ' ');
+    if (!fbAdd([{ ...parsed, name }])) return toast('That link is already saved.', true);
+    const t = fb.targets.find((x) => fbKey(x.url) === fbKey(parsed.url));
+    if (t) fb.selected.add(t.id);
+    fbSave();
+    renderFb();
+    $('fbUrl').value = '';
+    $('fbName').value = '';
+    toast(`Added ${short(name)}`);
+  });
+  $('fbFilter').addEventListener('input', (e) => {
+    fb.filter = e.target.value;
+    renderFbList();
+  });
+  $('fbSelAll').addEventListener('click', () => {
+    fb.targets.forEach((t) => fb.selected.add(t.id));
+    persist({ fbSelected: [...fb.selected] });
+    renderFbList();
+    renderFbCounts();
+  });
+  $('fbSelNone').addEventListener('click', () => {
+    fb.selected.clear();
+    persist({ fbSelected: [] });
+    renderFbList();
+    renderFbCounts();
+  });
+  $('fbGap').addEventListener('change', (e) => {
+    fb.gapSec = Math.min(900, Math.max(FB_MIN_GAP, Math.round(Number(e.target.value) || 60)));
+    e.target.value = String(fb.gapSec);
+    persist({ fbSettings: { gapSec: fb.gapSec } });
+    toast(`Facebook wait set to ${fb.gapSec} s`);
+  });
+  $('fbStartBtn').addEventListener('click', fbConfirmStart);
+  $('fbRunFocus').addEventListener('click', () => bg('BG_FB_OPEN'));
+  $('fbRunStop').addEventListener('click', async () => {
+    await bg('BG_FB_STOP');
+    toast('Facebook posting stopped');
+  });
+  $('message').addEventListener('input', () => {
+    renderFbMessage();
+    renderFbCounts();
+  });
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local') return;
+    if (changes.fbRun) {
+      fb.run = changes.fbRun.newValue || null;
+      renderFbRun();
+      renderFbList();
+    }
+    if (changes.attachments || changes.message) {
+      renderFbMessage();
+      renderFbCounts();
+    }
+    if (changes.fbTargets || changes.fbSelected) fbLoad().then(renderFb);
+  });
+}
+
 // ─────────────── wiring ───────────────
 function bind() {
   document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () => switchTab(t.dataset.tab)));
@@ -1078,6 +2004,47 @@ function bind() {
   $('selNone').addEventListener('click', () => bulk(false));
   $('saveListBtn').addEventListener('click', saveList);
 
+  // Groups tab: bulk actions on ticked groups.
+  $('mSelAll').addEventListener('click', () => {
+    const shown = manageVisible();
+    const allShown = shown.length > 0 && shown.every((g) => state.manageSel.has(g.id));
+    shown.forEach((g) => (allShown ? state.manageSel.delete(g.id) : state.manageSel.add(g.id)));
+    renderManageList();
+  });
+  $('bulkClear').addEventListener('click', () => {
+    state.manageSel.clear();
+    renderManageList();
+  });
+  $('bulkDelete').addEventListener('click', () => deleteGroups([...state.manageSel], { confirm: true }));
+  $('bulkAddList').addEventListener('click', () =>
+    openAddToList([...state.manageSel], {
+      onDone: () => {
+        state.manageSel.clear();
+        renderManageList();
+      },
+    })
+  );
+  $('bulkUse').addEventListener('click', () => {
+    state.selected = new Set(state.manageSel);
+    saveSelected();
+    switchTab('compose');
+    refreshGroups();
+    toast(`Selected ${plural(state.selected.size, 'group')} for sending`);
+  });
+
+  // Groups tab: lists.
+  $('newListBtn').addEventListener('click', () => openListEditor(null, { preselect: [...state.manageSel] }));
+  $('listSelAll').addEventListener('click', () => {
+    if (state.listSel.size === state.lists.length) state.listSel.clear();
+    else state.lists.forEach((l) => state.listSel.add(l.id));
+    renderListManager();
+  });
+  $('listBulkClear').addEventListener('click', () => {
+    state.listSel.clear();
+    renderListManager();
+  });
+  $('listBulkDelete').addEventListener('click', () => deleteLists([...state.listSel], { confirm: true }));
+
   $('addForm').addEventListener('submit', (e) => {
     e.preventDefault();
     const input = $('newGroup');
@@ -1091,11 +2058,13 @@ function bind() {
   });
 
   $('importBtn').addEventListener('click', openImport);
-  document.querySelectorAll('[data-close-modal]').forEach((b) => b.addEventListener('click', closeDialog));
+  document.querySelectorAll('[data-close-modal]').forEach((b) => b.addEventListener('click', () => closeDialog()));
   $('modal').addEventListener('click', (e) => e.target.id === 'modal' && closeDialog());
   $('modalConfirm').addEventListener('click', () => {
-    if (!dialogConfirm || $('modalConfirm').disabled) return;
-    if (dialogConfirm() !== false) closeDialog();
+    const fn = dialogConfirm;
+    if (!fn || $('modalConfirm').disabled) return;
+    // Don't close a dialog that the confirm handler itself opened.
+    if (fn() !== false && dialogConfirm === fn) closeDialog(true);
   });
 
   $('delay').addEventListener('change', (e) => {
@@ -1128,12 +2097,14 @@ function bind() {
     openDialog({
       title: 'Reset RitPost?',
       confirmText: 'Delete everything',
+      danger: true,
       body: h('p', { class: 'muted' }, 'This deletes all saved groups, lists, templates, your draft and session history from this browser. It cannot be undone.'),
       onConfirm: () => {
         (async () => {
           await chrome.storage.local.clear();
           await chrome.storage.local.set({ settings: DEFAULT_SETTINGS });
           await load();
+          await fbLoad();
           renderAll();
           toast('Everything has been reset');
         })();
@@ -1191,12 +2162,24 @@ function bind() {
       } else if (!$('tplMenu').hidden) {
         e.preventDefault();
         closeMenu();
+      } else if (!$('tab-groups').hidden && (state.manageSel.size || state.listSel.size)) {
+        e.preventDefault();
+        state.manageSel.clear();
+        state.listSel.clear();
+        refreshGroups();
       }
+    }
+    // Delete key in the Groups tab deletes the ticked groups (asks first).
+    const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName) && document.activeElement.type !== 'checkbox';
+    if (e.key === 'Delete' && !typing && $('modal').hidden && !$('tab-groups').hidden && state.manageSel.size) {
+      e.preventDefault();
+      deleteGroups([...state.manageSel], { confirm: true });
     }
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && $('modal').hidden && !$('startBtn').disabled) start();
   });
 
   chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && GROUP_KEYS.some((k) => changes[k])) syncFromStorageSoon();
     if (area === 'local' && changes.settings?.newValue) {
       // e.g. mode switched from the panel inside WhatsApp Web
       state.settings = { ...DEFAULT_SETTINGS, ...changes.settings.newValue };
@@ -1227,13 +2210,25 @@ async function refreshStatus() {
     WINDOW_ID = null;
   }
   await load();
+  await fbLoad();
   bind();
+  fbBind();
   renderAll();
   $('version').textContent = `RitPost v${chrome.runtime.getManifest().version}`;
 
-  // RitPost opens together with WhatsApp Web: bring it up beside the panel.
-  const s = await bg('BG_STATUS');
-  if (!s?.open || !s?.active) await bg('BG_OPEN');
+  // Opened while on Facebook: show the Facebook tab. Otherwise bring WhatsApp Web up beside the panel.
+  let onFacebook = false;
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    onFacebook = /^https:\/\/([a-z0-9-]+\.)*facebook\.com\//i.test(tab?.url || '');
+  } catch {
+    /* no tab info */
+  }
+  if (onFacebook) switchTab('facebook');
+  else {
+    const s = await bg('BG_STATUS');
+    if (!s?.open || !s?.active) await bg('BG_OPEN');
+  }
   await refreshStatus();
 
   let timer = null;
