@@ -212,6 +212,39 @@ async function fbFocus(windowId) {
   return { ok: true };
 }
 
+/**
+ * A real mouse click at (x, y) (CSS pixels in the tab's viewport). Facebook ignores script clicks on
+ * its final Post button, so Automatic mode clicks through Chrome's debugger. Needs the optional
+ * "debugger" permission; Chrome shows "RitPost started debugging this browser" while it is attached.
+ */
+async function trustedClick(tabId, x, y) {
+  const granted = await chrome.permissions.contains({ permissions: ['debugger'] }).catch(() => false);
+  if (!granted || !chrome.debugger) return { ok: false, error: 'no-permission' };
+  const target = { tabId };
+  let attachedHere = false;
+  try {
+    await chrome.debugger.attach(target, '1.3');
+    attachedHere = true;
+  } catch (e) {
+    if (!/already attached/i.test(e?.message || '')) return { ok: false, error: e?.message || String(e) };
+  }
+  try {
+    const send = (type, extra = {}) => chrome.debugger.sendCommand(target, 'Input.dispatchMouseEvent', { type, x, y, ...extra });
+    await send('mouseMoved');
+    await send('mousePressed', { button: 'left', buttons: 1, clickCount: 1 });
+    await sleep(60);
+    await send('mouseReleased', { button: 'left', buttons: 0, clickCount: 1 });
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e?.message || String(e) };
+  } finally {
+    if (attachedHere) {
+      await sleep(300);
+      chrome.debugger.detach(target).catch(() => {});
+    }
+  }
+}
+
 // A closed Facebook tab ends its run.
 chrome.tabs.onRemoved.addListener(async (tabId) => {
   const { fbRun } = await chrome.storage.local.get('fbRun');
@@ -262,6 +295,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     BG_FB_STOP: () => fbStop(),
     BG_FB_OPEN: () => fbFocus(windowId),
     BG_FB_TABID: async () => ({ ok: true, tabId: sender.tab?.id ?? null }),
+    BG_HAS_DEBUGGER: async () => ({ ok: true, granted: await chrome.permissions.contains({ permissions: ['debugger'] }).catch(() => false) }),
+    BG_TRUSTED_CLICK: () => (sender.tab?.id ? trustedClick(sender.tab.id, p.x, p.y) : Promise.resolve({ ok: false })),
   };
   const handler = handlers[msg?.type];
   if (!handler) return false;

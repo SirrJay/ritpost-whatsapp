@@ -90,6 +90,8 @@ RitPost can post the same message to your Facebook groups and the Facebook Pages
   - it stops at a **daily limit** (20 posts by default, up to 50);
   - it **stops at once** if Facebook shows a "temporarily blocked", "going too fast" or similar limit message.
 
+**Real clicks.** Facebook only accepts a real mouse click on its final **Post** button. When you turn on Automatic, Chrome asks you to allow RitPost to "access the page debugger backend" (an optional permission). RitPost uses it only to click **Next** and **Post** in the Facebook tab; while it clicks, Chrome briefly shows "RitPost started debugging this browser". Without it, RitPost fills everything in and asks you to click Post.
+
 Facebook's terms don't allow automated posting, and no interval is guaranteed to be safe; a long interval and a low daily limit only lower the risk. Post only where your post is welcome.
 
 ### Pages

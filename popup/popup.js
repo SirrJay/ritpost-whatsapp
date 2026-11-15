@@ -1948,15 +1948,37 @@ function confirmFbAuto() {
           h('li', {}, 'Post only to groups that welcome your posts and follow each group’s rules. Repeating the same post in many groups is what Facebook flags most.')
         ),
         h('p', { class: 'muted' }, 'Every post shows a countdown with Post now, Hold, Skip and Stop. You can switch back to Manual at any time.'),
+        h(
+          'p',
+          { class: 'muted' },
+          'Facebook only accepts a real click on its Post button. Chrome will now ask you to allow RitPost to “access the page debugger backend”. RitPost uses it only to click Next and Post in the Facebook tab; while it clicks, Chrome briefly shows “RitPost started debugging this browser”.'
+        ),
       ],
       onConfirm: () => {
-        resolve(true);
+        // Must be requested straight from the click.
+        requestRealClicks().finally(() => resolve(true));
         return true;
       },
       onCancel: () => resolve(false),
     });
   });
 }
+
+/** Ask Chrome for the "debugger" permission RitPost uses to click Facebook's Post button for real. */
+function requestRealClicks() {
+  try {
+    return chrome.permissions
+      .request({ permissions: ['debugger'] })
+      .then((ok) => {
+        if (!ok) toast('Without that permission, Facebook may wait for you to click Post yourself.', true);
+        return ok;
+      })
+      .catch(() => false);
+  } catch {
+    return Promise.resolve(false);
+  }
+}
+const hasRealClicks = () => chrome.permissions.contains({ permissions: ['debugger'] }).catch(() => false);
 
 async function fbSetMode(mode) {
   if (mode === fb.settings.mode) return;
@@ -1999,7 +2021,11 @@ function fbConfirmStart() {
       docs ? h('p', { class: 'muted' }, `${plural(docs, 'document')} will be left out (Facebook gets photos and videos only).`) : null
     ),
     onConfirm: () => {
+      // Automatic mode clicks Post for real: ask for the permission now (straight from this click) if it's missing.
+      // (If it's already granted, Chrome answers yes without asking again.)
+      const perm = auto ? requestRealClicks() : Promise.resolve(true);
       (async () => {
+        await perm;
         const run = {
           items: items.map((t) => ({ id: t.id, name: t.name, url: t.url, kind: t.kind, text: fbText(message.replaceAll('{group}', t.name)) })),
           attachmentIds: media.map((a) => a.id),

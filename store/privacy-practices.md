@@ -33,6 +33,11 @@ RitPost's interface is a side panel docked beside WhatsApp Web or Facebook, so i
 Lets the user export a backup file (JSON) of their saved groups, lists and templates when they click "Export" in Settings.
 ```
 
+**debugger (optional, requested only when the user turns on Automatic Facebook posting)**
+```
+Facebook only accepts a real mouse click on its final Post button. In Automatic mode RitPost uses chrome.debugger only to send a mouse click (Input.dispatchMouseEvent) on the Next and Post buttons in the Facebook tab it opened, then detaches immediately. It reads no page data through the debugger and is not used on any other site. The permission is optional and asked for only when the user turns on Automatic Facebook posting.
+```
+
 **Host permission: https://web.whatsapp.com/***
 ```
 RitPost works only on WhatsApp Web. It reads the chat list to import group names, opens the chats the user selected, and fills in the user's message and any files the user attached. It runs on no other site.
