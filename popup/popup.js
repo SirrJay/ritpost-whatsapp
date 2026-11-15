@@ -1951,7 +1951,7 @@ function confirmFbAuto() {
         h(
           'p',
           { class: 'muted' },
-          'Facebook only accepts a real click on its Post button. Chrome will now ask you to allow RitPost to “access the page debugger backend”. RitPost uses it only to click Next and Post in the Facebook tab; while it clicks, Chrome briefly shows “RitPost started debugging this browser”.'
+          'Facebook only accepts a real click on its Post button, so RitPost clicks Next and Post for real in the Facebook tab. While it clicks, Chrome briefly shows “RitPost started debugging this browser”.'
         ),
       ],
       onConfirm: () => {
@@ -1967,13 +1967,13 @@ function confirmFbAuto() {
 /** Ask Chrome for the "debugger" permission RitPost uses to click Facebook's Post button for real. */
 function requestRealClicks() {
   try {
-    return chrome.permissions
+    return hasRealClicks().then((has) => has || chrome.permissions
       .request({ permissions: ['debugger'] })
       .then((ok) => {
         if (!ok) toast('Without that permission, Facebook may wait for you to click Post yourself.', true);
         return ok;
       })
-      .catch(() => false);
+      .catch(() => false));
   } catch {
     return Promise.resolve(false);
   }

@@ -1089,7 +1089,7 @@
     const allowBtn = { label: 'Allow real clicks', kind: 'primary', run: () => bg('BG_ASK_DEBUGGER') };
     ui.update({
       ...base,
-      msg: `Facebook only accepts a real click on Post. Click “Allow real clicks” and accept Chrome’s prompt: RitPost then clicks Post by itself. Or click Post yourself.${note}`,
+      msg: `RitPost can’t click for real yet. Reload RitPost at chrome://extensions (or click “Allow real clicks”), and it clicks Post by itself. Or click Post yourself.${note}`,
       buttons: [allowBtn, skipBtn, stopBtn],
     });
     const allowed = await waitFor(async () => !alive() || !composerOpen() || (await bg('BG_HAS_DEBUGGER'))?.granted, 300000, 1000);

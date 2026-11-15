@@ -16,5 +16,8 @@ btn.addEventListener('click', () => {
   chrome.permissions
     .request({ permissions: ['debugger'] })
     .then(done)
-    .catch(() => done(false));
+    .catch((e) => {
+      done(false);
+      status.textContent += ' (' + (e?.message || e) + ') Reload RitPost at chrome://extensions to turn real clicks on.';
+    });
 });
