@@ -213,36 +213,104 @@ async function fbFocus(windowId) {
 }
 
 /**
- * A real mouse click at (x, y) (CSS pixels in the tab's viewport). Facebook ignores script clicks on
- * its final Post button, so Automatic mode clicks through Chrome's debugger. Needs the optional
- * "debugger" permission; Chrome shows "RitPost started debugging this browser" while it is attached.
+ * Real (trusted) clicks through Chrome's debugger. Facebook ignores script clicks on its final Post
+ * button. Needs the optional "debugger" permission; Chrome shows "RitPost started debugging this
+ * browser" while attached. That bar pushes the page down, so the button is measured only AFTER
+ * attaching, inside the page, and the debugger stays attached for a short while (Next → Post) so the
+ * page doesn't jump between clicks.
  */
-async function trustedClick(tabId, x, y) {
+const dbg = { tabId: null, timer: null, listening: false };
+
+async function attachDebugger(tabId) {
+  const target = { tabId };
+  if (!dbg.listening && chrome.debugger?.onDetach) {
+    dbg.listening = true;
+    chrome.debugger.onDetach.addListener((src) => {
+      if (src.tabId === dbg.tabId) dbg.tabId = null;
+    });
+  }
+  if (dbg.tabId !== tabId) {
+    try {
+      await chrome.debugger.attach(target, '1.3');
+    } catch (e) {
+      if (!/already attached/i.test(e?.message || '')) throw e;
+    }
+    dbg.tabId = tabId;
+    await sleep(900); // let the "started debugging" bar settle before measuring anything
+  }
+  clearTimeout(dbg.timer);
+  dbg.timer = setTimeout(() => {
+    chrome.debugger.detach(target).catch(() => {});
+    if (dbg.tabId === tabId) dbg.tabId = null;
+  }, 25000);
+  return target;
+}
+
+async function evalInPage(target, expression) {
+  const res = await chrome.debugger.sendCommand(target, 'Runtime.evaluate', { expression, returnByValue: true });
+  return res?.result?.value ?? null;
+}
+
+/** Click (how = 'mouse') or press Enter on (how = 'key') the element marked data-ritpost-click="<token>". */
+async function trustedClick(tabId, token, how = 'mouse') {
   const granted = await chrome.permissions.contains({ permissions: ['debugger'] }).catch(() => false);
   if (!granted || !chrome.debugger) return { ok: false, error: 'no-permission' };
-  const target = { tabId };
-  let attachedHere = false;
+  if (!/^[a-z0-9]+$/i.test(token || '')) return { ok: false, error: 'bad-token' };
+  let target;
   try {
-    await chrome.debugger.attach(target, '1.3');
-    attachedHere = true;
-  } catch (e) {
-    if (!/already attached/i.test(e?.message || '')) return { ok: false, error: e?.message || String(e) };
-  }
-  try {
-    const send = (type, extra = {}) => chrome.debugger.sendCommand(target, 'Input.dispatchMouseEvent', { type, x, y, ...extra });
-    await send('mouseMoved');
-    await send('mousePressed', { button: 'left', buttons: 1, clickCount: 1 });
-    await sleep(60);
-    await send('mouseReleased', { button: 'left', buttons: 0, clickCount: 1 });
-    return { ok: true };
+    target = await attachDebugger(tabId);
   } catch (e) {
     return { ok: false, error: e?.message || String(e) };
-  } finally {
-    if (attachedHere) {
-      await sleep(300);
-      chrome.debugger.detach(target).catch(() => {});
-    }
   }
+  const find = `document.querySelector('[data-ritpost-click="${token}"]')`;
+  try {
+    // Bring it into view and hide RitPost's own panel so it isn't under the pointer.
+    const there = await evalInPage(
+      target,
+      `(() => { const el = ${find}; if (!el) return false; const h = document.getElementById('ritpost-fb'); if (h) h.style.visibility = 'hidden'; el.scrollIntoView({ block: 'center', inline: 'center' }); return true; })()`
+    );
+    if (!there) return { ok: false, error: 'gone' };
+    await sleep(250);
+
+    if (how === 'key') {
+      await evalInPage(target, `(() => { const el = ${find}; if (el) { if (!el.hasAttribute('tabindex')) el.setAttribute('tabindex', '0'); el.focus(); } })()`);
+      const key = { key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 };
+      await chrome.debugger.sendCommand(target, 'Input.dispatchKeyEvent', { type: 'keyDown', text: '\r', unmodifiedText: '\r', ...key });
+      await sleep(40);
+      await chrome.debugger.sendCommand(target, 'Input.dispatchKeyEvent', { type: 'keyUp', ...key });
+      return { ok: true, how };
+    }
+
+    // Measure now (after the bar appeared) and pick a point where the button really is on top.
+    const pt = await evalInPage(
+      target,
+      `(() => { const el = ${find}; if (!el) return null; const r = el.getBoundingClientRect();
+        for (const [fx, fy] of [[0.5, 0.5], [0.3, 0.5], [0.7, 0.5], [0.5, 0.3], [0.5, 0.7]]) {
+          const x = r.left + r.width * fx, y = r.top + r.height * fy;
+          const t = document.elementFromPoint(x, y);
+          if (t && (el === t || el.contains(t) || t.contains(el))) return { x, y, hit: true };
+        }
+        return { x: r.left + r.width / 2, y: r.top + r.height / 2, hit: false }; })()`
+    );
+    if (!pt) return { ok: false, error: 'gone' };
+    const x = Math.round(pt.x);
+    const y = Math.round(pt.y);
+    const send = (type, extra = {}) => chrome.debugger.sendCommand(target, 'Input.dispatchMouseEvent', { type, x, y, ...extra });
+    await send('mouseMoved');
+    await sleep(40);
+    await send('mousePressed', { button: 'left', buttons: 1, clickCount: 1 });
+    await sleep(70);
+    await send('mouseReleased', { button: 'left', buttons: 0, clickCount: 1 });
+    return { ok: true, how, hit: pt.hit };
+  } catch (e) {
+    return { ok: false, error: e?.message || String(e) };
+  }
+}
+
+/** A small RitPost window with one button that asks Chrome for the "debugger" permission (needs a click on an extension page). */
+async function askForDebugger() {
+  await chrome.windows.create({ url: chrome.runtime.getURL('grant.html'), type: 'popup', width: 440, height: 330, focused: true });
+  return { ok: true };
 }
 
 // A closed Facebook tab ends its run.
@@ -296,7 +364,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     BG_FB_OPEN: () => fbFocus(windowId),
     BG_FB_TABID: async () => ({ ok: true, tabId: sender.tab?.id ?? null }),
     BG_HAS_DEBUGGER: async () => ({ ok: true, granted: await chrome.permissions.contains({ permissions: ['debugger'] }).catch(() => false) }),
-    BG_TRUSTED_CLICK: () => (sender.tab?.id ? trustedClick(sender.tab.id, p.x, p.y) : Promise.resolve({ ok: false })),
+    BG_TRUSTED_CLICK: () => (sender.tab?.id ? trustedClick(sender.tab.id, p.token, p.how) : Promise.resolve({ ok: false })),
+    BG_ASK_DEBUGGER: () => askForDebugger(),
   };
   const handler = handlers[msg?.type];
   if (!handler) return false;

@@ -35,7 +35,7 @@ Lets the user export a backup file (JSON) of their saved groups, lists and templ
 
 **debugger (optional, requested only when the user turns on Automatic Facebook posting)**
 ```
-Facebook only accepts a real mouse click on its final Post button. In Automatic mode RitPost uses chrome.debugger only to send a mouse click (Input.dispatchMouseEvent) on the Next and Post buttons in the Facebook tab it opened, then detaches immediately. It reads no page data through the debugger and is not used on any other site. The permission is optional and asked for only when the user turns on Automatic Facebook posting.
+Facebook only accepts a real mouse click on its final Post button. In Automatic mode RitPost uses chrome.debugger only to send a mouse click (Input.dispatchMouseEvent) or an Enter key press (Input.dispatchKeyEvent) on the Next and Post buttons in the Facebook tab it opened. To aim the click it reads only the position of that one button (Runtime.evaluate), and it detaches about 25 seconds after the last click. It collects no page data through the debugger and is not used on any other site. The permission is optional and asked for only when the user turns on Automatic Facebook posting.
 ```
 
 **Host permission: https://web.whatsapp.com/***

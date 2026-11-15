@@ -29,7 +29,8 @@
   async function waitFor(fn, timeout = 10000, interval = 250) {
     const end = Date.now() + timeout;
     while (Date.now() < end) {
-      const v = fn();
+      let v = fn();
+      if (v && typeof v.then === 'function') v = await v.catch(() => null);
       if (v) return v;
       await sleep(interval);
     }
@@ -592,20 +593,18 @@
    * A real mouse click on `el` (through the background's Chrome debugger). Facebook ignores script
    * clicks on its final Post button. Returns false when the permission isn't granted.
    */
-  async function realClick(el) {
-    el.scrollIntoView({ block: 'center', inline: 'center' });
-    await sleep(300);
-    const r = el.getBoundingClientRect();
-    const x = Math.round(r.left + r.width / 2);
-    const y = Math.round(r.top + r.height / 2);
+  async function realClick(el, how = 'mouse') {
+    // The background finds the button by this mark and measures it itself (after Chrome's debugging bar
+    // has moved the page), so the click lands on it.
+    const token = Math.random().toString(36).slice(2, 10);
+    el.setAttribute('data-ritpost-click', token);
     const host = document.getElementById('ritpost-fb');
-    // Our own panel must not be under the pointer.
-    if (host) host.style.visibility = 'hidden';
+    if (host) host.style.visibility = 'hidden'; // our own panel must not be under the pointer
     try {
-      const res = await bg('BG_TRUSTED_CLICK', { x, y });
-      return !!res?.ok;
+      return (await bg('BG_TRUSTED_CLICK', { token, how })) || { ok: false, error: 'no-answer' };
     } finally {
-      if (host) setTimeout(() => (host.style.visibility = ''), 400);
+      el.removeAttribute('data-ritpost-click');
+      if (host) setTimeout(() => (host.style.visibility = ''), 500);
     }
   }
 
@@ -1016,63 +1015,90 @@
       const b = postButton(postDialog());
       return b && b.getAttribute('aria-disabled') !== 'true' && !b.disabled ? b : null;
     };
-    let btn = await waitFor(() => !alive() || ready(), 180000, 500);
+    const first = await waitFor(() => !alive() || ready(), 180000, 500);
     if (!alive()) return;
-    if (!btn || btn === true) return manualWait('\nThe Post button didn’t become available. Post it yourself or Skip.');
+    if (!first || first === true) return manualWait('\nThe Post button didn’t become available. Post it yourself or Skip.');
 
-    for (let step = 0; step < 3 && alive(); step++) {
-      const label = (btn.getAttribute('aria-label') || textOf(btn)).trim();
-      lastPostClick = POST_RE.test(label) ? Date.now() : lastPostClick;
-      // Click once, then wait for Facebook to react. Only if nothing at all happened (button still enabled
-      // and unchanged, box still open) try another way of clicking, so a post is never sent twice.
-      const reacted = () =>
-        !composerOpen() ||
-        !btn.isConnected ||
-        btn.getAttribute('aria-disabled') === 'true' ||
-        (ready() && ready() !== btn) ||
-        facebookMessage(BLOCK_RE) ||
-        /\b(posting|publishing)…?$/im.test(textOf(postDialog()).slice(0, 3000));
-      // Real click first (Facebook needs it for the final Post button); script clicks only as a fallback,
-      // and only if Facebook showed no reaction at all, so a post is never sent twice.
-      const real = await realClick(btn);
-      let moved = real && !!(await waitFor(reacted, 12000, 250));
-      if (!moved) {
-        for (const click of CLICKS.slice(0, 3)) {
-          if (await waitFor(reacted, 200, 100)) {
+    /** Click Next (if any) and then Post. Returns 'done', 'no-permission' or 'ignored'. */
+    const clickThrough = async (btn) => {
+      let denied = false;
+      for (let step = 0; step < 3 && alive(); step++) {
+        const label = (btn.getAttribute('aria-label') || textOf(btn)).trim();
+        const isNext = NEXT_RE.test(label);
+        ui.update({ ...base, msg: isNext ? 'Clicking Next…' : 'Clicking Post…', buttons: [skipBtn, stopBtn] });
+        if (!isNext) lastPostClick = Date.now();
+        // Facebook's reaction: box closed, button gone/disabled, a new step, a message, or "Posting…".
+        const reacted = () =>
+          !composerOpen() ||
+          !btn.isConnected ||
+          btn.getAttribute('aria-disabled') === 'true' ||
+          (ready() && ready() !== btn) ||
+          facebookMessage(BLOCK_RE) ||
+          /\b(posting|publishing)…?$/im.test(textOf(postDialog()).slice(0, 3000));
+        // One attempt at a time, and the next only if Facebook showed no reaction at all, so a post is
+        // never sent twice: real mouse click, real Enter key, then script clicks.
+        let moved = false;
+        for (const how of ['mouse', 'key']) {
+          if (await waitFor(reacted, 300, 100)) {
             moved = true;
             break;
           }
-          click(btn);
-          if (await waitFor(reacted, 6000, 250)) {
+          const res = await realClick(btn, how);
+          if (!res.ok) {
+            denied = res.error === 'no-permission';
+            break;
+          }
+          if (await waitFor(reacted, how === 'mouse' ? 10000 : 8000, 250)) {
             moved = true;
             break;
           }
         }
-      }
-      if (!moved) break; // Facebook ignored every click: hand over to the user straight away
-      // Wait for the result (uploads can take a while); the watcher records it.
-      await waitFor(
-        () => !alive() || !composerOpen() || facebookMessage(BLOCK_RE) || (NEXT_RE.test(label) && ready() && ready() !== btn),
-        60000,
-        400
-      );
-      if (!alive() || !composerOpen() || facebookMessage(BLOCK_RE)) return;
-      // "Next" leads to another step with the real Post button.
-      if (NEXT_RE.test(label)) {
+        if (!moved) {
+          for (const click of CLICKS.slice(0, 3)) {
+            if (await waitFor(reacted, 300, 100)) {
+              moved = true;
+              break;
+            }
+            click(btn);
+            if (await waitFor(reacted, 5000, 250)) {
+              moved = true;
+              break;
+            }
+          }
+        }
+        if (!moved) return denied ? 'no-permission' : 'ignored';
+        if (!isNext) ui.update({ ...base, msg: 'Publishing…', buttons: [skipBtn, stopBtn] });
+        // Wait for the result (uploads can take a while); the watcher records it.
+        await waitFor(() => !alive() || !composerOpen() || facebookMessage(BLOCK_RE) || (isNext && ready() && ready() !== btn), 60000, 400);
+        if (!alive() || !composerOpen() || facebookMessage(BLOCK_RE)) return 'done';
+        if (!isNext) return 'ignored';
+        // "Next" leads to the "Post settings" step with the real Post button.
         btn = await waitFor(ready, 15000, 300);
-        if (!btn) break;
-        continue;
+        if (!btn) return 'ignored';
       }
-      break;
-    }
-    if (alive() && composerOpen()) {
-      const { granted } = await bg('BG_HAS_DEBUGGER').then((r) => r || {});
-      manualWait(
-        granted
-          ? '\nFacebook didn’t accept RitPost’s click on Post. Click Post yourself, or Skip.'
-          : '\nFacebook only accepts a real click on Post. Allow RitPost to click for you: in the RitPost panel, switch Facebook to Manual and back to Automatic, then accept Chrome’s prompt. For now, click Post yourself.'
-      );
-    }
+      return 'ignored';
+    };
+
+    const outcome = await clickThrough(first);
+    if (!alive() || !composerOpen() || outcome === 'done') return;
+
+    const { granted } = (await bg('BG_HAS_DEBUGGER')) || {};
+    if (granted) return manualWait('\nFacebook didn’t accept RitPost’s click on Post. Click Post yourself, or Skip.');
+
+    // No permission for real clicks yet: offer it here, and carry on by itself as soon as it's allowed.
+    const allowBtn = { label: 'Allow real clicks', kind: 'primary', run: () => bg('BG_ASK_DEBUGGER') };
+    ui.update({
+      ...base,
+      msg: `Facebook only accepts a real click on Post. Click “Allow real clicks” and accept Chrome’s prompt: RitPost then clicks Post by itself. Or click Post yourself.${note}`,
+      buttons: [allowBtn, skipBtn, stopBtn],
+    });
+    const allowed = await waitFor(async () => !alive() || !composerOpen() || (await bg('BG_HAS_DEBUGGER'))?.granted, 300000, 1000);
+    if (!alive() || !composerOpen()) return;
+    if (!allowed) return manualWait('\nClick Post yourself, or Skip.');
+    const again = ready();
+    if (!again) return manualWait('\nClick Post yourself, or Skip.');
+    const second = await clickThrough(again);
+    if (alive() && composerOpen() && second !== 'done') manualWait('\nFacebook didn’t accept RitPost’s click on Post. Click Post yourself, or Skip.');
   }
 
   function showCountdown(run) {
