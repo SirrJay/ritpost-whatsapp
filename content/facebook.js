@@ -299,6 +299,10 @@
   async function rememberPersonal() {
     const cur = currentProfileName();
     if (!cur) return;
+    // Needs the full list of your Pages (saved by "Import Pages I manage"); otherwise a Page that
+    // wasn't imported could be mistaken for your own profile.
+    const { fbPageNames } = await chrome.storage.local.get('fbPageNames');
+    if (!fbPageNames?.length) return;
     const pages = await knownPageNames();
     if (!pages.some((n) => sameName(n, cur))) await chrome.storage.local.set({ fbPersonalName: cur });
   }
@@ -337,18 +341,72 @@
   }
 
   /** Start switching to the Page called `name`. Facebook then reloads the page. */
-  async function switchToPage(name) {
-    const direct = switchButton(name);
-    if (direct) {
-      direct.click();
+  /** The Page's own "Switch Now" banner (shown when you view a Page you manage as yourself). */
+  function switchNowButton(name) {
+    const b = switchButton(name);
+    if (!b || !b.closest('[role="main"]')) return null;
+    const l = (b.getAttribute('aria-label') || textOf(b)).trim();
+    return /^switch now$/i.test(l) || /^switch (to|into) /i.test(l) ? b : null;
+  }
+
+  /**
+   * Switch methods for a Page, best first: the Page's "Switch Now" banner → profile menu
+   * "Switch to <Page>" (works from your profile and from another Page) → any other switch button.
+   */
+  const SWITCH_METHODS = ['now', 'menu', 'other'];
+  /** Try one method. Returns true when a switch was started (Facebook then reloads). */
+  async function switchToPage(name, method) {
+    if (method === 'now') {
+      const now = switchNowButton(name);
+      if (!now) return false;
+      now.click();
       await confirmSwitch();
       return true;
     }
-    return switchViaMenu((t) => sameName(t.replace(/^switch to\s+/i, ''), name));
+    if (method === 'menu') return switchViaMenu((t) => sameName(t.replace(/^switch to\s+/i, ''), name));
+    const other = switchButton(name);
+    if (!other) return false;
+    other.scrollIntoView({ block: 'center' });
+    other.click();
+    await confirmSwitch();
+    return true;
   }
 
+  /** Name of the profile you're using right now (opens and closes the profile menu). */
+  async function activeProfile() {
+    if (!(await openAccountMenu())) return '';
+    const cur = currentProfileName();
+    await rememberPersonal();
+    closeMenus();
+    await sleep(400);
+    return cur;
+  }
+
+  /** Scroll down the page bit by bit until the post prompt appears (Facebook loads it lazily). */
+  async function findPrompt(timeout = 15000) {
+    const end = Date.now() + timeout;
+    let steps = 0;
+    while (Date.now() < end) {
+      if (composerBox() || triggerCandidates().length) {
+        if (steps) window.scrollTo(0, 0);
+        return true;
+      }
+      if (steps < 8 && Date.now() > end - timeout + 2500) {
+        window.scrollBy(0, Math.round(innerHeight * 0.8));
+        steps++;
+      }
+      await sleep(600);
+    }
+    if (steps) window.scrollTo(0, 0);
+    return !!(composerBox() || triggerCandidates().length);
+  }
+
+  let personalAmbiguous = false;
+  // Facebook's list of the Pages you manage (tests can point this at a mock page).
+  const PAGES_LIST_URL = window.__ritpostPagesUrl || 'https://www.facebook.com/pages/?category=your_pages';
   /** Start switching back to your own profile (the remembered one, or the only profile that isn't one of your Pages). */
   async function switchToPersonal(pageNames) {
+    personalAmbiguous = false;
     const { fbPersonalName } = await chrome.storage.local.get('fbPersonalName');
     const allPages = [...pageNames, ...(await knownPageNames())];
     const isPage = (n) => allPages.some((p) => sameName(n, p));
@@ -377,6 +435,7 @@
     }
     if (opts.length !== 1) {
       closeMenus();
+      personalAmbiguous = opts.length > 1;
       return false; // unsure which profile is yours: don't guess
     }
     await chrome.storage.local.set({ fbPersonalName: cleanName(opts[0].name) });
@@ -738,7 +797,12 @@
     const base = { meta: meta(run), mode: modeTag(run), name: cleanName(item.name), progress: progress(run) };
     const stopBtn = { label: 'Stop', kind: 'danger', run: () => stopRun() };
     const skipBtn = { label: 'Skip', run: () => record('skipped') };
-    const retry = () => {
+    const retry = async () => {
+      const r = await getRun();
+      if (r?.pageSwitchMethods?.[r.index]) {
+        delete r.pageSwitchMethods[r.index];
+        await setRun(r);
+      }
       busy = false;
       tick(true);
     };
@@ -777,26 +841,65 @@
 
     // Pages: post as the Page. Switch to the Page's profile automatically when needed.
     if (item.kind === 'page' && !composerBox()) {
-      await waitFor(() => triggerCandidates().length || switchButton(pageName), 12000, 400);
+      ui.update({ ...base, msg: 'Looking for the Page’s post box…', buttons: [skipBtn, stopBtn] });
+      await waitFor(() => triggerCandidates().length || switchButton(pageName), 8000, 400);
       if (!alive()) return;
-      if (!triggerCandidates().length) {
-        if (await switchProfile('pageSwitchTries', `Switching to “${pageName}” so the post comes from your Page…`, () => switchToPage(pageName))) return;
+      let ready = triggerCandidates().length > 0;
+      if (!ready) {
+        // Which profile are you using? If it's already this Page, the post box is just further down.
+        const active = await activeProfile();
+        if (!alive()) return;
+        if (active && sameName(active, pageName)) ready = await findPrompt(20000);
+      }
+      if (!alive()) return;
+      if (!ready) {
+        const tried = [...(run.pageSwitchMethods?.[run.index] || [])];
+        ui.update({ ...base, msg: `Switching to “${pageName}” so the post comes from your Page…`, buttons: [skipBtn, stopBtn] });
+        for (const method of SWITCH_METHODS.filter((m) => !tried.includes(m))) {
+          if (!alive()) return;
+          // Save the attempt BEFORE clicking: Facebook reloads the page right after a switch.
+          tried.push(method);
+          run.pageSwitchMethods = { ...(run.pageSwitchMethods || {}), [run.index]: [...tried] };
+          run.switchedToPage = true;
+          run.navigatedFor = -1; // after Facebook's reload, come back to this Page
+          run.navAt = Date.now();
+          await setRun(run);
+          if (await switchToPage(pageName, method)) {
+            // Facebook reloads after switching and this script starts again there.
+            await sleep(15000);
+            if (alive()) await goToCurrent(await getRun()); // it switched without reloading
+            return;
+          }
+        }
         if (!alive()) return;
         return fail(
-          `RitPost couldn’t switch to “${pageName}”. Switch to the Page yourself (your profile picture → See all profiles → the Page), then click Try again.`
+          `RitPost couldn’t switch to “${pageName}”. Check that you manage this Page, then click Try again (or switch to it from your profile picture).`
         );
       }
     }
 
     // Groups: if there's no post box (e.g. you're still using Facebook as a Page), switch back to your profile once.
     if (item.kind === 'group' && !composerBox()) {
-      await waitFor(() => triggerCandidates().length, 12000, 400);
+      await findPrompt(15000);
       if (!alive()) return;
       if (!triggerCandidates().length) {
         const { fbTargets } = await chrome.storage.local.get('fbTargets');
         const pageNames = [...run.items, ...(fbTargets || [])].filter((t) => t.kind === 'page').map((t) => cleanName(t.name));
         if (await switchProfile('personalSwitchTries', 'Switching back to your own profile to post in this group…', () => switchToPersonal(pageNames))) return;
         if (!alive()) return;
+        const { fbPageNames } = await chrome.storage.local.get('fbPageNames');
+        if (personalAmbiguous && !fbPageNames?.length && !run.pagesLearned) {
+          // Learn the full list of your Pages once, then come back and try again.
+          ui.update({ ...base, msg: 'Checking which profiles are your Pages…', buttons: [skipBtn, stopBtn] });
+          run.pagesLearned = true;
+          run.learningPages = true;
+          run.personalSwitchTries = { ...(run.personalSwitchTries || {}), [run.index]: 0 };
+          run.navAt = Date.now();
+          await setRun(run);
+          leaving = true;
+          location.assign(PAGES_LIST_URL);
+          return;
+        }
       }
     }
 
@@ -1033,6 +1136,20 @@
     }
     // running
     if (busy && !force) return;
+    if (run.learningPages) {
+      if (location.pathname !== new URL(PAGES_LIST_URL).pathname) return; // on the way to "Your Pages"
+      busy = true;
+      ui.update({ meta: meta(run), mode: modeTag(run), name: 'Checking which profiles are your Pages…', msg: '', buttons: [] });
+      try {
+        await scan('pages'); // saves the names of all your Pages
+      } catch {
+        /* carry on: the group step will ask you if it still can't tell */
+      }
+      const r = await getRun();
+      r.learningPages = false;
+      busy = false;
+      return goToCurrent(r);
+    }
     const item = run.items[run.index];
     if (!item) return;
     if (normPath(item.url) !== normPath(location.href)) {
