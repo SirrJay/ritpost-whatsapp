@@ -85,12 +85,11 @@ RitPost can post the same message to your Facebook groups and the Facebook Pages
 ### Manual and Automatic
 
 - **Manual** (default): you check each post and click **Post**. RitPost then waits at least 30 seconds (60 by default) before the next one.
-- **Automatic**: RitPost gives you a review countdown (10 seconds by default) with **Post now**, **Hold**, **Skip** and **Stop**, then clicks Post itself. To keep the risk low:
+- **Automatic**: RitPost gives you a review countdown (10 seconds by default) with **Continue now**, **Hold**, **Skip** and **Stop**, then switches profile if needed, fills in the post and clicks **Next** by itself. **You click Post** to publish each one (Facebook only accepts your own click there); RitPost highlights the button, shows "Click Post" in the tab title, records your click and carries on with the next one. To keep the risk low:
   - it waits at least **2 minutes** between posts (**5 minutes** by default), and makes each wait randomly up to 30% longer;
   - it stops at a **daily limit** (20 posts by default, up to 50);
   - it **stops at once** if Facebook shows a "temporarily blocked", "going too fast" or similar limit message.
 
-**Real clicks.** Facebook only accepts a real mouse click on its final **Post** button. So RitPost has the "debugger" permission (Chrome lists it as "access the page debugger backend"). RitPost uses it only to click **Next** and **Post** in the Facebook tab; while it clicks, Chrome briefly shows "RitPost started debugging this browser". If Facebook doesn't react to the click, RitPost tries a real Enter key on the button, then asks you to click Post.
 
 Facebook's terms don't allow automated posting, and no interval is guaranteed to be safe; a long interval and a low daily limit only lower the risk. Post only where your post is welcome.
 

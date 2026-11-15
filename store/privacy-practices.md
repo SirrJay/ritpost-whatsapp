@@ -3,7 +3,7 @@
 ## Single purpose
 
 ```
-RitPost helps a user post one message to several of their own groups: WhatsApp groups in WhatsApp Web, and Facebook groups and Pages on facebook.com. It opens each selected group, fills in the message and attachments, and lets the user send or post it (on WhatsApp it can optionally send after a user-controlled countdown; on Facebook the user clicks Post, or in optional Automatic mode RitPost posts after a review countdown with long pauses and a daily limit).
+RitPost helps a user post one message to several of their own groups: WhatsApp groups in WhatsApp Web, and Facebook groups and Pages on facebook.com. It opens each selected group, fills in the message and attachments, and lets the user send or post it (on WhatsApp it can optionally send after a user-controlled countdown; on Facebook the user clicks Post, also in optional Automatic mode, where RitPost prepares each post after a review countdown with long pauses and a daily limit).
 ```
 
 ## Permission justifications
@@ -33,11 +33,6 @@ RitPost's interface is a side panel docked beside WhatsApp Web or Facebook, so i
 Lets the user export a backup file (JSON) of their saved groups, lists and templates when they click "Export" in Settings.
 ```
 
-**debugger**
-```
-Facebook only accepts a real mouse click on its final Post button. In Automatic mode RitPost uses chrome.debugger only to send a mouse click (Input.dispatchMouseEvent) or an Enter key press (Input.dispatchKeyEvent) on the Next and Post buttons in the Facebook tab it opened. To aim the click it reads only the position of that one button (Runtime.evaluate), and it detaches about 25 seconds after the last click. It collects no page data through the debugger and is not used on any other site. It is never used in Manual mode or on WhatsApp. (Chrome does not allow "debugger" as an optional permission.)
-```
-
 **Host permission: https://web.whatsapp.com/***
 ```
 RitPost works only on WhatsApp Web. It reads the chat list to import group names, opens the chats the user selected, and fills in the user's message and any files the user attached. It runs on no other site.
@@ -45,7 +40,7 @@ RitPost works only on WhatsApp Web. It reads the chat list to import group names
 
 **Host permission: https://*.facebook.com/***
 ```
-Used only when the user posts to Facebook from RitPost. RitPost opens the Facebook groups and Pages the user selected, opens the post box, fills in the user's message and attaches the photos/videos the user chose; the user clicks Post (or, in optional Automatic mode, RitPost clicks Post after a countdown the user can cancel). For a Page, it clicks Facebook's "Switch now" so the post comes from the Page. When the user clicks "Import my Facebook groups" or "Import Pages I manage", it reads the names and links listed on Facebook's "Your groups" or "Your Pages" page. Nothing is sent anywhere else.
+Used only when the user posts to Facebook from RitPost. RitPost opens the Facebook groups and Pages the user selected, opens the post box, fills in the user's message and attaches the photos/videos the user chose; the user clicks Post (in optional Automatic mode RitPost also clicks Next after a countdown the user can cancel; the user still clicks Post). For a Page, it clicks Facebook's "Switch now" so the post comes from the Page. When the user clicks "Import my Facebook groups" or "Import Pages I manage", it reads the names and links listed on Facebook's "Your groups" or "Your Pages" page. Nothing is sent anywhere else.
 ```
 
 ## Remote code

@@ -1833,7 +1833,7 @@ function renderFbMode() {
   $('fbReview').value = String(fb.settings.reviewSec);
   $('fbTodayCount').textContent = `Posted today: ${fb.daily}.`;
   $('fbModeHint').textContent = auto
-    ? `RitPost fills in each post, gives you ${fb.settings.reviewSec} s to check it, then clicks Post. It waits ${fb.settings.intervalMin}–${Math.round(fb.settings.intervalMin * 1.3)} minutes between posts, stops at ${fb.settings.dailyLimit} posts a day, and stops at once if Facebook shows a posting limit.`
+    ? `RitPost fills in each post, gives you ${fb.settings.reviewSec} s to check it and clicks Next; you click Post to publish. It waits ${fb.settings.intervalMin}–${Math.round(fb.settings.intervalMin * 1.3)} minutes between posts, stops at ${fb.settings.dailyLimit} posts a day, and stops at once if Facebook shows a posting limit.`
     : 'RitPost fills in each post; you check it and click Post yourself.';
 }
 
@@ -1939,7 +1939,7 @@ function confirmFbAuto() {
       title: 'Turn on automatic Facebook posting?',
       confirmText: 'Turn on automatic',
       body: [
-        h('p', {}, 'RitPost will click Post for you after a review countdown on each group or Page.'),
+        h('p', {}, 'RitPost opens each group or Page, switches profile, fills in your post and clicks Next by itself after a review countdown. You click Post to publish each one; RitPost then carries on with the next.'),
         h(
           'ul',
           { class: 'risk' },
@@ -1948,37 +1948,15 @@ function confirmFbAuto() {
           h('li', {}, 'Post only to groups that welcome your posts and follow each group’s rules. Repeating the same post in many groups is what Facebook flags most.')
         ),
         h('p', { class: 'muted' }, 'Every post shows a countdown with Post now, Hold, Skip and Stop. You can switch back to Manual at any time.'),
-        h(
-          'p',
-          { class: 'muted' },
-          'Facebook only accepts a real click on its Post button, so RitPost clicks Next and Post for real in the Facebook tab. While it clicks, Chrome briefly shows “RitPost started debugging this browser”.'
-        ),
       ],
       onConfirm: () => {
-        // Must be requested straight from the click.
-        requestRealClicks().finally(() => resolve(true));
+        resolve(true);
         return true;
       },
       onCancel: () => resolve(false),
     });
   });
 }
-
-/** Ask Chrome for the "debugger" permission RitPost uses to click Facebook's Post button for real. */
-function requestRealClicks() {
-  try {
-    return hasRealClicks().then((has) => has || chrome.permissions
-      .request({ permissions: ['debugger'] })
-      .then((ok) => {
-        if (!ok) toast('Without that permission, Facebook may wait for you to click Post yourself.', true);
-        return ok;
-      })
-      .catch(() => false));
-  } catch {
-    return Promise.resolve(false);
-  }
-}
-const hasRealClicks = () => chrome.permissions.contains({ permissions: ['debugger'] }).catch(() => false);
 
 async function fbSetMode(mode) {
   if (mode === fb.settings.mode) return;
@@ -2011,7 +1989,7 @@ function fbConfirmStart() {
       'div',
       {},
       auto
-        ? h('p', {}, `RitPost opens each one, fills in your message and photos/videos, gives you ${fb.settings.reviewSec} s to check it, then clicks Post. It waits about ${fb.settings.intervalMin}–${Math.round(fb.settings.intervalMin * 1.3)} minutes between posts.`)
+        ? h('p', {}, `RitPost opens each one, fills in your message and photos/videos, gives you ${fb.settings.reviewSec} s to check it and clicks Next. `, h('b', {}, 'You click Post to publish each one.'), ` It waits about ${fb.settings.intervalMin}–${Math.round(fb.settings.intervalMin * 1.3)} minutes between posts.`)
         : h('p', {}, 'RitPost opens each one, fills in your message and photos/videos. ', h('b', {}, 'You check the post and click Post yourself.'), ` RitPost then waits about ${fb.settings.gapSec} s before the next one.`),
       auto && items.length > remainingToday
         ? h('p', { class: 'muted' }, `Only ${remainingToday} more post${remainingToday === 1 ? '' : 's'} fit today’s limit; RitPost stops there and you can continue tomorrow with “Select unposted”.`)
@@ -2021,11 +1999,7 @@ function fbConfirmStart() {
       docs ? h('p', { class: 'muted' }, `${plural(docs, 'document')} will be left out (Facebook gets photos and videos only).`) : null
     ),
     onConfirm: () => {
-      // Automatic mode clicks Post for real: ask for the permission now (straight from this click) if it's missing.
-      // (If it's already granted, Chrome answers yes without asking again.)
-      const perm = auto ? requestRealClicks() : Promise.resolve(true);
       (async () => {
-        await perm;
         const run = {
           items: items.map((t) => ({ id: t.id, name: t.name, url: t.url, kind: t.kind, text: fbText(message.replaceAll('{group}', t.name)) })),
           attachmentIds: media.map((a) => a.id),
