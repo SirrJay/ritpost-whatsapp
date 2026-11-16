@@ -64,6 +64,7 @@ Choose the mode in the switch above the Start button.
 
 - Attach up to 10 files, each up to 16 MB (64 MB in total): photos, videos or documents.
 - For each group, RitPost hands the files to WhatsApp, which opens its attachment preview. Your message goes in as the **caption**, with `{group}` filled in.
+- **Link previews.** WhatsApp never shows a link preview on a caption. So when your message has a link, RitPost (by default) sends the files first without a caption, then your message as its own text, with its link preview. Untick **Send my message separately after the files** under the attachments to use the caption instead. For any message with a link, RitPost waits until WhatsApp has loaded the preview before it sends (and in Manual mode before it tells you it's ready).
 - **Manual mode**: check the preview and press **Enter** (or click Send).
 - **Automatic mode**: RitPost clicks Send in the preview after the countdown. If the caption couldn't be added, it holds and lets you send that group yourself.
 - Attachments stay in the panel until you remove them, so you can reuse them for the next post. Each file has **Replace** (pick another file; it takes the same place) and **Remove**, and **Remove all** clears them at once. Each of these can be undone from the message that appears. They're stored only in your browser, and aren't included in backups.

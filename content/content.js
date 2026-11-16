@@ -885,6 +885,25 @@
     return Math.round(sec * 1000 * factor);
   }
 
+  const LINK_RE = /(https?:\/\/|www\.)\S+/i;
+  const linkPreviewEl = () => $('#main footer [data-testid="compose-box-link-preview"]');
+  /** WhatsApp's link preview above the message box, once it has loaded (title or image). */
+  const linkPreviewReady = () => {
+    const el = linkPreviewEl();
+    return el && (el.querySelector('img') || textOf(el).length > 3) ? el : null;
+  };
+  /** Wait for the link preview; if WhatsApp hasn't made one, nudge it like typing a space after the link. */
+  async function waitLinkPreview() {
+    ui.update({ phase: 'filling', status: 'Loading the link preview…' });
+    if (await waitFor(linkPreviewReady, 5000, 250)) return true;
+    const box = composeBox();
+    if (box) {
+      placeCaretAtEnd(box);
+      document.execCommand('insertText', false, ' ');
+    }
+    return !!(await waitFor(linkPreviewReady, 5000, 250));
+  }
+
   function sendButton() {
     const main = $('#main');
     if (!main) return null;
@@ -923,7 +942,10 @@
     pending: () => !composeEmpty(),
     inChat: () => chatIsOpen(item.name),
     verify: () => chatIsOpen(item.name) && !!composeQuality(item.text),
-    press: pressSend,
+    press: async () => {
+      await waitFor(() => !linkPreviewEl() || linkPreviewReady(), 4000, 200);
+      return pressSend();
+    },
     sentExtra: () => messageInChat(item.text),
     ready: 'Review the message, then press Enter to send.',
     cleared: 'The message box is empty. Refill it, or mark this group as sent.',
@@ -944,8 +966,8 @@
     cleared: 'The attachment preview was closed. Click Refill to attach again, or mark this group as sent.',
   });
 
-  async function autoSend(item, ctx) {
-    let remaining = intervalMs();
+  async function autoSend(item, ctx, delayMs = null) {
+    let remaining = delayMs ?? intervalMs();
     let last = Date.now();
     for (;;) {
       const a = run.action;
@@ -1047,12 +1069,14 @@
       // A preview left over from an earlier attempt would be sent by mistake.
       if (mediaPreview()) await closePreview();
 
-      let ctx;
-      let baseline;
-      let readyMsg;
+      // WhatsApp never shows a link preview on a caption: with files and a link, send the files first and the
+      // message as its own text right after, so the preview shows (unless the user turned that off).
+      const text = item.text || '';
+      const split = run.files.length > 0 && !!text.trim() && LINK_RE.test(text) && run.settings.linkSeparate !== false;
+
       if (run.files.length) {
         await clearCompose();
-        baseline = outgoingSignature();
+        const baseline = outgoingSignature();
         ui.update({ phase: 'filling', status: `Attaching ${run.files.length === 1 ? 'your file' : `${run.files.length} files`}…` });
         const attached = await attachFiles(run.files).catch(() => false);
         if (run.action === 'stop') return { status: 'cancelled' };
@@ -1063,59 +1087,94 @@
           if (a === 'stop') return { status: 'cancelled' };
           return { status: 'failed', reason: 'Files could not be attached' };
         }
-        ctx = mediaCtx(item);
-        readyMsg = ctx.ready;
-        if (item.text.trim()) {
+        const ctx = mediaCtx(split ? { ...item, text: '' } : item);
+        let readyMsg = split
+          ? 'Check the files, then press Enter (or click Send). Your message follows as its own text, so the link preview shows.'
+          : ctx.ready;
+        if (!split && text.trim()) {
           ui.update({ phase: 'filling', status: 'Adding your message as the caption…' });
-          const captioned = await fillEditor(captionBox, item.text).catch(() => false);
+          const captioned = await fillEditor(captionBox, text).catch(() => false);
           if (!captioned) {
             // Never auto-send media without the caption the user wrote.
             run.held = true;
             readyMsg = 'Couldn’t add the caption. Type it in the preview, then press Enter to send.';
           }
         }
+        const r = await sendLoop(item, ctx, baseline, readyMsg);
+        if (r === 'retry') {
+          run.held = false;
+          continue;
+        }
+        if (r === 'stop') return { status: 'cancelled' };
+        if (r === 'skip') return { status: 'skipped' };
+        if (split) {
+          const r2 = await sendTextPart(item, true);
+          if (r2 === 'stop') return { status: 'cancelled' };
+          if (r2 !== 'sent') return { status: 'failed', reason: 'The files were sent, but not the message' };
+        }
       } else {
-        const filled = await fillCompose(item.text).catch(() => false);
-        if (!filled) {
-          ui.update({ phase: 'error', status: 'Couldn’t place the message in the chat box. Click Retry or Skip.' });
-          const a = await waitForAction();
-          if (a === 'retry') continue;
-          if (a === 'stop') return { status: 'cancelled' };
-          return { status: 'failed', reason: 'Message could not be inserted' };
+        const r = await sendTextPart(item, false);
+        if (r === 'retry') {
+          run.held = false;
+          continue;
         }
-        baseline = outgoingSignature();
-        ctx = textCtx(item);
-        readyMsg = ctx.ready;
+        if (r === 'unfilled') return { status: 'failed', reason: 'Message could not be inserted' };
+        if (r === 'stop') return { status: 'cancelled' };
+        if (r === 'skip') return { status: 'skipped' };
       }
-
-      let result = null;
-      for (;;) {
-        if (isAuto() && !run.held) {
-          const r = await autoSend(item, ctx);
-          if (r === 'sent' || r === 'skip' || r === 'stop' || r === 'retry') {
-            result = r;
-            break;
-          }
-          if (r === 'failed') {
-            run.held = true;
-            readyMsg = 'RitPost couldn’t press Send in this chat. Press Enter to send it yourself.';
-          }
-        }
-        ui.update({ phase: 'ready', status: readyMsg });
-        const m = await waitForSend(item, baseline, readyMsg, ctx);
-        if (m !== 'auto') {
-          result = m;
-          break;
-        }
-      }
-      if (result === 'retry') {
-        run.held = false;
-        continue;
-      }
-      if (result === 'stop') return { status: 'cancelled' };
-      if (result === 'skip') return { status: 'skipped' };
       ui.update({ phase: 'sent', status: 'Sent ✓' });
       return { status: 'sent' };
+    }
+  }
+
+  /** Countdown/auto-send or wait for the user, until this part is sent (or skipped, stopped, retried). */
+  async function sendLoop(item, ctx, baseline, readyMsg, autoDelayMs = null) {
+    for (;;) {
+      if (isAuto() && !run.held) {
+        const r = await autoSend(item, ctx, autoDelayMs);
+        if (r === 'sent' || r === 'skip' || r === 'stop' || r === 'retry') return r;
+        if (r === 'failed') {
+          run.held = true;
+          readyMsg = 'RitPost couldn’t press Send in this chat. Press Enter to send it yourself.';
+        }
+      }
+      ui.update({ phase: 'ready', status: readyMsg });
+      const m = await waitForSend(item, baseline, readyMsg, ctx);
+      if (m !== 'auto') return m;
+    }
+  }
+
+  /**
+   * Put the message in the chat box (waiting for its link preview) and send it.
+   * `followUp`: it comes right after the files, so a short countdown, and Retry only refills the text.
+   * Returns 'sent' | 'skip' | 'stop' | 'retry' | 'unfilled'.
+   */
+  async function sendTextPart(item, followUp) {
+    for (;;) {
+      if (followUp) await waitFor(() => !mediaPreview() && composeBox(), 8000, 200);
+      ui.update({ phase: 'filling', status: followUp ? 'Adding your message with the link…' : 'Adding your message…' });
+      const filled = await fillCompose(item.text).catch(() => false);
+      if (!filled) {
+        ui.update({ phase: 'error', status: 'Couldn’t place the message in the chat box. Click Retry or Skip.' });
+        const a = await waitForAction();
+        if (a === 'retry') {
+          if (followUp) continue;
+          return 'retry';
+        }
+        if (a === 'stop') return 'stop';
+        return followUp ? 'skip' : 'unfilled';
+      }
+      if (LINK_RE.test(item.text || '')) await waitLinkPreview();
+      if (run.action === 'stop') return 'stop';
+      const baseline = outgoingSignature();
+      const ctx = textCtx(item);
+      const r = await sendLoop(item, ctx, baseline, ctx.ready, followUp ? 3000 : null);
+      if (r === 'retry' && followUp) {
+        run.held = false;
+        await clearCompose();
+        continue;
+      }
+      return r;
     }
   }
 

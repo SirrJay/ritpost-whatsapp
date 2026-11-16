@@ -1,7 +1,7 @@
 /* RitPost — popup */
 'use strict';
 
-const DEFAULT_SETTINGS = { delayMs: 2000, mode: 'manual', intervalSec: 6, randomize: true, autoAck: false };
+const DEFAULT_SETTINGS = { delayMs: 2000, mode: 'manual', intervalSec: 6, randomize: true, autoAck: false, linkSeparate: true };
 const clampInterval = (v) => Math.min(600, Math.max(5, Math.round(Number(v) || 6)));
 const AVATAR_COLORS = ['#0e7c66', '#2563eb', '#7c3aed', '#db2777', '#ea580c', '#0891b2', '#4d7c0f', '#9333ea'];
 const CHECK_SVG = '<svg viewBox="0 0 12 12"><path d="M4.6 8.6 2.3 6.3l-.9.9 3.2 3.2 6-6-.9-.9z"/></svg>';
@@ -669,10 +669,7 @@ function renderCounts() {
   $('selCount').textContent = state.groups.length ? `(${n} of ${state.groups.length})` : '';
   $('charCount').textContent = state.message.length.toLocaleString();
 
-  if (state.attachments.length)
-    $('attachNote').textContent = state.message.trim()
-      ? 'Your message is sent as the caption.'
-      : 'Files will be sent without a caption. Write a message above to add one.';
+  if (state.attachments.length) renderAttachNote();
   const hasContent = state.message.trim().length > 0 || state.attachments.length > 0;
   const ready = n > 0 && hasContent;
   const running = !!state.status.running;
@@ -1637,6 +1634,21 @@ async function replaceAttachment(id, file) {
 
 const PLAY_SVG = '<svg viewBox="0 0 20 20" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M6 4.5v11l9-5.5-9-5.5Z"/></svg>';
 
+/** The note under the attachments, and the "send the link separately" choice when the message has a link. */
+function renderAttachNote() {
+  const msg = state.message.trim();
+  const n = state.attachments.length;
+  const linkCase = n > 0 && /(https?:\/\/|www\.)\S+/i.test(msg);
+  const separate = linkCase && state.settings.linkSeparate !== false;
+  $('linkSepRow').hidden = !linkCase;
+  $('linkSep').checked = state.settings.linkSeparate !== false;
+  $('attachNote').textContent = !msg
+    ? 'Files will be sent without a caption. Write a message above to add one.'
+    : separate
+      ? 'Files are sent first, then your message as its own text with the link preview.'
+      : 'Your message is sent as the caption.';
+}
+
 function renderAttachments() {
   const list = $('attachList');
   list.replaceChildren(
@@ -1663,9 +1675,7 @@ function renderAttachments() {
   const n = state.attachments.length;
   list.hidden = !n;
   $('attachNote').hidden = !n;
-  $('attachNote').textContent = state.message.trim()
-    ? 'Your message is sent as the caption.'
-    : 'Files will be sent without a caption. Write a message above to add one.';
+  renderAttachNote();
   $('attachClear').hidden = n < 2;
   $('attachHint').textContent = n
     ? `${plural(n, 'file')} · ${formatBytes(state.attachments.reduce((s, a) => s + a.size, 0))}`
@@ -2404,6 +2414,11 @@ function bind() {
     e.target.value = '';
   });
   $('attachClear').addEventListener('click', removeAllAttachments);
+  $('linkSep').addEventListener('change', (e) => {
+    state.settings.linkSeparate = e.target.checked;
+    renderAttachNote();
+    saveSettings(e.target.checked ? 'Message sent separately, with the link preview' : 'Message sent as the caption (no link preview)');
+  });
   $('replaceInput').addEventListener('change', (e) => {
     const file = e.target.files?.[0];
     e.target.value = '';

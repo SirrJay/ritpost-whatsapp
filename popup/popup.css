@@ -405,6 +405,8 @@ kbd {
 @keyframes rp-flash { from { background: var(--soft); } to { background: var(--surface); } }
 .attach.dragover .attach-list, .attach.dragover .attach-head { outline: 2px dashed var(--brand-2); outline-offset: 3px; border-radius: var(--radius); }
 #attachNote { margin: 6px 0 0; }
+.check-row { display: flex; gap: 8px; align-items: flex-start; margin-top: 6px; padding: 7px 10px; border-radius: var(--radius); background: var(--brand-soft); color: var(--ink-2); font-size: 12px; cursor: pointer; }
+.check-row input { margin-top: 1px; accent-color: var(--brand); flex: none; }
 
 /* ── Group & list management ── */
 .pick { position: relative; }
