@@ -66,7 +66,7 @@ Choose the mode in the switch above the Start button.
 - For each group, RitPost hands the files to WhatsApp, which opens its attachment preview. Your message goes in as the **caption**, with `{group}` filled in.
 - **Manual mode**: check the preview and press **Enter** (or click Send).
 - **Automatic mode**: RitPost clicks Send in the preview after the countdown. If the caption couldn't be added, it holds and lets you send that group yourself.
-- Attachments stay in the panel until you remove them, so you can reuse them for the next post. They're stored only in your browser, and aren't included in backups.
+- Attachments stay in the panel until you remove them, so you can reuse them for the next post. Each file has **Replace** (pick another file; it takes the same place) and **Remove**, and **Remove all** clears them at once. Each of these can be undone from the message that appears. They're stored only in your browser, and aren't included in backups.
 - If the preview doesn't open in a chat, click **Retry**. WhatsApp sometimes changes how it accepts files.
 
 ## Facebook groups and Pages

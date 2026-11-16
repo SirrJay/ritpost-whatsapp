@@ -1524,17 +1524,11 @@ async function addAttachments(fileList) {
       problems.push(`Only ${MAX_FILES} files can be attached.`);
       break;
     }
-    if (!f.size) {
-      problems.push(`${f.name} is empty.`);
+    const problem = fileProblem(f, total);
+    if (problem) {
+      problems.push(problem);
+      if (problem.includes('64 MB')) break;
       continue;
-    }
-    if (f.size > MAX_FILE_BYTES) {
-      problems.push(`${f.name} is larger than 16 MB.`);
-      continue;
-    }
-    if (total + f.size > MAX_TOTAL_BYTES) {
-      problems.push('Attachments are limited to 64 MB in total.');
-      break;
     }
     try {
       const data = await readAsDataURL(f);
@@ -1560,11 +1554,85 @@ async function addAttachments(fileList) {
   else if (added) toast(`${plural(added, 'file')} attached`);
 }
 
-function removeAttachment(id) {
-  state.attachments = state.attachments.filter((a) => a.id !== id);
+/** Why a file can't be attached (or null). `otherBytes` is the size of the other attachments. */
+function fileProblem(f, otherBytes) {
+  if (!f.size) return `${f.name} is empty.`;
+  if (f.size > MAX_FILE_BYTES) return `${f.name} is larger than 16 MB.`;
+  if (otherBytes + f.size > MAX_TOTAL_BYTES) return 'Attachments are limited to 64 MB in total.';
+  return null;
+}
+
+function attachmentsChanged() {
   saveAttachments();
   renderAttachments();
   renderCounts();
+}
+
+/** Put removed attachments back where they were. */
+function restoreAttachments(removed) {
+  for (const { item, index } of [...removed].sort((a, b) => a.index - b.index)) {
+    if (state.attachments.length >= MAX_FILES || state.attachments.some((a) => a.id === item.id)) continue;
+    state.attachments.splice(Math.min(index, state.attachments.length), 0, item);
+  }
+  attachmentsChanged();
+}
+
+function removeAttachment(id) {
+  const index = state.attachments.findIndex((a) => a.id === id);
+  if (index < 0) return;
+  const [item] = state.attachments.splice(index, 1);
+  attachmentsChanged();
+  toast(`Removed ${item.name}`, false, { label: 'Undo', run: () => restoreAttachments([{ item, index }]) });
+}
+
+function removeAllAttachments() {
+  if (!state.attachments.length) return;
+  const removed = state.attachments.map((item, index) => ({ item, index }));
+  state.attachments = [];
+  attachmentsChanged();
+  toast(`Removed ${plural(removed.length, 'file')}`, false, { label: 'Undo', run: () => restoreAttachments(removed) });
+}
+
+/** Swap one attachment for another file, in the same place. */
+let replacingId = null;
+function pickReplacement(id) {
+  replacingId = id;
+  $('replaceInput').click();
+}
+async function replaceAttachment(id, file) {
+  const index = state.attachments.findIndex((a) => a.id === id);
+  if (index < 0 || !file) return;
+  const old = state.attachments[index];
+  const others = state.attachments.reduce((s, a) => s + (a.id === id ? 0 : a.size || 0), 0);
+  const problem = fileProblem(file, others);
+  if (problem) return toast(problem, true);
+  let data;
+  try {
+    data = await readAsDataURL(file);
+  } catch {
+    return toast(`${file.name} couldn’t be read.`, true);
+  }
+  const fresh = { id: uid(), name: file.name, type: file.type || 'application/octet-stream', size: file.size, data };
+  state.attachments.splice(index, 1, fresh);
+  try {
+    await saveAttachments();
+  } catch (e) {
+    state.attachments.splice(index, 1, old);
+    renderAttachments();
+    return toast(`Couldn’t save ${file.name}: ${e?.message || e}`, true);
+  }
+  renderAttachments();
+  renderCounts();
+  document.querySelector(`[data-attach-id="${fresh.id}"]`)?.classList.add('replaced');
+  toast(`Replaced ${old.name} with ${file.name}`, false, {
+    label: 'Undo',
+    run: () => {
+      const i = state.attachments.findIndex((a) => a.id === fresh.id);
+      if (i < 0) return;
+      state.attachments.splice(i, 1, old);
+      attachmentsChanged();
+    },
+  });
 }
 
 const PLAY_SVG = '<svg viewBox="0 0 20 20" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M6 4.5v11l9-5.5-9-5.5Z"/></svg>';
@@ -1580,10 +1648,15 @@ function renderAttachments() {
       else thumb = h('span', { class: 'attach-thumb' }, ext);
       return h(
         'li',
-        { class: 'attach-item' },
+        { class: 'attach-item', 'data-attach-id': a.id },
         thumb,
         h('span', { class: 'attach-meta' }, h('span', { class: 'attach-name', title: a.name }, a.name), h('span', { class: 'attach-size' }, formatBytes(a.size))),
-        h('button', { type: 'button', class: 'attach-remove', title: 'Remove', 'aria-label': `Remove ${a.name}`, onclick: () => removeAttachment(a.id) }, '✕')
+        h(
+          'span',
+          { class: 'attach-actions' },
+          h('button', { type: 'button', class: 'attach-act', title: 'Choose another file instead', 'aria-label': `Replace ${a.name}`, onclick: () => pickReplacement(a.id) }, 'Replace'),
+          h('button', { type: 'button', class: 'attach-act del', title: 'Remove this file', 'aria-label': `Remove ${a.name}`, onclick: () => removeAttachment(a.id) }, 'Remove')
+        )
       );
     })
   );
@@ -1593,6 +1666,7 @@ function renderAttachments() {
   $('attachNote').textContent = state.message.trim()
     ? 'Your message is sent as the caption.'
     : 'Files will be sent without a caption. Write a message above to add one.';
+  $('attachClear').hidden = n < 2;
   $('attachHint').textContent = n
     ? `${plural(n, 'file')} · ${formatBytes(state.attachments.reduce((s, a) => s + a.size, 0))}`
     : 'Up to 10 files · 16 MB each';
@@ -2281,6 +2355,13 @@ function bind() {
   $('attachInput').addEventListener('change', (e) => {
     addAttachments(e.target.files);
     e.target.value = '';
+  });
+  $('attachClear').addEventListener('click', removeAllAttachments);
+  $('replaceInput').addEventListener('change', (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (replacingId && file) replaceAttachment(replacingId, file);
+    replacingId = null;
   });
   // Files can also be dragged onto the message area.
   const attachWrap = document.querySelector('.attach');

@@ -394,6 +394,15 @@ kbd {
 .attach-size { font-size: 11.5px; color: var(--muted); }
 .attach-remove { flex: none; border: 0; background: transparent; color: var(--muted); cursor: pointer; width: 26px; height: 26px; border-radius: 6px; font-size: 13px; }
 .attach-remove:hover { background: var(--danger-soft); color: var(--danger); }
+.attach-tools { display: inline-flex; align-items: center; gap: 10px; }
+.attach-actions { flex: none; display: inline-flex; align-items: center; gap: 2px; }
+.attach-act { border: 0; background: transparent; color: var(--brand-ink); cursor: pointer; font: inherit; font-size: 12px; font-weight: 600; padding: 4px 7px; border-radius: 6px; }
+.attach-act:hover, .attach-act:focus-visible { background: var(--soft); }
+.attach-act.del { color: var(--muted); }
+.attach-act.del:hover, .attach-act.del:focus-visible { background: var(--danger-soft); color: var(--danger); }
+.link.danger { color: var(--danger); }
+.attach-item.replaced { animation: rp-flash 1.2s ease-out; }
+@keyframes rp-flash { from { background: var(--soft); } to { background: var(--surface); } }
 .attach.dragover .attach-list, .attach.dragover .attach-head { outline: 2px dashed var(--brand-2); outline-offset: 3px; border-radius: var(--radius); }
 #attachNote { margin: 6px 0 0; }
 
