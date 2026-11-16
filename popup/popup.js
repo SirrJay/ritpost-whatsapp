@@ -1698,9 +1698,11 @@ async function start() {
 // ─────────────── Facebook ───────────────
 const FB_MIN_GAP = 30; // seconds, manual mode
 const FB_MIN_INTERVAL_MIN = 2; // minutes, automatic mode
-const FB_DEFAULTS = { mode: 'manual', gapSec: 60, intervalMin: 5, dailyLimit: 20, reviewSec: 10 };
+const FB_DEFAULTS = { mode: 'manual', gapSec: 60, intervalMin: 5, dailyLimit: 20, reviewSec: 10, linkPreview: true };
 const fb = { targets: [], selected: new Set(), settings: { ...FB_DEFAULTS }, run: null, filter: '', kind: 'group', daily: 0 };
 const isMedia = (a) => /^(image|video)\//.test(a?.type || '');
+/** Facebook shows a link preview only for posts without photos/videos. */
+const hasLink = (s) => /(https?:\/\/|www\.)\S+/i.test(s || '');
 
 /** Normalise a Facebook link; returns { url, kind, slug } or null. */
 function parseFbUrl(raw) {
@@ -1746,6 +1748,7 @@ async function fbLoad() {
     intervalMin: Math.min(60, Math.max(FB_MIN_INTERVAL_MIN, Number(s.intervalMin) || 5)),
     dailyLimit: Math.min(50, Math.max(1, Number(s.dailyLimit) || 20)),
     reviewSec: Math.min(120, Math.max(5, Number(s.reviewSec) || 10)),
+    linkPreview: s.linkPreview !== false,
   };
   fb.run = d.fbRun || null;
   fb.daily = d.fbDaily?.day === new Date().toISOString().slice(0, 10) ? d.fbDaily.count : 0;
@@ -1886,9 +1889,17 @@ function renderFbMessage() {
   const el = $('fbMsgPreview');
   const text = fbText(state.message.trim());
   const media = state.attachments.filter(isMedia).length;
-  const extra = media ? `📎 ${plural(media, 'photo/video')}` : '';
+  const conflict = media > 0 && hasLink(text);
+  const dropMedia = conflict && fb.settings.linkPreview;
+  const extra = media ? (dropMedia ? `📎 ${plural(media, 'photo/video')} (left out on Facebook, for the link preview)` : `📎 ${plural(media, 'photo/video')}`) : '';
   el.textContent = text ? (extra ? `${text}\n\n${extra}` : text) : extra || 'Write your message in the Compose tab first.';
   el.classList.toggle('empty-msg', !text && !media);
+  const note = $('fbLinkNote');
+  note.hidden = !conflict;
+  if (conflict)
+    note.textContent = dropMedia
+      ? 'Your message has a link: RitPost leaves the photos/videos out on Facebook so the link preview shows. You can change this when you start.'
+      : 'Facebook doesn’t show a link preview on posts with photos/videos. Your photos/videos will be posted and the link stays as plain text. You can change this when you start.';
 }
 
 function renderFbMode() {
@@ -2054,6 +2065,22 @@ function fbConfirmStart() {
   const p = fbSelOf('page').length;
   const docs = state.attachments.length - media.length;
   const auto = fb.settings.mode === 'auto';
+  // Facebook drops the link preview as soon as a photo/video is added (checked live), so let the user pick.
+  const conflict = media.length > 0 && hasLink(message);
+  let keepPreview = fb.settings.linkPreview;
+  const choice = (value, title, sub) =>
+    h(
+      'label',
+      {},
+      h('input', {
+        type: 'radio',
+        name: 'fbLinkChoice',
+        value,
+        checked: (value === 'preview') === keepPreview,
+        onchange: () => (keepPreview = value === 'preview'),
+      }),
+      h('span', {}, h('b', {}, title), h('br'), sub)
+    );
   const remainingToday = Math.max(0, fb.settings.dailyLimit - fb.daily);
   if (auto && !remainingToday) return toast(`Today’s limit of ${fb.settings.dailyLimit} Facebook posts is reached. Continue tomorrow, or raise the limit.`, true);
   openDialog({
@@ -2070,13 +2097,33 @@ function fbConfirmStart() {
         : null,
       auto ? h('p', { class: 'muted' }, `This takes roughly ${Math.round((Math.min(items.length, remainingToday) - 1) * fb.settings.intervalMin * 1.15)} minutes. Keep the Facebook tab open; you can use other tabs meanwhile.`) : null,
       p ? h('p', { class: 'muted' }, 'Pages come after groups. When it’s a Page’s turn, RitPost switches to that Page’s profile by itself so the post comes from the Page, and switches back to your profile for any group that follows. At the end, the Facebook panel offers “Switch back to my profile”.') : null,
-      docs ? h('p', { class: 'muted' }, `${plural(docs, 'document')} will be left out (Facebook gets photos and videos only).`) : null
+      docs ? h('p', { class: 'muted' }, `${plural(docs, 'document')} will be left out (Facebook gets photos and videos only).`) : null,
+      conflict
+        ? h(
+            'div',
+            {},
+            h('p', { class: 'muted' }, 'Your message has a link, and Facebook doesn’t show a link preview on posts with photos or videos.'),
+            h(
+              'div',
+              { class: 'link-choice' },
+              choice('preview', 'Show the link preview', `Post the text and link only; leave out ${plural(media.length, 'photo/video')}.`),
+              choice('media', 'Post the photos/videos', 'The link stays as plain text, with no preview.')
+            )
+          )
+        : null
     ),
     onConfirm: () => {
+      if (conflict && keepPreview !== fb.settings.linkPreview) {
+        fb.settings.linkPreview = keepPreview;
+        fbSaveSettings();
+        renderFbMessage();
+      }
+      const sendMedia = !(conflict && keepPreview);
       (async () => {
         const run = {
           items: items.map((t) => ({ id: t.id, name: t.name, url: t.url, kind: t.kind, text: fbText(message.replaceAll('{group}', t.name)) })),
-          attachmentIds: media.map((a) => a.id),
+          attachmentIds: sendMedia ? media.map((a) => a.id) : [],
+          linkPreview: !sendMedia || !media.length,
           mode: fb.settings.mode,
           gapSec: fb.settings.gapSec,
           intervalSec: fb.settings.intervalMin * 60,

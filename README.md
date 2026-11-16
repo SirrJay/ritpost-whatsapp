@@ -110,6 +110,7 @@ If switching fails twice, RitPost asks you to switch yourself and click **Try ag
 
 ### Good to know
 
+- **Link previews.** Facebook shows a link preview only on posts without photos or videos; it drops the preview as soon as one is added. When your message has a link and you have photos/videos attached, RitPost asks when you start: **Show the link preview** (posts the text and link, leaves the photos/videos out on Facebook) or **Post the photos/videos** (the link stays as plain text). It remembers your choice. Before the countdown carries on, RitPost waits for Facebook to build the preview, and removes an old preview left in a draft.
 - WhatsApp formatting marks (`*bold*`, `_italic_`, `~strike~`) are removed, because Facebook doesn't use them. `{group}` works the same as on WhatsApp.
 - Facebook gets photos and videos only; documents are sent to WhatsApp only.
 - If you close the post box without posting, RitPost doesn't count it and offers **Fill again**.

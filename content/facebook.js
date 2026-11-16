@@ -474,6 +474,30 @@
   }
 
   const noUrls = (s) => loose(String(s || '').replace(/https?:\/\/\S+/gi, ''));
+  const LINK_RE = /(https?:\/\/|www\.)\S+/i;
+
+  /** Facebook's link preview card in the post box (its "Remove link preview" button). */
+  function linkPreviewButton() {
+    const scope = postDialog() || composerScope(composerBox());
+    if (!scope) return null;
+    return $$('[aria-label]', scope).find((e) => /remove link preview/i.test(e.getAttribute('aria-label') || '')) || null;
+  }
+
+  /** Wait for the link preview; if Facebook hasn't made one, nudge it like a person typing a space after the link. */
+  async function ensureLinkPreview() {
+    if (await waitFor(linkPreviewButton, 6000, 300)) return true;
+    const box = composerBox();
+    if (!box) return false;
+    box.focus();
+    const sel = window.getSelection();
+    const r = document.createRange();
+    r.selectNodeContents(box);
+    r.collapse(false);
+    sel.removeAllRanges();
+    sel.addRange(r);
+    document.execCommand('insertText', false, ' ');
+    return !!(await waitFor(linkPreviewButton, 8000, 300));
+  }
   /** True when the box already holds the text (ignoring links, which Facebook may turn into a preview). */
   function hasText(box, text) {
     const want = loose(text).slice(0, 40);
@@ -487,6 +511,12 @@
     let box = await waitFor(composerBox, 5000, 200);
     if (!box) return false;
     if (hasText(box, text)) return true;
+    const oldCard = linkPreviewButton();
+    if (oldCard) {
+      oldCard.click();
+      await sleep(600);
+      box = composerBox() || box;
+    }
     if (loose(textOf(box))) {
       // Facebook kept an old draft in the box: clear it so the post isn't mixed with old text.
       for (let i = 0; i < 3 && loose(textOf(composerBox() || box)); i++) {
@@ -950,6 +980,13 @@
       if (!res.ok) note += '\nAttachments couldn’t be added automatically; add them with Photo/video before posting.';
     }
     if (skippedDocs) note += `\n${skippedDocs} document(s) left out (Facebook gets photos and videos only).`;
+    // A link and no photos/videos: make sure the link preview is there before the countdown/Next.
+    if (!media.length && LINK_RE.test(item.text || '')) {
+      ui.update({ ...base, msg: 'Loading the link preview…', buttons: [skipBtn, stopBtn] });
+      const shown = await ensureLinkPreview();
+      if (!alive()) return;
+      if (!shown) note += '\nFacebook didn’t make a preview for this link (some sites don’t allow it); the link is posted as text.';
+    }
 
     lastPostClick = 0;
     const closedWithoutPost = () => {
