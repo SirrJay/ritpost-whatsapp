@@ -117,6 +117,29 @@ If switching fails twice, RitPost asks you to switch yourself and click **Try ag
 - If you close the post box without posting, RitPost doesn't count it and offers **Fill again**.
 - **Select unposted** (under the list after a session) picks everything that wasn't posted, for example to continue the next day.
 
+## Scheduled posts
+
+Post later, or on repeat, to WhatsApp groups or Facebook groups and Pages.
+
+1. Write your message (and attach files) in **Compose**, and select your groups (or Facebook groups and Pages).
+2. Click the **clock** button next to Start, or **Schedule current message** in the **Scheduled** tab.
+3. Choose WhatsApp or Facebook, then the time (or a quick pick: *In 1 hour*, *Tonight 8 PM*, *Tomorrow 7 AM*, *Tomorrow noon*).
+4. Optional:
+   - **Repeat**: every day, weekdays (Mon–Fri) or chosen days of the week, and **Stop** after a number of times.
+   - **How**: Manual or Automatic. A Manual schedule opens and fills everything, then waits for you. On Facebook you always click Post.
+   - **Remind me 5 minutes before**: a Chrome notification.
+   - **If Chrome is closed or the computer is asleep at that time**: post when Chrome opens again (up to 6 hours late), or skip it and tell you.
+   - **Name**, to find it easily.
+
+The **Scheduled** tab lists what's coming, with **Post now**, **Pause / Resume**, **Edit** and **Delete** (with Undo). Finished ones can be scheduled again. **Recent activity** shows what started, what was missed and why. A notification tells you when a scheduled post starts.
+
+Good to know:
+
+- Chrome has to be open (it can be minimised) and the computer awake. RitPost opens WhatsApp Web or Facebook by itself.
+- A schedule keeps its own copy of the message, the selected groups and the files, so you can keep using Compose for other posts. To change what a schedule posts, Edit it and tick **Use the current Compose message, files and selection instead**.
+- If another send session is still going when a schedule comes up, RitPost waits for it to finish (up to 2 hours).
+- Automatic posting rules still apply: countdowns, Facebook's pauses between posts and daily limit.
+
 ## Premium features
 
 - **Templates**: save messages you send often and load them in one click (Compose → Templates).
@@ -152,11 +175,12 @@ Everything stays on your computer in `chrome.storage.local`. RitPost has no serv
 
 ```
 manifest.json            Manifest V3 config
-background.js            Side panel, finds or opens the WhatsApp/Facebook tab, relays commands, saves backups
+background.js            Side panel, finds or opens the WhatsApp/Facebook tab, relays commands, runs scheduled posts, saves backups
 content/content.js       Opens chats, fills messages, notices sends, shows the progress panel
 content/page-bridge.js   Tells groups apart from contacts when importing
 content/facebook.js      Facebook: opens each group/Page, fills the post box, waits for you to click Post
-popup/                   Compose, group manager and settings UI (shown in the side panel)
+popup/                   Compose, group manager, scheduling and settings UI (shown in the side panel)
+lib/schedule.js          Repeat rules and time formatting shared by the panel and the background
 icons/                   Extension icons
 store/                   Chrome Web Store listing text, privacy policy and promo images
 ```

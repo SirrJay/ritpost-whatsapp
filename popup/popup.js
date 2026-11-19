@@ -2241,6 +2241,550 @@ function fbBind() {
   });
 }
 
+// ─────────────── Scheduled posts ───────────────
+const RS = window.RitSchedule;
+/** replaceChildren, skipping empty parts (replaceChildren would print "null"). */
+const setChildren = (el, ...kids) => el.replaceChildren(...kids.filter((k) => k !== null && k !== undefined && k !== false));
+const sched = { jobs: [], history: [] };
+
+async function schedLoad() {
+  const d = await chrome.storage.local.get(['schedules', 'schedHistory']);
+  sched.jobs = Array.isArray(d.schedules) ? d.schedules : [];
+  sched.history = Array.isArray(d.schedHistory) ? d.schedHistory : [];
+}
+const schedSave = () => persist({ schedules: sched.jobs });
+
+const pad2 = (n) => String(n).padStart(2, '0');
+const dateValue = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+const timeValue = (d) => `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+const schedTitle = (j) =>
+  j.label || String(j.message || '').split('\n')[0].slice(0, 60) || (j.fileNames?.length ? plural(j.fileNames.length, 'file') : 'Scheduled post');
+
+/** What would be scheduled on a platform from the current Compose content and selection. */
+function schedSnapshot(platform, keepPreview) {
+  const message = state.message.trim();
+  if (platform === 'whatsapp') {
+    const groups = state.groups.filter((g) => state.selected.has(g.id));
+    if (!groups.length) return { error: 'Select WhatsApp groups in the Groups tab first.' };
+    if (!message && !state.attachments.length) return { error: 'Write a message or attach files in Compose first.' };
+    return {
+      platform,
+      message,
+      files: state.attachments,
+      names: groups.map((g) => g.name),
+      targetsLabel: plural(groups.length, 'group'),
+      wa: { items: groups.map((g) => ({ name: g.name, text: message.replaceAll('{group}', g.name) })) },
+    };
+  }
+  const items = [...fbSelOf('group'), ...fbSelOf('page')];
+  const media = state.attachments.filter(isMedia);
+  if (!items.length) return { error: 'Select Facebook groups or Pages in the Facebook tab first.' };
+  if (!message && !media.length) return { error: 'Write a message or attach photos/videos in Compose first.' };
+  const conflict = media.length > 0 && hasLink(message);
+  const sendMedia = !(conflict && keepPreview);
+  return {
+    platform,
+    message,
+    conflict,
+    files: sendMedia ? media : [],
+    leftOut: state.attachments.length - (sendMedia ? media.length : 0),
+    names: items.map((t) => t.name),
+    targetsLabel: fbWhat(fbSelOf('group').length, fbSelOf('page').length),
+    fb: {
+      items: items.map((t) => ({ id: t.id, name: t.name, url: t.url, kind: t.kind, text: fbText(message.replaceAll('{group}', t.name)) })),
+      linkPreview: !sendMedia || !media.length,
+    },
+  };
+}
+
+/** Copy files for a schedule, so later changes in Compose don't affect it. */
+async function schedKeepFiles(files) {
+  if (!files?.length) return { ids: [], names: [] };
+  const { schedFiles = {} } = await chrome.storage.local.get('schedFiles');
+  const ids = [];
+  for (const a of files) {
+    const id = `sf${uid()}`;
+    schedFiles[id] = { ...a, id };
+    ids.push(id);
+  }
+  await chrome.storage.local.set({ schedFiles });
+  return { ids, names: files.map((a) => a.name) };
+}
+
+/** Remove kept files no schedule uses any more. */
+async function schedDropUnused() {
+  const { schedFiles = {} } = await chrome.storage.local.get('schedFiles');
+  const used = new Set(sched.jobs.flatMap((j) => j.fileIds || []));
+  let changed = false;
+  for (const id of Object.keys(schedFiles))
+    if (!used.has(id)) {
+      delete schedFiles[id];
+      changed = true;
+    }
+  if (changed) await chrome.storage.local.set({ schedFiles });
+}
+
+function schedModeHint(platform, mode) {
+  if (platform === 'facebook')
+    return mode === 'auto'
+      ? `Automatic: RitPost switches profile, fills in each post, gives you ${fb.settings.reviewSec} s to check it and clicks Next; you click Post. About ${fb.settings.intervalMin}–${Math.round(fb.settings.intervalMin * 1.3)} min between posts, at most ${fb.settings.dailyLimit} a day.`
+      : 'Manual: RitPost opens each group or Page and fills in the post; you check it and click Post.';
+  return mode === 'auto'
+    ? `Automatic: RitPost presses Send after a ${state.settings.intervalSec} s countdown on each group. WhatsApp’s terms don’t allow automated messaging, so this can get your account restricted.`
+    : 'Manual: RitPost opens each group and fills in the message; you press Enter for each one.';
+}
+
+function openScheduleDialog({ platform = 'whatsapp', job = null } = {}) {
+  const editing = !!job;
+  const quarter = 15 * 60 * 1000;
+  const start = job?.next ? new Date(job.next) : new Date(Math.ceil((Date.now() + 10 * 60 * 1000) / quarter) * quarter);
+  const f = {
+    platform: job?.platform || platform,
+    date: dateValue(start),
+    time: job?.repeat?.time && job.repeat.type !== 'once' ? job.repeat.time : timeValue(start),
+    repeat: job?.repeat?.type || 'once',
+    days: job?.repeat?.days?.length ? [...job.repeat.days] : [start.getDay()],
+    endAfter: job?.endAfter || 0,
+    mode: job?.mode || null,
+    remind: job ? !!job.remind : true,
+    missed: job?.missed || 'run',
+    label: job?.label || '',
+    keepPreview: job?.fb ? job.fb.linkPreview !== false : fb.settings.linkPreview,
+    refresh: false,
+  };
+  if (!f.mode) f.mode = f.platform === 'facebook' ? fb.settings.mode : state.settings.mode;
+
+  const firstRun = () => {
+    const [y, m, d] = f.date.split('-').map(Number);
+    const [hh, mm] = f.time.split(':').map(Number);
+    if (!y || !m || !d || !Number.isFinite(hh) || !Number.isFinite(mm)) return null;
+    const at = new Date(y, m - 1, d, hh, mm, 0, 0).getTime();
+    if (f.repeat === 'once') return at;
+    const rule = { type: f.repeat, time: f.time, days: f.days };
+    let n = RS.nextOccurrence(rule, at - 1);
+    if (n && n <= Date.now()) n = RS.nextOccurrence(rule, Date.now());
+    return n;
+  };
+  const snapshot = () => (editing && !f.refresh ? null : schedSnapshot(f.platform, f.keepPreview));
+
+  // ── fields ──
+  const whatBox = h('div', { class: 'sched-what' });
+  const sum = h('div', { class: 'sched-sum' });
+  const modeHint = h('p', { class: 'hint' });
+  const linkRow = h('div', {});
+  const daysRow = h('div', { class: 'days' });
+  const endRow = h('div', {});
+  const platSeg = h('div', { class: 'plat-seg' });
+
+  const dateIn = h('input', { type: 'date', value: f.date, min: dateValue(new Date()), oninput: (e) => ((f.date = e.target.value), update()) });
+  const timeIn = h('input', { type: 'time', value: f.time, oninput: (e) => ((f.time = e.target.value), update()) });
+  const setWhen = (d) => {
+    f.date = dateValue(d);
+    f.time = timeValue(d);
+    dateIn.value = f.date;
+    timeIn.value = f.time;
+    if (f.repeat === 'weekly' && !f.days.includes(d.getDay())) f.days = [d.getDay()];
+    update();
+  };
+  const at = (dayOffset, hh, mm = 0) => {
+    const d = new Date();
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate() + dayOffset, hh, mm, 0, 0);
+  };
+  const tonight = () => (new Date().getHours() < 20 ? at(0, 20) : at(1, 20));
+  const quick = h(
+    'div',
+    { class: 'quick' },
+    h('button', { type: 'button', onclick: () => setWhen(new Date(Math.ceil((Date.now() + 60 * 60 * 1000) / (5 * 60 * 1000)) * 5 * 60 * 1000)) }, 'In 1 hour'),
+    h('button', { type: 'button', onclick: () => setWhen(tonight()) }, new Date().getHours() < 20 ? 'Tonight 8 PM' : 'Tomorrow 8 PM'),
+    h('button', { type: 'button', onclick: () => setWhen(at(1, 7)) }, 'Tomorrow 7 AM'),
+    h('button', { type: 'button', onclick: () => setWhen(at(1, 12)) }, 'Tomorrow noon')
+  );
+
+  const repeatSel = h(
+    'select',
+    { onchange: (e) => ((f.repeat = e.target.value), update()) },
+    ...[
+      ['once', 'Once'],
+      ['daily', 'Every day'],
+      ['weekdays', 'Weekdays (Mon–Fri)'],
+      ['weekly', 'Weekly, on chosen days'],
+    ].map(([v, t]) => h('option', { value: v, selected: v === f.repeat }, t))
+  );
+  const endSel = h(
+    'select',
+    { onchange: (e) => ((f.endAfter = Number(e.target.value)), update()) },
+    ...[0, 2, 3, 5, 7, 10, 14, 30].map((n) => h('option', { value: n, selected: n === f.endAfter }, n ? `After ${n} times` : 'Never (until you stop it)'))
+  );
+  const modeSel = h(
+    'select',
+    { onchange: (e) => ((f.mode = e.target.value), update()) },
+    h('option', { value: 'manual', selected: f.mode === 'manual' }, 'Manual'),
+    h('option', { value: 'auto', selected: f.mode === 'auto' }, 'Automatic')
+  );
+  const missedSel = h(
+    'select',
+    { onchange: (e) => (f.missed = e.target.value) },
+    h('option', { value: 'run', selected: f.missed === 'run' }, 'Post when Chrome opens again (up to 6 h late)'),
+    h('option', { value: 'skip', selected: f.missed === 'skip' }, 'Skip it and tell me')
+  );
+  const remindChk = h('input', { type: 'checkbox', checked: f.remind, onchange: (e) => (f.remind = e.target.checked) });
+  const labelIn = h('input', { type: 'text', maxlength: 60, placeholder: 'e.g. Sunday service flyer', value: f.label, oninput: (e) => (f.label = e.target.value) });
+  const refreshChk = h('input', { type: 'checkbox', onchange: (e) => ((f.refresh = e.target.checked), update()) });
+
+  function renderPlatforms() {
+    const wa = schedSnapshot('whatsapp', f.keepPreview);
+    const fbs = schedSnapshot('facebook', f.keepPreview);
+    platSeg.replaceChildren(
+      ...[
+        ['whatsapp', 'WhatsApp', wa],
+        ['facebook', 'Facebook', fbs],
+      ].map(([p, name, s]) =>
+        h(
+          'button',
+          {
+            type: 'button',
+            class: f.platform === p ? 'on' : '',
+            onclick: () => {
+              f.platform = p;
+              f.mode = p === 'facebook' ? fb.settings.mode : state.settings.mode;
+              modeSel.value = f.mode;
+              update();
+            },
+          },
+          h('b', {}, name),
+          h('small', {}, s.error ? 'Nothing selected' : s.targetsLabel)
+        )
+      )
+    );
+  }
+
+  function renderWhat() {
+    if (editing && !f.refresh) {
+      setChildren(whatBox, 
+        h('div', { class: 'msg' }, job.message || '(no text)'),
+        h('div', {}, `To: ${job.targetsLabel}${job.names?.length ? ` (${job.names.slice(0, 3).join(', ')}${job.names.length > 3 ? ` +${job.names.length - 3} more` : ''})` : ''}`),
+        job.fileNames?.length ? h('div', {}, `📎 ${job.fileNames.join(', ')}`) : null
+      );
+      return true;
+    }
+    const s = schedSnapshot(f.platform, f.keepPreview);
+    if (s.error) {
+      setChildren(whatBox, h('div', { class: 'err' }, s.error));
+      return false;
+    }
+    setChildren(whatBox, 
+      h('div', { class: 'msg' }, s.message || '(no text)'),
+      h('div', {}, `To: ${s.targetsLabel} (${s.names.slice(0, 3).join(', ')}${s.names.length > 3 ? ` +${s.names.length - 3} more` : ''})`),
+      s.files.length ? h('div', {}, `📎 ${s.files.map((a) => a.name).join(', ')}`) : null,
+      s.leftOut ? h('div', { class: 'muted' }, `${plural(s.leftOut, 'file')} left out on Facebook${s.conflict && f.keepPreview ? ' (for the link preview)' : ' (documents)'}.`) : null
+    );
+    return true;
+  }
+
+  function update() {
+    if (!editing) renderPlatforms();
+    const okWhat = renderWhat();
+    modeHint.textContent = schedModeHint(f.platform, f.mode);
+    modeHint.classList.toggle('warn-hint', f.platform === 'whatsapp' && f.mode === 'auto');
+    daysRow.hidden = f.repeat !== 'weekly';
+    daysRow.replaceChildren(
+      ...[1, 2, 3, 4, 5, 6, 0].map((d) =>
+        h(
+          'button',
+          {
+            type: 'button',
+            class: f.days.includes(d) ? 'on' : '',
+            'aria-pressed': f.days.includes(d) ? 'true' : 'false',
+            onclick: () => {
+              f.days = f.days.includes(d) ? f.days.filter((x) => x !== d) : [...f.days, d];
+              update();
+            },
+          },
+          RS.DAYS[d]
+        )
+      )
+    );
+    endRow.hidden = f.repeat === 'once';
+    const snap = f.platform === 'facebook' && (!editing || f.refresh) ? schedSnapshot('facebook', f.keepPreview) : null;
+    const showLink = f.platform === 'facebook' && (editing && !f.refresh ? job.message && hasLink(job.message) && (job.fileNames?.length || job.fb?.linkPreview) : snap?.conflict);
+    linkRow.hidden = !showLink;
+    if (showLink && !linkRow.childElementCount)
+      linkRow.append(
+        h('label', { class: 'sl' }, 'Link and photos/videos'),
+        h(
+          'select',
+          { onchange: (e) => ((f.keepPreview = e.target.value === 'preview'), update()) },
+          h('option', { value: 'preview', selected: f.keepPreview }, 'Show the link preview (leave photos/videos out)'),
+          h('option', { value: 'media', selected: !f.keepPreview }, 'Post the photos/videos (link as plain text)')
+        ),
+        h('p', { class: 'hint' }, 'Facebook doesn’t show a link preview on posts with photos or videos.')
+      );
+
+    const next = firstRun();
+    let problem = '';
+    if (!okWhat) problem = 'Nothing to schedule yet.';
+    else if (f.repeat === 'weekly' && !f.days.length) problem = 'Pick at least one day.';
+    else if (!next) problem = 'Pick a date and time.';
+    else if (next < Date.now() + 30 * 1000) problem = 'Pick a time in the future.';
+    sum.classList.toggle('bad', !!problem);
+    sum.textContent = problem
+      ? problem
+      : `${f.repeat === 'once' ? 'Posts' : 'First post'} ${RS.formatWhen(next)} (${RS.relative(next)})${f.repeat === 'once' ? '' : ` · then ${RS.describeRepeat({ type: f.repeat, time: f.time, days: f.days }).replace(/^Every/, 'every').replace(/^Weekdays/, 'weekdays')}${f.endAfter ? `, ${f.endAfter} times in all` : ''}`}.`;
+    d.setConfirm(!problem);
+  }
+
+  const body = h(
+    'div',
+    { class: 'sform' },
+    editing ? null : h('div', {}, h('label', { class: 'sl' }, 'Post to'), platSeg),
+    h('div', {}, h('label', { class: 'sl' }, editing ? 'What gets posted' : 'What gets posted (from Compose)'), whatBox),
+    editing ? h('label', { class: 'opt-check' }, refreshChk, h('span', {}, 'Use the current Compose message, files and selection instead')) : null,
+    h('div', {}, h('label', { class: 'sl' }, 'When'), quick, h('div', { class: 'row2' }, dateIn, timeIn)),
+    h('div', {}, h('label', { class: 'sl' }, 'Repeat'), repeatSel, daysRow),
+    endRow,
+    h('div', {}, h('label', { class: 'sl' }, 'How'), modeSel, modeHint),
+    linkRow,
+    h('label', { class: 'opt-check' }, remindChk, h('span', {}, 'Remind me 5 minutes before (a Chrome notification)')),
+    h('div', {}, h('label', { class: 'sl' }, 'If Chrome is closed or the computer is asleep at that time'), missedSel),
+    h('div', {}, h('label', { class: 'sl' }, 'Name (optional)'), labelIn),
+    sum
+  );
+  endRow.append(h('label', { class: 'sl' }, 'Stop'), endSel);
+
+  const d = openDialog({
+    title: editing ? 'Edit scheduled post' : 'Schedule a post',
+    confirmText: editing ? 'Save changes' : 'Schedule',
+    body,
+    onConfirm: () => {
+      const next = firstRun();
+      if (!next || next < Date.now() + 30 * 1000) return false;
+      const snap = snapshot();
+      if (snap?.error) return false;
+      saveScheduled({ f, job, snap, next }).catch((e) => toast(`Couldn’t save the schedule: ${e?.message || e}`, true));
+      return true;
+    },
+  });
+  update();
+}
+
+async function saveScheduled({ f, job, snap, next }) {
+  const repeat = { type: f.repeat, time: f.time, days: f.repeat === 'weekly' ? [...f.days].sort() : [] };
+  const settingsFor = (platform, mode, s) =>
+    platform === 'whatsapp'
+      ? { wa: { items: s.wa.items, settings: { ...state.settings, mode } }, fb: null }
+      : {
+          wa: null,
+          fb: {
+            ...s.fb,
+            mode,
+            gapSec: fb.settings.gapSec,
+            intervalSec: fb.settings.intervalMin * 60,
+            dailyLimit: fb.settings.dailyLimit,
+            reviewSec: fb.settings.reviewSec,
+          },
+        };
+  const common = {
+    label: f.label.trim(),
+    next,
+    repeat,
+    endAfter: f.repeat === 'once' ? 0 : f.endAfter,
+    mode: f.mode,
+    remind: f.remind,
+    missed: f.missed,
+    status: 'active',
+    retryAt: null,
+    waiting: '',
+  };
+  if (!job) {
+    const kept = await schedKeepFiles(snap.files);
+    const created = {
+      id: uid(),
+      platform: f.platform,
+      createdAt: Date.now(),
+      runs: 0,
+      message: snap.message,
+      names: snap.names.slice(0, 60),
+      targetsLabel: snap.targetsLabel,
+      fileIds: kept.ids,
+      fileNames: kept.names,
+      ...settingsFor(f.platform, f.mode, snap),
+      ...common,
+    };
+    sched.jobs.push(created);
+    await schedSave();
+    renderSched();
+    toast(`Scheduled: ${RS.formatWhen(next)} (${RS.relative(next)})`, false, { label: 'View', run: () => switchTab('schedule') });
+    return;
+  }
+  const i = sched.jobs.findIndex((j) => j.id === job.id);
+  if (i < 0) return toast('That scheduled post was deleted meanwhile.', true);
+  const cur = { ...sched.jobs[i], ...common };
+  if (cur.status === 'active' && job.status === 'done') cur.runs = 0;
+  if (snap) {
+    const kept = await schedKeepFiles(snap.files);
+    Object.assign(cur, {
+      message: snap.message,
+      names: snap.names.slice(0, 60),
+      targetsLabel: snap.targetsLabel,
+      fileIds: kept.ids,
+      fileNames: kept.names,
+      ...settingsFor(cur.platform, f.mode, snap),
+    });
+  } else if (cur.platform === 'whatsapp') cur.wa = { ...cur.wa, settings: { ...cur.wa.settings, mode: f.mode } };
+  else cur.fb = { ...cur.fb, mode: f.mode };
+  sched.jobs[i] = cur;
+  await schedSave();
+  await schedDropUnused();
+  renderSched();
+  toast(`Saved: next post ${RS.formatWhen(next)}`);
+}
+
+function schedSetStatus(id, status) {
+  const j = sched.jobs.find((x) => x.id === id);
+  if (!j) return;
+  if (status === 'active') {
+    // Resuming: a time that has passed moves on to the next one (or asks for a new time).
+    if (!j.next || j.next < Date.now() + 30 * 1000) {
+      const n = RS.nextOccurrence(j.repeat, Date.now());
+      if (!n) return openScheduleDialog({ job: j });
+      j.next = n;
+    }
+    j.retryAt = null;
+    j.waiting = '';
+  }
+  j.status = status;
+  schedSave();
+  renderSched();
+  toast(status === 'paused' ? 'Paused. It won’t post until you resume it.' : `Resumed: next post ${RS.formatWhen(j.next)}`);
+}
+
+function schedDelete(id) {
+  const i = sched.jobs.findIndex((x) => x.id === id);
+  if (i < 0) return;
+  const [removed] = sched.jobs.splice(i, 1);
+  schedSave();
+  renderSched();
+  let undone = false;
+  setTimeout(() => !undone && schedDropUnused(), 8000);
+  toast(`Deleted “${schedTitle(removed)}”`, false, {
+    label: 'Undo',
+    run: () => {
+      undone = true;
+      sched.jobs.splice(Math.min(i, sched.jobs.length), 0, removed);
+      schedSave();
+      renderSched();
+    },
+  });
+}
+
+function schedRunNow(id) {
+  const j = sched.jobs.find((x) => x.id === id);
+  if (!j) return;
+  openDialog({
+    title: 'Post now?',
+    confirmText: 'Post now',
+    body: h('p', {}, `RitPost starts “${schedTitle(j)}” on ${j.platform === 'facebook' ? 'Facebook' : 'WhatsApp'} now (${j.targetsLabel}). ${j.repeat?.type === 'once' ? 'This uses up the schedule.' : 'The repeat schedule stays as it is.'}`),
+    onConfirm: () => {
+      bg('BG_SCHED_RUN', { id }).then((res) => (res?.ok ? toast('Started.') : toast(res?.error || 'Couldn’t start it.', true)));
+      return true;
+    },
+  });
+}
+
+function schedClearFinished() {
+  sched.jobs = sched.jobs.filter((j) => j.status !== 'done');
+  schedSave().then(schedDropUnused);
+  renderSched();
+}
+
+const HIST_ICON = { started: '✓', missed: '!', failed: '✕', waiting: '…' };
+const HIST_TEXT = { started: 'Started', missed: 'Missed', failed: 'Couldn’t start', waiting: 'Waiting' };
+
+function renderSched() {
+  const active = sched.jobs.filter((j) => j.status === 'active').length;
+  $('schedCount').textContent = active ? String(active) : '';
+  const rank = { active: 0, paused: 1, done: 2 };
+  const jobs = [...sched.jobs].sort((a, b) => rank[a.status] - rank[b.status] || (a.next || Infinity) - (b.next || Infinity) || (b.lastRunAt || 0) - (a.lastRunAt || 0));
+  const cards = jobs.map((j) => {
+    const plat = j.platform === 'facebook' ? 'Facebook' : 'WhatsApp';
+    const chip =
+      j.status === 'paused'
+        ? h('span', { class: 'chip' }, 'Paused')
+        : j.status === 'done'
+          ? h('span', { class: 'chip' }, 'Finished')
+          : j.waiting
+            ? h('span', { class: 'chip waiting' }, 'Waiting')
+            : h('span', { class: 'chip active' }, 'Scheduled');
+    const when =
+      j.status === 'done'
+        ? h('div', { class: 'sched-when' }, j.lastRunAt ? `Last posted ${RS.formatWhen(j.lastRunAt)}` : 'Finished')
+        : h('div', { class: 'sched-when' }, h('b', {}, RS.formatWhen(j.next)), ` · ${RS.relative(j.next)}`);
+    const repeatTxt = RS.describeRepeat(j.repeat);
+    const meta = [
+      j.repeat?.type === 'once' ? 'Once' : `${repeatTxt}${j.endAfter ? ` · ${j.runs || 0} of ${j.endAfter} done` : j.runs ? ` · posted ${j.runs}×` : ''}`,
+      `To ${j.targetsLabel}`,
+      j.fileNames?.length ? plural(j.fileNames.length, 'file') : null,
+      j.mode === 'auto' ? 'Automatic' : 'Manual',
+    ]
+      .filter(Boolean)
+      .join(' · ');
+    const btn = (label, run, cls = 'secondary') => h('button', { type: 'button', class: `btn ${cls} sm`, onclick: run }, label);
+    const actions =
+      j.status === 'done'
+        ? [btn('Schedule again', () => openScheduleDialog({ job: { ...j, next: null } })), btn('Delete', () => schedDelete(j.id), 'danger')]
+        : [
+            btn('Post now', () => schedRunNow(j.id)),
+            j.status === 'paused' ? btn('Resume', () => schedSetStatus(j.id, 'active')) : btn('Pause', () => schedSetStatus(j.id, 'paused')),
+            btn('Edit', () => openScheduleDialog({ job: j })),
+            btn('Delete', () => schedDelete(j.id), 'danger'),
+          ];
+    return h(
+      'div',
+      { class: `sched-card ${j.status}`, 'data-sched-id': j.id },
+      h('div', { class: 'sched-top' }, h('span', { class: `plat ${j.platform}` }, plat), h('span', { class: 'sched-title', title: j.message || '' }, schedTitle(j)), chip),
+      when,
+      h('div', { class: 'sched-meta' }, meta),
+      j.waiting && j.status === 'active' ? h('div', { class: 'sched-note' }, `${j.waiting} It starts as soon as that finishes.`) : null,
+      h('div', { class: 'sched-actions' }, ...actions)
+    );
+  });
+  if (sched.jobs.some((j) => j.status === 'done'))
+    cards.push(h('button', { type: 'button', class: 'link', style: 'justify-self:start', onclick: schedClearFinished }, 'Clear finished'));
+  $('schedList').replaceChildren(...cards);
+  $('schedEmpty').hidden = sched.jobs.length > 0;
+
+  $('schedHistWrap').hidden = !sched.history.length;
+  $('schedHist').replaceChildren(
+    ...sched.history.slice(0, 15).map((e) =>
+      h(
+        'li',
+        {},
+        h('span', { class: `ic ${e.outcome}` }, HIST_ICON[e.outcome] || '•'),
+        h('span', { class: 'txt' }, h('b', {}, `${HIST_TEXT[e.outcome] || e.outcome}: `), `${e.title} (${e.platform === 'facebook' ? 'Facebook' : 'WhatsApp'})`, e.detail ? h('span', { class: 'muted' }, ` — ${e.detail}`) : null),
+        h('span', { class: 'ago' }, RS.relative(e.at))
+      )
+    )
+  );
+}
+
+function schedBind() {
+  $('schedBtn').addEventListener('click', () => openScheduleDialog({ platform: document.body.dataset.tab === 'facebook' ? 'facebook' : 'whatsapp' }));
+  $('schedNewBtn').addEventListener('click', () => openScheduleDialog({ platform: 'whatsapp' }));
+  $('schedHistClear').addEventListener('click', () => {
+    sched.history = [];
+    persist({ schedHistory: [] });
+    renderSched();
+  });
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local') return;
+    if (changes.schedules) sched.jobs = changes.schedules.newValue || [];
+    if (changes.schedHistory) sched.history = changes.schedHistory.newValue || [];
+    if (changes.schedules || changes.schedHistory) renderSched();
+  });
+  // Keep "in 2 h" style times fresh.
+  setInterval(() => !document.hidden && renderSched(), 30000);
+}
+
 // ─────────────── wiring ───────────────
 function bind() {
   document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () => switchTab(t.dataset.tab)));
@@ -2518,9 +3062,12 @@ async function refreshStatus() {
   }
   await load();
   await fbLoad();
+  await schedLoad();
   bind();
   fbBind();
+  schedBind();
   renderAll();
+  renderSched();
   $('version').textContent = `RitPost v${chrome.runtime.getManifest().version}`;
 
   // Opened while on Facebook: show the Facebook tab. Otherwise bring WhatsApp Web up beside the panel.

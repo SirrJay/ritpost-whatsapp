@@ -5,7 +5,10 @@
  *   (injecting it if the tab was open before the extension was installed or reloaded).
  * - Starts Facebook posting runs (content/facebook.js does the work in the Facebook tab).
  * - Saves backup files through the downloads API.
+ * - Runs scheduled posts (chrome.alarms) and shows notifications for them.
  */
+
+importScripts('lib/schedule.js');
 
 const WA_URL = 'https://web.whatsapp.com/';
 const WA_MATCH = 'https://web.whatsapp.com/*';
@@ -220,6 +223,193 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
   }
 });
 
+// ─────────────── Scheduled posts ───────────────
+// The side panel saves schedules in chrome.storage ("schedules"); this worker turns them into
+// chrome.alarms, starts the WhatsApp or Facebook run when one fires, and moves repeating ones on.
+const SCHED_ALARM = 'sched:';
+const REMIND_ALARM = 'remind:';
+const REMIND_BEFORE_MS = 5 * 60 * 1000;
+const ON_TIME_MS = 15 * 60 * 1000; // "Skip it" still runs if Chrome was only briefly away
+const LATE_OK_MS = 6 * 60 * 60 * 1000; // "Post when Chrome opens" runs up to 6 hours late
+const BUSY_RETRY_MS = 3 * 60 * 1000;
+const BUSY_GIVE_UP_MS = 2 * 60 * 60 * 1000;
+
+const getSchedules = async () => (await chrome.storage.local.get('schedules')).schedules || [];
+const jobTitle = (j) => j.label || String(j.message || '').split('\n')[0].slice(0, 40) || (j.fileNames?.length ? `${j.fileNames.length} file(s)` : 'Scheduled post');
+const platformName = (j) => (j.platform === 'facebook' ? 'Facebook' : 'WhatsApp');
+
+/** Change one schedule (read–modify–write, so a panel edit made meanwhile isn't lost). */
+async function updateJob(id, fn) {
+  const jobs = await getSchedules();
+  const i = jobs.findIndex((j) => j.id === id);
+  if (i < 0) return null;
+  jobs[i] = fn({ ...jobs[i] }) || jobs[i];
+  await chrome.storage.local.set({ schedules: jobs });
+  return jobs[i];
+}
+
+async function addHistory(job, outcome, detail) {
+  const { schedHistory = [] } = await chrome.storage.local.get('schedHistory');
+  schedHistory.unshift({ at: Date.now(), jobId: job.id, title: jobTitle(job), platform: job.platform, outcome, detail: detail || '' });
+  await chrome.storage.local.set({ schedHistory: schedHistory.slice(0, 40) });
+}
+
+function notify(job, title, message) {
+  if (!chrome.notifications) return;
+  chrome.notifications
+    .create(`ritpost|${job.platform}|${job.id}|${Date.now()}`, {
+      type: 'basic',
+      iconUrl: chrome.runtime.getURL('icons/icon128.png'),
+      title,
+      message,
+      priority: 2,
+    })
+    .catch(() => {});
+}
+
+chrome.notifications?.onClicked.addListener((nid) => {
+  const [, platform] = String(nid).split('|');
+  if (platform === 'facebook') fbFocus(null).catch(() => {});
+  else if (platform === 'whatsapp') openWhatsApp(null).catch(() => {});
+  chrome.notifications.clear(nid).catch(() => {});
+});
+
+/** Keep one alarm per active schedule (plus its reminder) in step with what's saved. */
+async function syncAlarms() {
+  if (!chrome.alarms) return;
+  const jobs = await getSchedules();
+  const now = Date.now();
+  const want = new Map();
+  for (const j of jobs) {
+    if (j.status !== 'active' || !j.next) continue;
+    const at = j.retryAt || j.next;
+    want.set(SCHED_ALARM + j.id, Math.max(at, now + 1000));
+    if (j.remind && !j.retryAt && j.next - REMIND_BEFORE_MS > now + 5000) want.set(REMIND_ALARM + j.id, j.next - REMIND_BEFORE_MS);
+  }
+  const existing = await chrome.alarms.getAll();
+  for (const a of existing) {
+    if (!a.name.startsWith(SCHED_ALARM) && !a.name.startsWith(REMIND_ALARM)) continue;
+    const w = want.get(a.name);
+    if (w === undefined || Math.abs(a.scheduledTime - w) > 1500) await chrome.alarms.clear(a.name);
+    else want.delete(a.name); // already right
+  }
+  for (const [name, when] of want) await chrome.alarms.create(name, { when });
+}
+
+/** Why a new run can't start on this platform right now (or null). */
+async function platformBusy(platform) {
+  if (platform === 'facebook') {
+    const { fbRun } = await chrome.storage.local.get('fbRun');
+    return fbRun && (fbRun.status === 'running' || fbRun.status === 'waiting') ? 'Another Facebook posting run is still going.' : null;
+  }
+  const s = await getStatus(null).catch(() => null);
+  return s?.running ? 'Another WhatsApp send session is still going.' : null;
+}
+
+async function targetWindow() {
+  const w = await chrome.windows.getLastFocused({ windowTypes: ['normal'] }).catch(() => null);
+  if (w?.id !== undefined && w.id !== chrome.windows.WINDOW_ID_NONE) return w.id;
+  const created = await chrome.windows.create({ focused: true, url: 'about:blank' });
+  return created.id;
+}
+
+async function startJob(job) {
+  const windowId = await targetWindow();
+  if (job.platform === 'facebook') {
+    const run = { ...job.fb, attachmentIds: job.fileIds || [], scheduleId: job.id, scheduleTitle: jobTitle(job) };
+    return fbStart(run, windowId);
+  }
+  return startRun({ items: job.wa.items, settings: job.wa.settings, attachments: job.fileIds || [], scheduleId: job.id }, windowId);
+}
+
+/** After a run (or a miss), set the next time; once-only and finished schedules are marked done. */
+async function advanceJob(id, due, ran) {
+  return updateJob(id, (j) => {
+    if (ran) j.runs = (j.runs || 0) + 1;
+    j.retryAt = null;
+    j.waiting = '';
+    j.lastRunAt = Date.now();
+    const next = RitSchedule.nextOccurrence(j.repeat, Math.max(due, Date.now()));
+    if (!next || (j.endAfter && (j.runs || 0) >= j.endAfter)) {
+      j.status = 'done';
+      j.next = null;
+    } else j.next = next;
+    return j;
+  });
+}
+
+async function fireJob(id, { manual = false } = {}) {
+  const job = (await getSchedules()).find((j) => j.id === id);
+  if (!job) return { ok: false, error: 'This scheduled post no longer exists.' };
+  if (!manual && (job.status !== 'active' || !job.next)) return { ok: true };
+  const now = Date.now();
+  const due = job.next || now;
+  const who = `${platformName(job)} · ${job.targetsLabel || ''}`.trim();
+
+  if (!manual) {
+    const late = now - due;
+    const limit = job.missed === 'skip' ? ON_TIME_MS : LATE_OK_MS;
+    if (late > limit) {
+      const why = `Chrome was closed or your computer was asleep at ${RitSchedule.formatWhen(due)}.`;
+      await addHistory(job, 'missed', why);
+      notify(job, `Missed: ${jobTitle(job)}`, `${why} ${job.repeat?.type === 'once' ? 'Open RitPost to run it now.' : 'It will run again next time.'}`);
+      await advanceJob(id, due, false);
+      return { ok: true };
+    }
+  }
+
+  const busy = await platformBusy(job.platform);
+  if (busy) {
+    if (manual) return { ok: false, error: busy };
+    if (now - due > BUSY_GIVE_UP_MS) {
+      await addHistory(job, 'missed', `${busy} RitPost waited 2 hours.`);
+      notify(job, `Missed: ${jobTitle(job)}`, `${busy} RitPost waited 2 hours, then gave up.`);
+      await advanceJob(id, due, false);
+    } else {
+      const first = !job.retryAt;
+      await updateJob(id, (j) => ({ ...j, retryAt: now + BUSY_RETRY_MS, waiting: busy }));
+      if (first) await addHistory(job, 'waiting', `${busy} RitPost will start as soon as it finishes.`);
+    }
+    return { ok: true };
+  }
+
+  let res;
+  try {
+    res = await startJob(job);
+  } catch (e) {
+    res = { ok: false, error: e?.message || String(e) };
+  }
+  if (res?.ok) {
+    await addHistory(job, 'started', `${who}${manual ? ' (run now)' : ''}`);
+    const needsYou = job.platform === 'facebook' ? ' Click Post on each one when RitPost asks.' : job.mode === 'manual' ? ' Press Enter in each group.' : '';
+    notify(job, `Posting now: ${jobTitle(job)}`, `${who}.${needsYou}`);
+  } else {
+    await addHistory(job, 'failed', res?.error || 'Couldn’t start.');
+    notify(job, `Couldn’t post: ${jobTitle(job)}`, res?.error || 'RitPost couldn’t start this scheduled post.');
+  }
+  if (!manual) await advanceJob(id, due, !!res?.ok);
+  else if (res?.ok && job.repeat?.type === 'once' && job.status === 'active') await advanceJob(id, now, true);
+  else if (res?.ok) await updateJob(id, (j) => ({ ...j, lastRunAt: Date.now() }));
+  return res || { ok: false };
+}
+
+async function remindJob(id) {
+  const job = (await getSchedules()).find((j) => j.id === id);
+  if (!job || job.status !== 'active') return;
+  const extra = job.platform === 'facebook' ? ' You’ll click Post on each one.' : job.mode === 'manual' ? ' You’ll press Enter in each group.' : '';
+  notify(job, `In 5 minutes: ${jobTitle(job)}`, `${platformName(job)} · ${job.targetsLabel || ''}. Keep Chrome open.${extra}`);
+}
+
+chrome.alarms?.onAlarm.addListener((a) => {
+  if (a.name.startsWith(SCHED_ALARM)) fireJob(a.name.slice(SCHED_ALARM.length)).catch(() => {});
+  else if (a.name.startsWith(REMIND_ALARM)) remindJob(a.name.slice(REMIND_ALARM.length)).catch(() => {});
+});
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && changes.schedules) syncAlarms().catch(() => {});
+});
+chrome.runtime.onStartup.addListener(() => syncAlarms().catch(() => {}));
+syncAlarms().catch(() => {});
+
 async function downloadFile({ filename, json }) {
   const url = `data:application/json;charset=utf-8,${encodeURIComponent(json)}`;
   try {
@@ -262,6 +452,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     BG_FB_STOP: () => fbStop(),
     BG_FB_OPEN: () => fbFocus(windowId),
     BG_FB_TABID: async () => ({ ok: true, tabId: sender.tab?.id ?? null }),
+    BG_SCHED_RUN: () => fireJob(p.id, { manual: true }),
   };
   const handler = handlers[msg?.type];
   if (!handler) return false;

@@ -54,6 +54,7 @@ FEATURES
 • Optional Automatic mode with an adjustable interval (5–600 s) and a visible countdown you can hold or cancel
 • Session summary with one-click "Retry unsent"
 • Post the same message to Facebook groups and the Pages you manage, manually or automatically with safe pacing
+• Schedule posts for later or on repeat (daily, weekdays or chosen days) for WhatsApp and Facebook, with reminders, Post now, Pause and Edit
 • Backup and restore of groups, lists, templates and Facebook groups
 • Light and dark mode
 

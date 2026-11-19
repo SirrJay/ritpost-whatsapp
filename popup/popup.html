@@ -23,6 +23,7 @@
     <button class="tab active" data-tab="compose" role="tab">Compose</button>
     <button class="tab" data-tab="groups" role="tab">Groups <span id="groupCount" class="badge">0</span></button>
     <button class="tab" data-tab="facebook" role="tab">Facebook <span id="fbCount" class="badge">0</span></button>
+    <button class="tab" data-tab="schedule" role="tab">Scheduled <span id="schedCount" class="badge">0</span></button>
     <button class="tab" data-tab="settings" role="tab">Settings</button>
   </nav>
 
@@ -283,6 +284,25 @@
     </section>
 
     <!-- ── Settings ────────────────────────────── -->
+    <section id="tab-schedule" class="panel" hidden>
+      <div class="sched-intro">
+        <div>
+          <div class="s-title">Schedule posts</div>
+          <div class="muted">Pick a time and RitPost posts your message to WhatsApp or Facebook then, once or on repeat. Keep Chrome open (minimised is fine) and your computer awake.</div>
+        </div>
+        <button type="button" id="schedNewBtn" class="btn primary sm with-icon"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2a8 8 0 1 1 0 16 8 8 0 0 1 0-16Zm0 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13Zm.75 2.75v3.44l2.28 2.28-1.06 1.06-2.72-2.72V6.25h1.5Z"/></svg> Schedule current message</button>
+      </div>
+      <div id="schedList" class="sched-list"></div>
+      <div id="schedEmpty" class="sched-empty" hidden>
+        <p><strong>Nothing scheduled yet</strong></p>
+        <p class="muted">Write your message in Compose, select your groups or Pages, then click the clock button next to Start (or “Schedule current message” above).</p>
+      </div>
+      <div id="schedHistWrap" hidden>
+        <div class="field-head"><label>Recent activity</label><button type="button" class="link" id="schedHistClear">Clear</button></div>
+        <ul id="schedHist" class="sched-hist"></ul>
+      </div>
+    </section>
+
     <section id="tab-settings" class="panel" hidden>
       <div class="setting">
         <div>
@@ -370,6 +390,7 @@
         every <input id="interval" type="number" min="5" max="600" step="1" inputmode="numeric"> s
       </label>
     </div>
+    <div class="start-row">
     <button id="startBtn" class="btn primary block lg" type="button" disabled>
       <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2.9 2.7a.75.75 0 0 1 .82-.1l13.5 6.75a.75.75 0 0 1 0 1.34L3.72 17.44a.75.75 0 0 1-1.05-.87L4.38 10 2.67 3.43a.75.75 0 0 1 .23-.73ZM5.6 10.75l-1.07 4.13L14.57 10 4.53 5.12l1.07 4.13H10v1.5H5.6Z"/></svg>
       <span id="startLabel">Start sending</span>
@@ -378,6 +399,8 @@
       <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 1.5a8.5 8.5 0 0 0-1.33 16.9v-5.94H6.51V10h2.16V8.13c0-2.13 1.27-3.31 3.21-3.31.93 0 1.9.17 1.9.17v2.09h-1.07c-1.05 0-1.38.65-1.38 1.33V10h2.35l-.38 2.46h-1.97v5.94A8.5 8.5 0 0 0 10 1.5Z"/></svg>
       <span id="fbStartLabel">Post to Facebook</span>
     </button>
+    <button id="schedBtn" class="btn secondary lg sched-btn" type="button" title="Schedule this post for later" aria-label="Schedule this post for later"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2a8 8 0 1 1 0 16 8 8 0 0 1 0-16Zm0 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13Zm.75 2.75v3.44l2.28 2.28-1.06 1.06-2.72-2.72V6.25h1.5Z"/></svg></button>
+    </div>
   </footer>
 
   <!-- Generic dialog -->
@@ -397,6 +420,7 @@
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
+  <script src="../lib/schedule.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

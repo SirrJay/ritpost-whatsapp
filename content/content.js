@@ -723,8 +723,9 @@
   /** Rebuild File objects from what the side panel saved (data URLs in chrome.storage). */
   async function loadFiles(ids) {
     if (!ids?.length) return [];
-    const { attachments } = await chrome.storage.local.get('attachments');
-    const byId = new Map((attachments || []).map((a) => [a.id, a]));
+    // Files from the Compose tab, or the copies a scheduled post keeps.
+    const { attachments, schedFiles } = await chrome.storage.local.get(['attachments', 'schedFiles']);
+    const byId = new Map([...(attachments || []), ...Object.values(schedFiles || {})].map((a) => [a.id, a]));
     const files = [];
     for (const id of ids) {
       const a = byId.get(id);

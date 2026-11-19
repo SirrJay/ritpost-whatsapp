@@ -28,6 +28,16 @@ Re-injects RitPost's own content script into an already-open WhatsApp Web tab af
 RitPost's interface is a side panel docked beside WhatsApp Web or Facebook, so it stays open while messages are being posted.
 ```
 
+**alarms**
+```
+Runs the posts the user schedules in RitPost's Scheduled tab at the time they chose (once or on repeat). One alarm per scheduled post, plus an optional reminder 5 minutes before.
+```
+
+**notifications**
+```
+Tells the user when a scheduled post starts, when one was missed (Chrome was closed or the computer asleep) or couldn't start, and the optional 5-minute reminder. Notifications are shown only for posts the user scheduled.
+```
+
 **downloads**
 ```
 Lets the user export a backup file (JSON) of their saved groups, lists and templates when they click "Export" in Settings.
