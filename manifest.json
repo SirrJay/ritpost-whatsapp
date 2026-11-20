@@ -1,10 +1,10 @@
 {
   "manifest_version": 3,
-  "name": "RitPost – Group Posting for WhatsApp Web & Facebook",
+  "name": "RitPost – Post to WhatsApp, Facebook, Instagram & X",
   "short_name": "RitPost",
-  "version": "1.9.0",
+  "version": "2.0.0",
   "minimum_chrome_version": "116",
-  "description": "Write once, pick your WhatsApp groups and Facebook groups or Pages, and post to each one with a single click.",
+  "description": "Write once and post to WhatsApp groups, Facebook groups and Pages, Instagram and X. Edit photos, add emojis and schedule posts.",
   "icons": {
     "16": "icons/icon16.png",
     "32": "icons/icon32.png",
@@ -31,8 +31,8 @@
   "background": {
     "service_worker": "background.js"
   },
-  "permissions": ["storage", "unlimitedStorage", "scripting", "sidePanel", "downloads", "alarms", "notifications"],
-  "host_permissions": ["https://web.whatsapp.com/*", "https://*.facebook.com/*"],
+  "permissions": ["storage", "unlimitedStorage", "scripting", "sidePanel", "downloads", "alarms", "notifications", "declarativeNetRequestWithHostAccess"],
+  "host_permissions": ["https://web.whatsapp.com/*", "https://*.facebook.com/*", "https://www.instagram.com/*", "https://instagram.com/*", "https://*.cdninstagram.com/*", "https://x.com/*", "https://twitter.com/*"],
   "content_scripts": [
     {
       "matches": ["https://web.whatsapp.com/*"],
@@ -48,6 +48,17 @@
     {
       "matches": ["https://*.facebook.com/*"],
       "js": ["content/facebook.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://www.instagram.com/*", "https://instagram.com/*"],
+      "js": ["content/ig-mobile.js"],
+      "world": "MAIN",
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["https://www.instagram.com/*", "https://instagram.com/*", "https://x.com/*", "https://twitter.com/*"],
+      "js": ["content/social.js"],
       "run_at": "document_idle"
     }
   ],

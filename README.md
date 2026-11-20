@@ -1,8 +1,8 @@
-# RitPost – Group Posting for WhatsApp Web & Facebook
+# RitPost – Post to WhatsApp, Facebook, Instagram & X
 
 A Chrome extension for WhatsApp Web. Write a message once, pick your groups from a saved list, and RitPost goes through them one by one. It opens each group and fills in the message. You press **Enter**, and the next group opens on its own.
 
-It can also post the same message to your **Facebook groups and Pages**; see [Facebook groups and Pages](#facebook-groups-and-pages).
+It can also post the same message to your **Facebook groups and Pages** ([Facebook groups and Pages](#facebook-groups-and-pages)) and to **Instagram and X** ([Instagram and X](#instagram-and-x)), edit your photos first in **RitPost Studio** ([RitPost Studio](#ritpost-studio-photo-editor)), add **emojis** anywhere you write, and **schedule** all of it.
 
 In **Manual** mode (the default) RitPost never presses Send. You send every message yourself. An optional **Automatic** mode can send after a countdown; see [Send modes](#send-modes).
 
@@ -117,16 +117,70 @@ If switching fails twice, RitPost asks you to switch yourself and click **Try ag
 - If you close the post box without posting, RitPost doesn't count it and offers **Fill again**.
 - **Select unposted** (under the list after a session) picks everything that wasn't posted, for example to continue the next day.
 
+## Instagram and X
+
+Open the **IG & X** tab and pick **Instagram** or **X**.
+
+**Instagram**
+
+- **Feed post**: one photo makes a post, one video makes a Reel, and 2–10 photos/videos make a **carousel** (in the order shown; use ‹ › to reorder).
+- **Story (beta)**: Instagram only offers Stories in its phone layout, so RitPost opens a small phone-sized Instagram window and adds your photo or video to your story. If Instagram doesn't show its story picker there, RitPost lets you save the photo and add it yourself. For a full-screen Story, use Studio → Crop → **Fit the whole photo** → **Story**.
+- **Crop**: Original shape (keeps the crop you made in Studio), Portrait 4:5, Square 1:1 or Landscape 16:9. RitPost chooses it in Instagram's crop step.
+- Instagram takes JPG, PNG or HEIC photos and MP4 or MOV videos. Saving a photo in Studio turns it into a JPG.
+
+**X**
+
+- Text, with up to 4 photos or 1 video or GIF.
+- Over 280 characters? Turn on **thread**: RitPost splits the text between words (preferring sentence ends) into numbered posts (1/3, 2/3…). With **X Premium** ticked, long posts (up to 25,000 characters) go out as one post.
+- The counter counts like X does: links count as 23 characters, emoji count double.
+
+**Caption**
+
+- **Same as Compose** (default) uses your Compose message, with WhatsApp marks (`*bold*`, `_italic_`) and `{group}` removed. Type in the caption box to write a separate caption for Instagram or for X.
+- **Emoji** button, live **character counter** (2,200 on Instagram, with a hashtag count up to 30), and **# Hashtags**: save the hashtags you use often as sets and add them in one click.
+- **Preview** shows how the post will look (Instagram card, carousel dots, Story frame, or the X thread).
+
+**Edit before publishing**
+
+**Review & post** opens a final check: the post preview and the caption, which you can still edit (with emoji), plus **Edit photos in Studio** and **Schedule instead**. Then:
+
+- **Manual** (default): RitPost opens Instagram or X, adds the photos/videos, sets the crop and fills in the caption, then highlights **Share** / **Post**. You check it and click it; RitPost confirms when it's posted.
+- **Automatic**: the same, then a review countdown (15 s by default) with **Share now**, **Hold** and **Cancel**, then RitPost clicks it.
+
+RitPost posts to the Instagram and X accounts you're signed in to in Chrome. One Instagram/X post is prepared at a time; a corner panel on the site shows progress and any problem (for example a file Instagram refuses).
+
+## RitPost Studio (photo editor)
+
+Click **Edit** on a photo in Compose (or **Edit photos** / **Edit in Studio**). Studio opens in its own tab:
+
+- **Crop**: Free, Original, 1:1, 4:5, 9:16 (Story/Reel), 16:9 and 1.91:1, with a draggable frame; rotate and flip.
+- **Fit the whole photo**: keeps everything in the picture at 1:1, 4:5, 9:16 or 16:9 and fills the space with a blurred copy of the photo or a colour. One click turns any photo into a Story.
+- **Filters**: 15 looks (Vivid, Warm, Cool, Golden, Bright, Dramatic, Vintage, Matte, Rose, Teal & Orange, Sunset, Fade, Mono, Noir…) previewed on your photo, each with a strength slider.
+- **Adjust**: brightness, contrast, saturation, warmth, tint, fade, vignette and soft focus.
+- **Text**: six fonts, five styles (plain, shadow, box, outline, neon), any colour, alignment, emoji in text.
+- **Stickers**: emoji stickers (all of them, with search) and labels such as NEW, LIVE, SALE, JOIN US, LINK IN BIO or your own.
+- **Draw**: pen, highlighter or neon.
+- Drag text and stickers on the photo; the green handle resizes and rotates (snaps straight). Arrow keys nudge, Delete removes.
+- **Undo/redo** (Ctrl+Z / Ctrl+Y), **Hold to compare** with the original, **Reset**.
+- **Save photo** replaces the attachment with the edited JPG (up to 2160 px; small photos are brought up to 1080 px). The original and your edits are kept, so you can open it again and keep editing, or Reset and Save to go back to the original. **Save as copy** keeps both.
+- Drag photos in Studio's left strip to change the order they're posted in.
+
+Videos and documents are posted as they are.
+
+## Emoji
+
+Every place you write has an emoji button: Compose, the Instagram/X caption, the review dialog and Studio's text tool. Search by word (heart, party, pray, ghana…), browse categories, pick a skin tone, and find your recently used ones first. Shift+click adds several at once.
+
 ## Scheduled posts
 
-Post later, or on repeat, to WhatsApp groups or Facebook groups and Pages.
+Post later, or on repeat, to WhatsApp groups, Facebook groups and Pages, Instagram or X.
 
-1. Write your message (and attach files) in **Compose**, and select your groups (or Facebook groups and Pages).
+1. Write your message (and attach files) in **Compose**, and select your groups (or Facebook groups and Pages), or set up your post in the **IG & X** tab.
 2. Click the **clock** button next to Start, or **Schedule current message** in the **Scheduled** tab.
-3. Choose WhatsApp or Facebook, then the time (or a quick pick: *In 1 hour*, *Tonight 8 PM*, *Tomorrow 7 AM*, *Tomorrow noon*).
+3. Choose WhatsApp, Facebook, Instagram or X, then the time (or a quick pick: *In 1 hour*, *Tonight 8 PM*, *Tomorrow 7 AM*, *Tomorrow noon*).
 4. Optional:
    - **Repeat**: every day, weekdays (Mon–Fri) or chosen days of the week, and **Stop** after a number of times.
-   - **How**: Manual or Automatic. A Manual schedule opens and fills everything, then waits for you. On Facebook you always click Post.
+   - **How**: Manual or Automatic. A Manual schedule opens and fills everything, then waits for you. On Facebook you always click Post. An Automatic Instagram or X schedule posts after its review countdown, so it can go out while you're away.
    - **Remind me 5 minutes before**: a Chrome notification.
    - **If Chrome is closed or the computer is asleep at that time**: post when Chrome opens again (up to 6 hours late), or skip it and tell you.
    - **Name**, to find it easily.
@@ -135,7 +189,7 @@ The **Scheduled** tab lists what's coming, with **Post now**, **Pause / Resume**
 
 Good to know:
 
-- Chrome has to be open (it can be minimised) and the computer awake. RitPost opens WhatsApp Web or Facebook by itself.
+- Chrome has to be open (it can be minimised) and the computer awake. RitPost opens WhatsApp Web, Facebook, Instagram or X by itself.
 - A schedule keeps its own copy of the message, the selected groups and the files, so you can keep using Compose for other posts. To change what a schedule posts, Edit it and tick **Use the current Compose message, files and selection instead**.
 - If another send session is still going when a schedule comes up, RitPost waits for it to finish (up to 2 hours).
 - Automatic posting rules still apply: countdowns, Facebook's pauses between posts and daily limit.
@@ -155,7 +209,7 @@ Good to know:
 - **Automatic sending interval**: in Automatic mode, the countdown on each group before RitPost presses Send (default 6 s, 5 to 600 s).
 - **Vary the interval slightly**: makes each countdown a little different (−15% to +25%).
 - **Pause between groups (manual)**: how long to wait after a send before opening the next group (default 2 s).
-- **Backup**: export or import your groups, lists and templates as JSON.
+- **Backup**: export or import your groups, lists, templates, Facebook groups and hashtag sets as JSON.
 - **Reset**: delete all saved data.
 
 ## Privacy
@@ -163,7 +217,7 @@ Good to know:
 Full policy: https://sirrjay.github.io/ritpost-whatsapp/store/privacy-policy.html
 
 
-Everything stays on your computer in `chrome.storage.local`. RitPost has no servers, no analytics, and doesn't talk to anything outside your browser. It only runs on `web.whatsapp.com`.
+Everything stays on your computer in `chrome.storage.local`. RitPost has no servers, no analytics, and doesn't talk to anything outside your browser. It only runs on `web.whatsapp.com`, `facebook.com`, `instagram.com` and `x.com`, and only acts there when you post from RitPost. RitPost Studio edits photos on your computer.
 
 ## Troubleshooting
 

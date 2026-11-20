@@ -220,6 +220,7 @@ function checkRow(name, checked, onChange, extra) {
 function switchTab(name) {
   document.body.dataset.tab = name;
   $('fbStartBtn').hidden = name !== 'facebook';
+  $('socStartBtn').hidden = name !== 'social';
   document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.tab === name));
   document.querySelectorAll('.panel').forEach((p) => (p.hidden = p.id !== `tab-${name}`));
   closeMenu();
@@ -356,6 +357,7 @@ function togglePreview(on = !state.preview) {
 // ─────────────── templates menu ───────────────
 function closeMenu() {
   $('tplMenu').hidden = true;
+  if ($('socTagsMenu')) $('socTagsMenu').hidden = true;
 }
 
 function renderTemplateMenu() {
@@ -840,6 +842,7 @@ function renderAll() {
   renderLastRun();
   renderStatus();
   renderFb();
+  renderSoc();
 }
 
 // ─────────────── group actions ───────────────
@@ -1439,6 +1442,7 @@ async function exportData() {
     lists: state.lists.map((l) => ({ name: l.name, groups: l.groupIds.map((id) => nameById.get(id)).filter(Boolean) })),
     templates: state.templates.map((t) => ({ name: t.name, text: t.text })),
     facebook: fb.targets.map((t) => ({ name: t.name, url: t.url, kind: t.kind })),
+    hashtags: soc.settings.tags,
   };
   const res = await bg('BG_DOWNLOAD', {
     filename: `ritpost-backup-${new Date().toISOString().slice(0, 10)}.json`,
@@ -1484,6 +1488,11 @@ async function restoreData(file) {
       })
       .filter(Boolean);
     const fbAdded = fbEntries.length ? fbAdd(fbEntries) : 0;
+    for (const t of Array.isArray(data.hashtags) ? data.hashtags : []) {
+      if (!t?.name || !t?.text || soc.settings.tags.some((x) => keyOf(x.name) === keyOf(t.name))) continue;
+      soc.settings.tags.push({ name: String(t.name), text: String(t.text) });
+    }
+    socSave();
     saveLists();
     saveTemplates();
     renderAll();
@@ -1662,10 +1671,13 @@ function renderAttachments() {
         'li',
         { class: 'attach-item', 'data-attach-id': a.id },
         thumb,
-        h('span', { class: 'attach-meta' }, h('span', { class: 'attach-name', title: a.name }, a.name), h('span', { class: 'attach-size' }, formatBytes(a.size))),
+        h('span', { class: 'attach-meta' }, h('span', { class: 'attach-name', title: a.name }, a.name), h('span', { class: 'attach-size' }, formatBytes(a.size), a.edit ? h('span', { class: 'edited-tag' }, ' · edited') : null)),
         h(
           'span',
           { class: 'attach-actions' },
+          a.type.startsWith('image/')
+            ? h('button', { type: 'button', class: 'attach-act', title: 'Crop, filters, text and stickers', 'aria-label': `Edit ${a.name}`, onclick: () => openStudio(a.id) }, 'Edit')
+            : null,
           h('button', { type: 'button', class: 'attach-act', title: 'Choose another file instead', 'aria-label': `Replace ${a.name}`, onclick: () => pickReplacement(a.id) }, 'Replace'),
           h('button', { type: 'button', class: 'attach-act del', title: 'Remove this file', 'aria-label': `Remove ${a.name}`, onclick: () => removeAttachment(a.id) }, 'Remove')
         )
@@ -1677,6 +1689,7 @@ function renderAttachments() {
   $('attachNote').hidden = !n;
   renderAttachNote();
   $('attachClear').hidden = n < 2;
+  $('studioBtn').hidden = !state.attachments.some((a) => a.type.startsWith('image/'));
   $('attachHint').textContent = n
     ? `${plural(n, 'file')} · ${formatBytes(state.attachments.reduce((s, a) => s + a.size, 0))}`
     : 'Up to 10 files · 16 MB each';
@@ -2241,6 +2254,637 @@ function fbBind() {
   });
 }
 
+// ─────────────── Instagram & X ───────────────
+const SOC_DEFAULTS = { platform: 'instagram', kind: 'post', same: true, captions: { instagram: '', x: '' }, crop: 'original', mode: 'manual', reviewSec: 15, thread: true, premium: false, tags: [], autoAck: false };
+const soc = { settings: { ...SOC_DEFAULTS, captions: { ...SOC_DEFAULTS.captions } }, run: null, preview: false };
+const IG_TYPES = /^(image\/(jpeg|png|heic|heif|avif)|video\/(mp4|quicktime))$/i;
+const IG_LIMIT = 2200;
+const X_LIMIT = 280;
+const X_PREMIUM_LIMIT = 25000;
+const platLabel = (p) => ({ whatsapp: 'WhatsApp', facebook: 'Facebook', instagram: 'Instagram', x: 'X' })[p] || p;
+const isSocialPlat = (p) => p === 'instagram' || p === 'x';
+const isVideo = (a) => /^video\//.test(a?.type || '') || a?.type === 'image/gif';
+
+async function socLoad() {
+  const d = await chrome.storage.local.get(['socSettings', 'socialRun']);
+  const s = { ...SOC_DEFAULTS, ...(d.socSettings || {}) };
+  soc.settings = {
+    ...s,
+    platform: s.platform === 'x' ? 'x' : 'instagram',
+    kind: s.kind === 'story' ? 'story' : 'post',
+    captions: { instagram: '', x: '', ...(s.captions || {}) },
+    mode: s.mode === 'auto' ? 'auto' : 'manual',
+    reviewSec: Math.min(120, Math.max(5, Number(s.reviewSec) || 15)),
+    tags: Array.isArray(s.tags) ? s.tags.filter((t) => t?.name && t?.text) : [],
+  };
+  soc.run = d.socialRun || null;
+}
+const socSave = () => persist({ socSettings: soc.settings });
+
+/** Compose text made ready for Instagram/X: no WhatsApp marks, no {group}. */
+const socText = (text) =>
+  fbText(text)
+    .replaceAll('{group}', '')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
+const socCaption = (p = soc.settings.platform) => (soc.settings.same ? socText(state.message) : soc.settings.captions[p] || '');
+
+/** Length as X counts it: links are 23, emoji and CJK count double. */
+function xLength(t) {
+  const s = String(t || '').replace(/https?:\/\/\S+/g, 'x'.repeat(23));
+  let n = 0;
+  for (const ch of s) n += ch.codePointAt(0) > 0x10ff ? 2 : 1;
+  return n;
+}
+
+/** Split long text into numbered posts, breaking between words (preferring sentence ends). */
+function splitThread(text, limit = X_LIMIT) {
+  const t = String(text || '').trim();
+  if (xLength(t) <= limit) return [t];
+  const room = limit - 7; // space for " 12/12"
+  const chunks = [];
+  let cur = '';
+  for (const w of t.split(/(\s+)/)) {
+    if (xLength(cur + w) <= room) {
+      cur += w;
+      if (/[.!?…]["”')]?$/.test(cur) && xLength(cur) > room * 0.75) {
+        chunks.push(cur.trim());
+        cur = '';
+      }
+      continue;
+    }
+    if (cur.trim()) chunks.push(cur.trim());
+    cur = w.trimStart();
+    while (xLength(cur) > room) {
+      chunks.push(cur.slice(0, room));
+      cur = cur.slice(room);
+    }
+  }
+  if (cur.trim()) chunks.push(cur.trim());
+  return chunks.map((c, i) => `${c} ${i + 1}/${chunks.length}`);
+}
+
+/** What would be posted on Instagram or X right now, with problems and notes. */
+function socPlan(platform = soc.settings.platform, kind = soc.settings.kind) {
+  const media = state.attachments.filter(isMedia);
+  const caption = socCaption(platform);
+  const notes = [];
+  let files = [];
+  let error = '';
+  let label = 'Post';
+  let thread = null;
+  if (platform === 'instagram') {
+    const ok = media.filter((a) => IG_TYPES.test(a.type));
+    if (media.length > ok.length)
+      notes.push(`${plural(media.length - ok.length, 'file')} left out: Instagram takes JPG, PNG or HEIC photos and MP4 or MOV videos. Saving a photo in Studio turns it into a JPG.`);
+    if (kind === 'story') {
+      files = ok.slice(0, 1);
+      if (ok.length > 1) notes.push('A Story uses the first photo or video. Use the arrows to choose which one.');
+      if (caption) notes.push('Stories have no caption. To put words on it, use Text in Studio.');
+      label = 'Story';
+    } else {
+      files = ok.slice(0, 10);
+      label = files.length > 1 ? `Carousel · ${files.length}` : isVideo(files[0]) ? 'Reel' : 'Post';
+      if (files.length === 1 && isVideo(files[0])) notes.push('Instagram shares a single video as a Reel.');
+    }
+    if (!files.length) error = media.length ? 'None of these files can go to Instagram.' : 'Instagram needs a photo or video. Attach one with “+ Add”.';
+    else if (kind !== 'story' && caption.length > IG_LIMIT) error = `The caption is ${caption.length.toLocaleString()} characters; Instagram allows ${IG_LIMIT.toLocaleString()}.`;
+    else {
+      const tags = (caption.match(/#[\p{L}\p{N}_]+/gu) || []).length;
+      if (kind !== 'story' && tags > 30) error = `Instagram allows 30 hashtags; this caption has ${tags}.`;
+    }
+  } else {
+    const first = media[0];
+    if (first && isVideo(first)) {
+      files = [first];
+      if (media.length > 1) notes.push('X takes one video or GIF per post, so only the first file is used.');
+    } else {
+      const imgs = media.filter((a) => !isVideo(a));
+      files = imgs.slice(0, 4);
+      if (media.length > files.length) notes.push(`X takes up to 4 photos per post, without videos: ${plural(media.length - files.length, 'file')} left out.`);
+    }
+    const limit = soc.settings.premium ? X_PREMIUM_LIMIT : X_LIMIT;
+    const len = xLength(caption);
+    if (len > limit) {
+      if (soc.settings.thread && !soc.settings.premium) {
+        thread = splitThread(caption);
+        label = `Thread · ${thread.length}`;
+        if (files.length) notes.push('Photos go on the first post of the thread.');
+      } else error = `Your text is ${len.toLocaleString()} characters; X allows ${limit.toLocaleString()}. Shorten it, or turn on “thread”.`;
+    }
+    if (!caption.trim() && !files.length) error = 'Write something or attach a photo first.';
+  }
+  return { platform, kind: platform === 'x' ? 'post' : kind, caption, files, notes, error, label, thread, targetsLabel: `${platLabel(platform)} ${label.toLowerCase()}` };
+}
+
+function openStudio(id) {
+  const url = chrome.runtime.getURL(`editor/editor.html${id ? `?id=${encodeURIComponent(id)}` : ''}`);
+  chrome.tabs.create({ url, active: true, ...(WINDOW_ID ? { windowId: WINDOW_ID } : {}) }).catch(() => window.open(url, '_blank'));
+}
+
+function moveAttachment(id, dir) {
+  const i = state.attachments.findIndex((a) => a.id === id);
+  const j = i + dir;
+  if (i < 0 || j < 0 || j >= state.attachments.length) return;
+  [state.attachments[i], state.attachments[j]] = [state.attachments[j], state.attachments[i]];
+  attachmentsChanged();
+}
+
+/** Stop following Compose so the caption can be edited for this platform. */
+function socDetach() {
+  if (!soc.settings.same) return;
+  const base = socText(state.message);
+  soc.settings.captions.instagram ||= base;
+  soc.settings.captions.x ||= base;
+  soc.settings.same = false;
+}
+
+function socInsert(text) {
+  socDetach();
+  const ta = $('socCaption');
+  const p = soc.settings.platform;
+  const cur = soc.settings.captions[p] || '';
+  soc.settings.captions[p] = cur ? `${cur.replace(/\s+$/, '')}\n\n${text}` : text;
+  socSave();
+  renderSoc();
+  ta.focus();
+  ta.setSelectionRange(ta.value.length, ta.value.length);
+}
+
+function renderSocPlatform() {
+  const s = soc.settings;
+  const x = s.platform === 'x';
+  document.querySelectorAll('#socPlatSeg button').forEach((b) => {
+    b.classList.toggle('on', b.dataset.plat === s.platform);
+    b.setAttribute('aria-selected', String(b.dataset.plat === s.platform));
+  });
+  document.querySelectorAll('#socKindSeg button').forEach((b) => b.classList.toggle('on', b.dataset.kind === s.kind));
+  $('socKindField').hidden = x;
+  $('socKindHint').textContent =
+    s.kind === 'story'
+      ? 'Beta. Instagram only offers Stories in its phone app layout, so RitPost opens a small phone-sized Instagram window for it. Use a 9:16 photo (Studio → Crop → Fit → Story).'
+      : 'One photo or video makes a post (a single video becomes a Reel); 2–10 make a carousel.';
+  $('socCropField').hidden = x || s.kind === 'story';
+  $('socXField').hidden = !x;
+  $('socThread').checked = s.thread;
+  $('socPremium').checked = s.premium;
+  $('socCrop').value = s.crop;
+  $('socCaptionLabel').textContent = x ? 'Post text' : 'Caption';
+  $('socSame').checked = s.same;
+  $('socStartBtn').classList.toggle('ig', !x);
+  $('socStartBtn').classList.toggle('x', x);
+}
+
+function renderSocMedia() {
+  const plan = socPlan();
+  const used = new Set(plan.files.map((a) => a.id));
+  const media = state.attachments.filter(isMedia);
+  const list = $('socMedia');
+  let n = 0;
+  list.replaceChildren(
+    ...media.map((a, idx) => {
+      const on = used.has(a.id);
+      const thumb = a.type.startsWith('image/') ? h('img', { src: a.data, alt: '' }) : h('span', { class: 'vid', html: PLAY_SVG });
+      const tools = h(
+        'span',
+        { class: 'soc-tools' },
+        h('button', { type: 'button', title: 'Move earlier', 'aria-label': 'Move earlier', disabled: idx === 0, onclick: () => moveAttachment(a.id, -1) }, '‹'),
+        a.type.startsWith('image/') ? h('button', { type: 'button', title: 'Edit in Studio', 'aria-label': `Edit ${a.name}`, onclick: () => openStudio(a.id) }, '✎') : null,
+        h('button', { type: 'button', title: 'Move later', 'aria-label': 'Move later', disabled: idx === media.length - 1, onclick: () => moveAttachment(a.id, 1) }, '›'),
+        h('button', { type: 'button', class: 'del', title: 'Remove', 'aria-label': `Remove ${a.name}`, onclick: () => removeAttachment(a.id) }, '✕')
+      );
+      return h('li', { class: on ? 'on' : 'off', title: on ? a.name : `${a.name} (not used here)` }, thumb, on ? h('span', { class: 'num' }, String(++n)) : h('span', { class: 'num off' }, '–'), a.edit ? h('span', { class: 'edited' }, 'Edited') : null, tools);
+    }),
+    h('li', { class: 'add', title: 'Add photos or videos' }, h('button', { type: 'button', onclick: () => $('attachInput').click() }, '+'))
+  );
+  $('socMediaCount').textContent = media.length ? `(${plan.files.length} used)` : '';
+  const note = [...plan.notes];
+  if (!media.length) note.unshift(soc.settings.platform === 'x' ? 'Optional on X: up to 4 photos, or 1 video or GIF.' : 'Add a photo or video. Instagram needs at least one.');
+  $('socMediaNote').textContent = note.join(' ');
+  $('socMediaNote').hidden = !note.length;
+}
+
+function renderSocCaption() {
+  const s = soc.settings;
+  const ta = $('socCaption');
+  const val = socCaption();
+  if (document.activeElement !== ta || ta.value !== val) ta.value = val;
+  ta.classList.toggle('following', s.same);
+  ta.placeholder = s.same ? 'Write your message in Compose (or untick “Same as Compose” to write a separate caption)' : s.platform === 'x' ? 'What’s happening?' : 'Write a caption…';
+  const plan = socPlan();
+  if (s.platform === 'x') {
+    const len = xLength(val);
+    const limit = s.premium ? X_PREMIUM_LIMIT : X_LIMIT;
+    $('socCount').textContent = `${len.toLocaleString()} / ${limit.toLocaleString()}`;
+    $('socCount').classList.toggle('over', len > limit && !plan.thread);
+    $('socCapHint').textContent = plan.thread ? `Posts as a thread of ${plan.thread.length}.` : s.same ? 'Following your Compose message.' : 'Links count as 23 characters.';
+  } else {
+    const tags = (val.match(/#[\p{L}\p{N}_]+/gu) || []).length;
+    $('socCount').textContent = `${val.length.toLocaleString()} / ${IG_LIMIT.toLocaleString()}${tags ? ` · ${tags} #` : ''}`;
+    $('socCount').classList.toggle('over', val.length > IG_LIMIT || tags > 30);
+    $('socCapHint').textContent = s.same ? 'Following your Compose message (formatting marks removed).' : 'Links aren’t clickable in Instagram captions.';
+  }
+  if (soc.preview) renderSocPreview();
+}
+
+function socPreviewNode(plan, { large = false } = {}) {
+  const firstSrc = plan.files[0];
+  const mediaEl = (a, cls = '') =>
+    !a ? null : a.type.startsWith('image/') ? h('img', { class: cls, src: a.data, alt: '' }) : h('video', { class: cls, src: a.data, muted: true, playsinline: true, preload: 'metadata' });
+  if (plan.platform === 'instagram' && plan.kind === 'story') {
+    return h(
+      'div',
+      { class: `ig-story ${large ? 'lg' : ''}` },
+      h('div', { class: 'bars' }, h('i')),
+      h('div', { class: 'who' }, h('span', { class: 'av' }), h('b', {}, 'Your story'), h('span', {}, 'now')),
+      mediaEl(firstSrc) || h('div', { class: 'none' }, 'No photo yet')
+    );
+  }
+  if (plan.platform === 'instagram') {
+    const ratio = { '1:1': '1 / 1', '4:5': '4 / 5', '16:9': '16 / 9' }[soc.settings.crop] || 'auto';
+    const cap = plan.caption;
+    const short = cap.length > 125 && !large ? `${cap.slice(0, 125).trimEnd()}… ` : cap;
+    return h(
+      'div',
+      { class: 'ig-card' },
+      h('div', { class: 'ig-head' }, h('span', { class: 'av' }), h('b', {}, 'your_account'), h('span', { class: 'dots' }, '•••')),
+      h(
+        'div',
+        { class: 'ig-media', style: `aspect-ratio:${ratio}` },
+        mediaEl(firstSrc) || h('div', { class: 'none' }, 'Add a photo or video'),
+        plan.files.length > 1 ? h('span', { class: 'count' }, `1/${plan.files.length}`) : null
+      ),
+      plan.files.length > 1 ? h('div', { class: 'ig-dots' }, ...plan.files.map((_, i) => h('i', { class: i ? '' : 'on' }))) : null,
+      h('div', { class: 'ig-acts' }, '♡  💬  ➤', h('span', {}, '🔖')),
+      cap ? h('div', { class: 'ig-cap' }, h('b', {}, 'your_account '), short, cap.length > 125 && !large ? h('span', { class: 'muted' }, 'more') : null) : null
+    );
+  }
+  const posts = plan.thread || [plan.caption];
+  return h(
+    'div',
+    { class: 'x-thread' },
+    ...posts.map((t, i) =>
+      h(
+        'div',
+        { class: 'x-card' },
+        h('span', { class: 'av' }),
+        h(
+          'div',
+          { class: 'x-body' },
+          h('div', {}, h('b', {}, 'You'), h('span', { class: 'muted' }, ' @you · now')),
+          t ? h('div', { class: 'x-text' }, t) : null,
+          i === 0 && plan.files.length ? h('div', { class: `x-grid n${plan.files.length}` }, ...plan.files.map((a) => mediaEl(a))) : null,
+          h('div', { class: 'x-acts muted' }, '💬   🔁   ♡   📊')
+        )
+      )
+    )
+  );
+}
+
+function renderSocPreview() {
+  $('socPreview').hidden = !soc.preview;
+  $('socCaption').hidden = soc.preview;
+  $('socPreviewToggle').classList.toggle('on', soc.preview);
+  if (soc.preview) setChildren($('socPreview'), socPreviewNode(socPlan()));
+}
+
+function renderSocMode() {
+  const s = soc.settings;
+  const auto = s.mode === 'auto';
+  document.querySelectorAll('#socModeSeg button').forEach((b) => {
+    const on = b.dataset.mode === s.mode;
+    b.classList.toggle('on', on);
+    b.classList.toggle('auto', on && auto);
+    b.setAttribute('aria-checked', String(on));
+  });
+  $('socReviewRow').hidden = !auto;
+  $('socReview').value = String(s.reviewSec);
+  const what = s.platform === 'x' ? 'Post' : s.kind === 'story' ? 'Add to your story' : 'Share';
+  $('socModeHint').textContent = auto
+    ? `RitPost fills everything in, shows a ${s.reviewSec} s countdown (Hold / Cancel / ${what} now), then clicks ${what}.`
+    : `RitPost fills everything in and highlights ${what}; you check the post and click it yourself.`;
+}
+
+const socActive = () => soc.run?.status === 'running' && Date.now() - (soc.run.startedAt || 0) < 2 * 60 * 60 * 1000;
+
+function renderSocRun() {
+  const r = soc.run;
+  const active = socActive();
+  $('socRunBox').hidden = !active;
+  if (active) {
+    $('socRunTitle').textContent = `${platLabel(r.platform)}: ${r.step === 'publishing' ? 'posting…' : r.mode === 'auto' ? 'preparing, then posting' : 'preparing — you click to post'}`;
+    $('socRunMeta').textContent = r.kind === 'story' ? 'Story' : r.thread?.length > 1 ? `Thread · ${r.thread.length}` : r.attachmentIds?.length > 1 ? `Carousel · ${r.attachmentIds.length}` : '';
+    $('socRunFocus').textContent = `Show ${platLabel(r.platform)}`;
+  }
+  const last = $('socLast');
+  if (!active && r?.finishedAt && Date.now() - r.finishedAt < 24 * 60 * 60 * 1000) {
+    last.hidden = false;
+    const ok = r.status === 'done';
+    setChildren(
+      last,
+      h(
+        'span',
+        {},
+        h('b', {}, ok ? `Posted to ${platLabel(r.platform)}` : r.status === 'failed' ? `Couldn’t post to ${platLabel(r.platform)}` : 'Stopped'),
+        ` · ${timeAgo(r.finishedAt)}`,
+        r.error ? h('div', { class: 'stop-reason' }, r.error) : r.note ? h('div', { class: 'muted' }, r.note) : null
+      ),
+      !ok ? h('button', { type: 'button', class: 'link', onclick: socConfirmStart }, 'Try again') : null
+    );
+  } else last.hidden = true;
+  renderSocStart();
+}
+
+function renderSocStart() {
+  const plan = socPlan();
+  const btn = $('socStartBtn');
+  btn.disabled = !!plan.error || socActive();
+  $('socStartLabel').textContent = socActive()
+    ? `Posting to ${platLabel(soc.run.platform)}…`
+    : plan.error
+      ? plan.platform === 'instagram' && !plan.files.length
+        ? 'Add a photo or video'
+        : 'Fix the post to continue'
+      : `Review & post ${plan.platform === 'x' ? 'to X' : plan.kind === 'story' ? 'Story' : `to Instagram`}`;
+  btn.title = plan.error || '';
+}
+
+function renderSoc() {
+  renderSocPlatform();
+  renderSocMedia();
+  renderSocCaption();
+  renderSocMode();
+  renderSocRun();
+}
+
+function renderSocTagsMenu() {
+  const menu = $('socTagsMenu');
+  const tags = soc.settings.tags;
+  setChildren(
+    menu,
+    ...(tags.length
+      ? tags.map((t) =>
+          h(
+            'button',
+            { type: 'button', class: 'menu-item', onclick: () => (closeMenu(), socInsert(t.text)) },
+            h('span', { class: 'mi-text' }, h('span', { class: 'mi-name' }, t.name), h('span', { class: 'mi-sub' }, t.text)),
+            h(
+              'span',
+              {
+                class: 'x',
+                title: 'Delete this set',
+                onclick: (e) => {
+                  e.stopPropagation();
+                  soc.settings.tags = soc.settings.tags.filter((x) => x !== t);
+                  socSave();
+                  renderSocTagsMenu();
+                  toast(`Deleted “${t.name}”`, false, { label: 'Undo', run: () => (soc.settings.tags.push(t), socSave()) });
+                },
+              },
+              '✕'
+            )
+          )
+        )
+      : [h('div', { class: 'menu-empty' }, 'Save the hashtags you use often and add them in one click.')]),
+    h('div', { class: 'menu-sep' }),
+    h(
+      'button',
+      {
+        type: 'button',
+        class: 'menu-item accent',
+        onclick: async () => {
+          closeMenu();
+          const found = [...new Set(socCaption().match(/#[\p{L}\p{N}_]+/gu) || [])];
+          if (!found.length) return toast('Type some #hashtags in the caption first, then save them as a set.', true);
+          const name = await askName({ title: 'Save hashtag set', label: `${found.length} hashtags: ${short(found.join(' '), 60)}`, placeholder: 'e.g. Church events' });
+          if (!name) return;
+          soc.settings.tags = [...soc.settings.tags.filter((t) => keyOf(t.name) !== keyOf(name)), { name, text: found.join(' ') }];
+          socSave();
+          toast(`Saved “${name}”`);
+        },
+      },
+      '+ Save hashtags from the caption'
+    )
+  );
+}
+
+function confirmSocAuto() {
+  return new Promise((resolve) => {
+    openDialog({
+      title: 'Turn on automatic posting?',
+      confirmText: 'Turn on automatic',
+      body: [
+        h('p', {}, 'RitPost fills in the post, shows a review countdown, then clicks Share (Instagram) or Post (X) for you. Scheduled posts can then go out while you’re away.'),
+        h(
+          'ul',
+          { class: 'risk' },
+          h('li', {}, 'Instagram’s and X’s terms limit automated activity. Posting your own content at a normal pace is low risk, but repeated identical posts can be flagged.'),
+          h('li', {}, 'You stay in control: every post shows Hold, Cancel and Post now, and Manual mode is always one click away.')
+        ),
+      ],
+      onConfirm: () => {
+        resolve(true);
+        return true;
+      },
+      onCancel: () => resolve(false),
+    });
+  });
+}
+
+/** "Edit before publishing": a final review with the post preview and an editable caption. */
+function socConfirmStart() {
+  if (socActive()) return toast(`A ${platLabel(soc.run.platform)} post is still open. Finish or stop it first.`, true);
+  let plan = socPlan();
+  if (plan.error) return toast(plan.error, true);
+  const s = soc.settings;
+  const what = s.platform === 'x' ? 'Post' : s.kind === 'story' ? 'Add to your story' : 'Share';
+  const previewBox = h('div', { class: 'soc-review-preview' });
+  const counter = h('span', { class: 'muted' });
+  const errLine = h('p', { class: 'field-error' });
+  const ta = h('textarea', { class: 'soc-review-text', rows: 5, placeholder: s.platform === 'x' ? 'What’s happening?' : 'Write a caption…' });
+  ta.value = plan.caption;
+  const emoji = h('button', { type: 'button', class: 'tb emoji-btn', title: 'Add an emoji' }, '😊');
+  window.RitEmoji?.attach(emoji, { target: ta, align: 'left' });
+  const showCaption = !(s.platform === 'instagram' && s.kind === 'story');
+  const refresh = () => {
+    plan = socPlan();
+    setChildren(previewBox, socPreviewNode(plan, { large: true }));
+    counter.textContent = s.platform === 'x' ? `${xLength(ta.value)} / ${s.premium ? X_PREMIUM_LIMIT : X_LIMIT}${plan.thread ? ` · thread of ${plan.thread.length}` : ''}` : `${ta.value.length} / ${IG_LIMIT}`;
+    errLine.textContent = plan.error;
+    errLine.hidden = !plan.error;
+    d.setConfirm(!plan.error);
+  };
+  ta.addEventListener('input', () => {
+    if (ta.value !== socCaption()) {
+      socDetach();
+      soc.settings.captions[s.platform] = ta.value;
+      socSave();
+      renderSocCaption();
+    }
+    refresh();
+  });
+  const d = openDialog({
+    title: `${s.mode === 'auto' ? 'Auto-post' : 'Post'} to ${platLabel(s.platform)}${s.platform === 'instagram' ? ` · ${plan.label}` : plan.thread ? ` · ${plan.label}` : ''}`,
+    confirmText: s.mode === 'auto' ? 'Start' : 'Open and fill in',
+    body: h(
+      'div',
+      { class: 'stack' },
+      previewBox,
+      showCaption ? h('div', { class: 'soc-review-edit' }, h('div', { class: 'field-head' }, h('label', {}, s.platform === 'x' ? 'Post text (edit before publishing)' : 'Caption (edit before publishing)'), h('span', {}, emoji, ' ', counter)), ta) : null,
+      errLine,
+      h(
+        'div',
+        { class: 'soc-review-actions' },
+        h('button', { type: 'button', class: 'link', onclick: () => (closeDialog(), openStudio(plan.files[0]?.id)) }, '✎ Edit photos in Studio'),
+        h('button', { type: 'button', class: 'link', onclick: () => (closeDialog(), openScheduleDialog({ platform: s.platform })) }, '🕒 Schedule instead')
+      ),
+      h(
+        'p',
+        { class: 'muted' },
+        s.mode === 'auto'
+          ? `RitPost opens ${platLabel(s.platform)}, fills everything in and clicks ${what} after a ${s.reviewSec} s countdown you can hold or cancel.`
+          : `RitPost opens ${platLabel(s.platform)} and fills everything in. You check it there and click ${what}.`,
+        s.platform === 'instagram' && s.kind === 'story' ? ' A small phone-sized Instagram window opens for the Story.' : ''
+      ),
+      plan.notes.length ? h('p', { class: 'muted' }, plan.notes.join(' ')) : null
+    ),
+    onConfirm: () => {
+      const p = socPlan();
+      if (p.error) return false;
+      socStart(p);
+      return true;
+    },
+  });
+  refresh();
+}
+
+async function socStart(plan) {
+  const s = soc.settings;
+  const run = {
+    platform: plan.platform,
+    kind: plan.kind,
+    caption: plan.platform === 'instagram' && plan.kind === 'story' ? '' : plan.caption,
+    thread: plan.thread,
+    attachmentIds: plan.files.map((a) => a.id),
+    isVideo: !!plan.files[0] && isVideo(plan.files[0]),
+    crop: s.crop,
+    mode: s.mode,
+    reviewSec: s.reviewSec,
+  };
+  $('socStartBtn').disabled = true;
+  const res = await bg('BG_SOCIAL_START', { run });
+  if (res?.ok) toast(s.mode === 'auto' ? `Opening ${platLabel(plan.platform)}: RitPost posts after the review countdown.` : `Opening ${platLabel(plan.platform)}: check the post there and click ${plan.platform === 'x' ? 'Post' : 'Share'}.`);
+  else {
+    toast(res?.error || `Couldn’t open ${platLabel(plan.platform)}.`, true);
+    renderSocStart();
+  }
+}
+
+function socBind() {
+  document.querySelectorAll('#socPlatSeg button').forEach((b) =>
+    b.addEventListener('click', () => {
+      const p = b.dataset.plat;
+      if (p === soc.settings.platform) return;
+      const from = soc.settings.platform;
+      soc.settings.platform = p;
+      if (!soc.settings.same && !soc.settings.captions[p]) soc.settings.captions[p] = soc.settings.captions[from] || socText(state.message);
+      socSave();
+      renderSoc();
+    })
+  );
+  document.querySelectorAll('#socKindSeg button').forEach((b) =>
+    b.addEventListener('click', () => {
+      soc.settings.kind = b.dataset.kind;
+      socSave();
+      renderSoc();
+    })
+  );
+  document.querySelectorAll('#socModeSeg button').forEach((b) =>
+    b.addEventListener('click', async () => {
+      const mode = b.dataset.mode;
+      if (mode === soc.settings.mode) return;
+      if (mode === 'auto' && !soc.settings.autoAck) {
+        if (!(await confirmSocAuto())) return;
+        soc.settings.autoAck = true;
+      }
+      soc.settings.mode = mode;
+      socSave();
+      renderSocMode();
+      toast(mode === 'auto' ? 'Automatic: RitPost posts after a review countdown' : 'Manual: you click Share / Post');
+    })
+  );
+  $('socReview').addEventListener('change', (e) => {
+    soc.settings.reviewSec = Math.min(120, Math.max(5, Math.round(Number(e.target.value) || 15)));
+    socSave();
+    renderSocMode();
+  });
+  $('socSame').addEventListener('change', (e) => {
+    if (e.target.checked) soc.settings.same = true;
+    else socDetach();
+    socSave();
+    renderSoc();
+  });
+  $('socCaption').addEventListener('input', (e) => {
+    socDetach();
+    soc.settings.captions[soc.settings.platform] = e.target.value;
+    $('socSame').checked = false;
+    socSave();
+    renderSocCaption();
+    renderSocStart();
+  });
+  $('socCrop').addEventListener('change', (e) => {
+    soc.settings.crop = e.target.value;
+    socSave();
+    if (soc.preview) renderSocPreview();
+  });
+  $('socThread').addEventListener('change', (e) => {
+    soc.settings.thread = e.target.checked;
+    socSave();
+    renderSoc();
+  });
+  $('socPremium').addEventListener('change', (e) => {
+    soc.settings.premium = e.target.checked;
+    socSave();
+    renderSoc();
+  });
+  $('socPreviewToggle').addEventListener('click', () => {
+    soc.preview = !soc.preview;
+    renderSocPreview();
+  });
+  window.RitEmoji?.attach($('socEmojiBtn'), { target: $('socCaption'), align: 'left' });
+  $('socTagsBtn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    const menu = $('socTagsMenu');
+    if (menu.hidden) renderSocTagsMenu();
+    $('tplMenu').hidden = true;
+    menu.hidden = !menu.hidden;
+  });
+  $('socAddMedia').addEventListener('click', () => $('attachInput').click());
+  $('socStudio').addEventListener('click', () => openStudio(socPlan().files.find((a) => a.type.startsWith('image/'))?.id));
+  $('socStartBtn').addEventListener('click', socConfirmStart);
+  $('socRunFocus').addEventListener('click', () => bg('BG_SOCIAL_OPEN', { platform: soc.run?.platform }));
+  $('socRunStop').addEventListener('click', async () => {
+    await bg('BG_SOCIAL_STOP');
+    toast('Stopped');
+  });
+  $('message').addEventListener('input', () => soc.settings.same && (renderSocCaption(), renderSocMedia(), renderSocStart()));
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local') return;
+    if (changes.socialRun) {
+      soc.run = changes.socialRun.newValue || null;
+      renderSocRun();
+    }
+    if (changes.attachments || changes.message) {
+      renderSocMedia();
+      renderSocCaption();
+      renderSocStart();
+    }
+  });
+  // Keep "2 min ago" fresh.
+  setInterval(() => !document.hidden && soc.run && renderSocRun(), 30000);
+}
+
 // ─────────────── Scheduled posts ───────────────
 const RS = window.RitSchedule;
 /** replaceChildren, skipping empty parts (replaceChildren would print "null"). */
@@ -2263,6 +2907,18 @@ const schedTitle = (j) =>
 /** What would be scheduled on a platform from the current Compose content and selection. */
 function schedSnapshot(platform, keepPreview) {
   const message = state.message.trim();
+  if (isSocialPlat(platform)) {
+    const p = socPlan(platform, platform === 'x' ? 'post' : soc.settings.kind);
+    if (p.error) return { error: p.error };
+    return {
+      platform,
+      message: p.thread ? p.thread.join('\n\n') : p.caption,
+      files: p.files,
+      names: [p.label],
+      targetsLabel: p.targetsLabel,
+      social: { kind: p.kind, caption: p.kind === 'story' ? '' : p.caption, thread: p.thread, crop: soc.settings.crop, reviewSec: soc.settings.reviewSec, isVideo: !!p.files[0] && isVideo(p.files[0]) },
+    };
+  }
   if (platform === 'whatsapp') {
     const groups = state.groups.filter((g) => state.selected.has(g.id));
     if (!groups.length) return { error: 'Select WhatsApp groups in the Groups tab first.' };
@@ -2304,7 +2960,9 @@ async function schedKeepFiles(files) {
   const ids = [];
   for (const a of files) {
     const id = `sf${uid()}`;
-    schedFiles[id] = { ...a, id };
+    // The edited photo is what gets posted; its original and edit recipe stay with Compose.
+    const { original, edit, originalName, originalType, ...file } = a;
+    schedFiles[id] = { ...file, id };
     ids.push(id);
   }
   await chrome.storage.local.set({ schedFiles });
@@ -2325,6 +2983,12 @@ async function schedDropUnused() {
 }
 
 function schedModeHint(platform, mode) {
+  if (isSocialPlat(platform)) {
+    const what = platform === 'x' ? 'Post' : 'Share';
+    return mode === 'auto'
+      ? `Automatic: RitPost opens ${platLabel(platform)}, fills in the post and clicks ${what} after a ${soc.settings.reviewSec} s review countdown, so it can go out while you’re away.`
+      : `Manual: RitPost opens ${platLabel(platform)} and fills in the post at that time; you check it and click ${what}.`;
+  }
   if (platform === 'facebook')
     return mode === 'auto'
       ? `Automatic: RitPost switches profile, fills in each post, gives you ${fb.settings.reviewSec} s to check it and clicks Next; you click Post. About ${fb.settings.intervalMin}–${Math.round(fb.settings.intervalMin * 1.3)} min between posts, at most ${fb.settings.dailyLimit} a day.`
@@ -2352,7 +3016,8 @@ function openScheduleDialog({ platform = 'whatsapp', job = null } = {}) {
     keepPreview: job?.fb ? job.fb.linkPreview !== false : fb.settings.linkPreview,
     refresh: false,
   };
-  if (!f.mode) f.mode = f.platform === 'facebook' ? fb.settings.mode : state.settings.mode;
+  const defaultMode = (p) => (p === 'facebook' ? fb.settings.mode : isSocialPlat(p) ? soc.settings.mode : state.settings.mode);
+  if (!f.mode) f.mode = defaultMode(f.platform);
 
   const firstRun = () => {
     const [y, m, d] = f.date.split('-').map(Number);
@@ -2375,6 +3040,7 @@ function openScheduleDialog({ platform = 'whatsapp', job = null } = {}) {
   const daysRow = h('div', { class: 'days' });
   const endRow = h('div', {});
   const platSeg = h('div', { class: 'plat-seg' });
+  const whatLabel = h('label', { class: 'sl' }, 'What gets posted');
 
   const dateIn = h('input', { type: 'date', value: f.date, min: dateValue(new Date()), oninput: (e) => ((f.date = e.target.value), update()) });
   const timeIn = h('input', { type: 'time', value: f.time, oninput: (e) => ((f.time = e.target.value), update()) });
@@ -2432,29 +3098,25 @@ function openScheduleDialog({ platform = 'whatsapp', job = null } = {}) {
   const refreshChk = h('input', { type: 'checkbox', onchange: (e) => ((f.refresh = e.target.checked), update()) });
 
   function renderPlatforms() {
-    const wa = schedSnapshot('whatsapp', f.keepPreview);
-    const fbs = schedSnapshot('facebook', f.keepPreview);
     platSeg.replaceChildren(
-      ...[
-        ['whatsapp', 'WhatsApp', wa],
-        ['facebook', 'Facebook', fbs],
-      ].map(([p, name, s]) =>
-        h(
+      ...['whatsapp', 'facebook', 'instagram', 'x'].map((p) => {
+        const s = schedSnapshot(p, f.keepPreview);
+        return h(
           'button',
           {
             type: 'button',
             class: f.platform === p ? 'on' : '',
             onclick: () => {
               f.platform = p;
-              f.mode = p === 'facebook' ? fb.settings.mode : state.settings.mode;
+              f.mode = defaultMode(p);
               modeSel.value = f.mode;
               update();
             },
           },
-          h('b', {}, name),
-          h('small', {}, s.error ? 'Nothing selected' : s.targetsLabel)
-        )
-      )
+          h('b', {}, platLabel(p)),
+          h('small', {}, s.error ? (isSocialPlat(p) ? 'Not ready yet' : 'Nothing selected') : s.targetsLabel)
+        );
+      })
     );
   }
 
@@ -2462,7 +3124,9 @@ function openScheduleDialog({ platform = 'whatsapp', job = null } = {}) {
     if (editing && !f.refresh) {
       setChildren(whatBox, 
         h('div', { class: 'msg' }, job.message || '(no text)'),
-        h('div', {}, `To: ${job.targetsLabel}${job.names?.length ? ` (${job.names.slice(0, 3).join(', ')}${job.names.length > 3 ? ` +${job.names.length - 3} more` : ''})` : ''}`),
+        isSocialPlat(job.platform)
+          ? h('div', {}, `On: ${job.targetsLabel}`)
+          : h('div', {}, `To: ${job.targetsLabel}${job.names?.length ? ` (${job.names.slice(0, 3).join(', ')}${job.names.length > 3 ? ` +${job.names.length - 3} more` : ''})` : ''}`),
         job.fileNames?.length ? h('div', {}, `📎 ${job.fileNames.join(', ')}`) : null
       );
       return true;
@@ -2474,7 +3138,9 @@ function openScheduleDialog({ platform = 'whatsapp', job = null } = {}) {
     }
     setChildren(whatBox, 
       h('div', { class: 'msg' }, s.message || '(no text)'),
-      h('div', {}, `To: ${s.targetsLabel} (${s.names.slice(0, 3).join(', ')}${s.names.length > 3 ? ` +${s.names.length - 3} more` : ''})`),
+      isSocialPlat(f.platform)
+        ? h('div', {}, `On: ${s.targetsLabel} · ${f.mode === 'auto' ? 'posted by RitPost' : 'you click to post'}`)
+        : h('div', {}, `To: ${s.targetsLabel} (${s.names.slice(0, 3).join(', ')}${s.names.length > 3 ? ` +${s.names.length - 3} more` : ''})`),
       s.files.length ? h('div', {}, `📎 ${s.files.map((a) => a.name).join(', ')}`) : null,
       s.leftOut ? h('div', { class: 'muted' }, `${plural(s.leftOut, 'file')} left out on Facebook${s.conflict && f.keepPreview ? ' (for the link preview)' : ' (documents)'}.`) : null
     );
@@ -2484,8 +3150,9 @@ function openScheduleDialog({ platform = 'whatsapp', job = null } = {}) {
   function update() {
     if (!editing) renderPlatforms();
     const okWhat = renderWhat();
+    whatLabel.textContent = editing ? 'What gets posted' : `What gets posted (from ${isSocialPlat(f.platform) ? 'the IG & X tab' : 'Compose'})`;
     modeHint.textContent = schedModeHint(f.platform, f.mode);
-    modeHint.classList.toggle('warn-hint', f.platform === 'whatsapp' && f.mode === 'auto');
+    modeHint.classList.toggle('warn-hint', (f.platform === 'whatsapp' || isSocialPlat(f.platform)) && f.mode === 'auto');
     daysRow.hidden = f.repeat !== 'weekly';
     daysRow.replaceChildren(
       ...[1, 2, 3, 4, 5, 6, 0].map((d) =>
@@ -2537,7 +3204,7 @@ function openScheduleDialog({ platform = 'whatsapp', job = null } = {}) {
     'div',
     { class: 'sform' },
     editing ? null : h('div', {}, h('label', { class: 'sl' }, 'Post to'), platSeg),
-    h('div', {}, h('label', { class: 'sl' }, editing ? 'What gets posted' : 'What gets posted (from Compose)'), whatBox),
+    h('div', {}, whatLabel, whatBox),
     editing ? h('label', { class: 'opt-check' }, refreshChk, h('span', {}, 'Use the current Compose message, files and selection instead')) : null,
     h('div', {}, h('label', { class: 'sl' }, 'When'), quick, h('div', { class: 'row2' }, dateIn, timeIn)),
     h('div', {}, h('label', { class: 'sl' }, 'Repeat'), repeatSel, daysRow),
@@ -2570,7 +3237,9 @@ function openScheduleDialog({ platform = 'whatsapp', job = null } = {}) {
 async function saveScheduled({ f, job, snap, next }) {
   const repeat = { type: f.repeat, time: f.time, days: f.repeat === 'weekly' ? [...f.days].sort() : [] };
   const settingsFor = (platform, mode, s) =>
-    platform === 'whatsapp'
+    isSocialPlat(platform)
+      ? { wa: null, fb: null, social: { ...s.social } }
+      : platform === 'whatsapp'
       ? { wa: { items: s.wa.items, settings: { ...state.settings, mode } }, fb: null }
       : {
           wa: null,
@@ -2630,7 +3299,8 @@ async function saveScheduled({ f, job, snap, next }) {
       fileNames: kept.names,
       ...settingsFor(cur.platform, f.mode, snap),
     });
-  } else if (cur.platform === 'whatsapp') cur.wa = { ...cur.wa, settings: { ...cur.wa.settings, mode: f.mode } };
+  } else if (isSocialPlat(cur.platform)) cur.social = { ...cur.social };
+  else if (cur.platform === 'whatsapp') cur.wa = { ...cur.wa, settings: { ...cur.wa.settings, mode: f.mode } };
   else cur.fb = { ...cur.fb, mode: f.mode };
   sched.jobs[i] = cur;
   await schedSave();
@@ -2683,7 +3353,7 @@ function schedRunNow(id) {
   openDialog({
     title: 'Post now?',
     confirmText: 'Post now',
-    body: h('p', {}, `RitPost starts “${schedTitle(j)}” on ${j.platform === 'facebook' ? 'Facebook' : 'WhatsApp'} now (${j.targetsLabel}). ${j.repeat?.type === 'once' ? 'This uses up the schedule.' : 'The repeat schedule stays as it is.'}`),
+    body: h('p', {}, `RitPost starts “${schedTitle(j)}” on ${platLabel(j.platform)} now (${j.targetsLabel}). ${j.repeat?.type === 'once' ? 'This uses up the schedule.' : 'The repeat schedule stays as it is.'}`),
     onConfirm: () => {
       bg('BG_SCHED_RUN', { id }).then((res) => (res?.ok ? toast('Started.') : toast(res?.error || 'Couldn’t start it.', true)));
       return true;
@@ -2706,7 +3376,7 @@ function renderSched() {
   const rank = { active: 0, paused: 1, done: 2 };
   const jobs = [...sched.jobs].sort((a, b) => rank[a.status] - rank[b.status] || (a.next || Infinity) - (b.next || Infinity) || (b.lastRunAt || 0) - (a.lastRunAt || 0));
   const cards = jobs.map((j) => {
-    const plat = j.platform === 'facebook' ? 'Facebook' : 'WhatsApp';
+    const plat = platLabel(j.platform);
     const chip =
       j.status === 'paused'
         ? h('span', { class: 'chip' }, 'Paused')
@@ -2760,7 +3430,7 @@ function renderSched() {
         'li',
         {},
         h('span', { class: `ic ${e.outcome}` }, HIST_ICON[e.outcome] || '•'),
-        h('span', { class: 'txt' }, h('b', {}, `${HIST_TEXT[e.outcome] || e.outcome}: `), `${e.title} (${e.platform === 'facebook' ? 'Facebook' : 'WhatsApp'})`, e.detail ? h('span', { class: 'muted' }, ` — ${e.detail}`) : null),
+        h('span', { class: 'txt' }, h('b', {}, `${HIST_TEXT[e.outcome] || e.outcome}: `), `${e.title} (${platLabel(e.platform)})`, e.detail ? h('span', { class: 'muted' }, ` — ${e.detail}`) : null),
         h('span', { class: 'ago' }, RS.relative(e.at))
       )
     )
@@ -2768,7 +3438,10 @@ function renderSched() {
 }
 
 function schedBind() {
-  $('schedBtn').addEventListener('click', () => openScheduleDialog({ platform: document.body.dataset.tab === 'facebook' ? 'facebook' : 'whatsapp' }));
+  $('schedBtn').addEventListener('click', () => {
+    const tab = document.body.dataset.tab;
+    openScheduleDialog({ platform: tab === 'facebook' ? 'facebook' : tab === 'social' ? soc.settings.platform : 'whatsapp' });
+  });
   $('schedNewBtn').addEventListener('click', () => openScheduleDialog({ platform: 'whatsapp' }));
   $('schedHistClear').addEventListener('click', () => {
     sched.history = [];
@@ -2811,6 +3484,8 @@ function bind() {
     ta.focus();
   });
   $('previewToggle').addEventListener('click', () => togglePreview());
+  window.RitEmoji?.attach($('emojiBtn'), { target: ta });
+  $('studioBtn').addEventListener('click', () => openStudio(state.attachments.find((a) => a.type.startsWith('image/'))?.id));
 
   $('tplBtn').addEventListener('click', (e) => {
     e.stopPropagation();
@@ -3031,6 +3706,16 @@ function bind() {
 
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === 'local' && GROUP_KEYS.some((k) => changes[k])) syncFromStorageSoon();
+    if (area === 'local' && changes.attachments) {
+      // Edited, reordered or added in RitPost Studio.
+      const list = (changes.attachments.newValue || []).filter((a) => a?.id && a?.data);
+      const sig = (l) => l.map((a) => `${a.id}:${a.size}`).join('|');
+      if (sig(list) !== sig(state.attachments)) {
+        state.attachments = list;
+        renderAttachments();
+        renderCounts();
+      }
+    }
     if (area === 'local' && changes.settings?.newValue) {
       // e.g. mode switched from the panel inside WhatsApp Web
       state.settings = { ...DEFAULT_SETTINGS, ...changes.settings.newValue };
@@ -3063,8 +3748,10 @@ async function refreshStatus() {
   await load();
   await fbLoad();
   await schedLoad();
+  await socLoad();
   bind();
   fbBind();
+  socBind();
   schedBind();
   renderAll();
   renderSched();
@@ -3072,14 +3759,23 @@ async function refreshStatus() {
 
   // Opened while on Facebook: show the Facebook tab. Otherwise bring WhatsApp Web up beside the panel.
   let onFacebook = false;
+  let onSocial = null;
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     onFacebook = /^https:\/\/([a-z0-9-]+\.)*facebook\.com\//i.test(tab?.url || '');
+    onSocial = /^https:\/\/(www\.)?instagram\.com\//i.test(tab?.url || '') ? 'instagram' : /^https:\/\/(x|twitter)\.com\//i.test(tab?.url || '') ? 'x' : null;
   } catch {
     /* no tab info */
   }
   if (onFacebook) switchTab('facebook');
-  else {
+  else if (onSocial) {
+    if (soc.settings.platform !== onSocial) {
+      soc.settings.platform = onSocial;
+      socSave();
+      renderSoc();
+    }
+    switchTab('social');
+  } else {
     const s = await bg('BG_STATUS');
     if (!s?.open || !s?.active) await bg('BG_OPEN');
   }

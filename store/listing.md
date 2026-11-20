@@ -6,14 +6,14 @@ Copy each section into the matching field in the Developer Dashboard.
 
 ## Item name (comes from `manifest.json`)
 
-**RitPost – Group Posting for WhatsApp Web & Facebook** (already set in `manifest.json`; the dashboard fills it in automatically)
+**RitPost – Post to WhatsApp, Facebook, Instagram & X** (already set in `manifest.json`; the dashboard fills it in automatically)
 
-> The name ends with "…for WhatsApp Web & Facebook", which is the accepted pattern for tools that work with another brand, so it isn't mistaken for an official WhatsApp product. Short name (toolbar): **RitPost**.
+> "RitPost – Post to …" names the services it works with without claiming to be one of them, so it isn't mistaken for an official WhatsApp, Meta or X product. Short name (toolbar): **RitPost**.
 
 ## Summary (max 132 characters)
 
 ```
-Write once, attach photos or videos, and post to your WhatsApp Web groups and Facebook groups or Pages, one click at a time.
+Write once, edit your photos, and post to WhatsApp groups, Facebook groups and Pages, Instagram and X, now or on a schedule.
 ```
 
 ## Category
@@ -54,7 +54,10 @@ FEATURES
 • Optional Automatic mode with an adjustable interval (5–600 s) and a visible countdown you can hold or cancel
 • Session summary with one-click "Retry unsent"
 • Post the same message to Facebook groups and the Pages you manage, manually or automatically with safe pacing
-• Schedule posts for later or on repeat (daily, weekdays or chosen days) for WhatsApp and Facebook, with reminders, Post now, Pause and Edit
+• Post to Instagram (photos, carousels, Reels and Stories) and X (posts with photos or video, and threads), with a preview and a final edit before publishing
+• RitPost Studio photo editor: crop for posts and Stories, fit with a blurred background, 15 filters, adjustments, text, emoji stickers, labels and drawing
+• Emoji picker everywhere you write, saved hashtag sets and live character counters
+• Schedule posts for later or on repeat (daily, weekdays or chosen days) for WhatsApp, Facebook, Instagram and X, with reminders, Post now, Pause and Edit
 • Backup and restore of groups, lists, templates and Facebook groups
 • Light and dark mode
 
@@ -65,7 +68,8 @@ PLEASE NOTE
 • Manual mode, where you press Enter for each message, is the default.
 • Facebook's terms don't allow automated posting. Automatic Facebook posting is optional; even with long intervals it can lead to posts being held or your account being limited. Manual is the default.
 • WhatsApp's terms don't allow automated or bulk messaging. Automatic mode is optional, and using it can lead to WhatsApp restricting your account. Only post to groups that expect your messages.
-• RitPost is an independent tool. It is not affiliated with, endorsed by or sponsored by WhatsApp, Facebook or Meta. WhatsApp and Facebook are trademarks of their respective owners.
+• Instagram and X limit automated activity. Automatic posting there is optional and always shows a review countdown first; Manual (you click Share/Post) is the default.
+• RitPost is an independent tool. It is not affiliated with, endorsed by or sponsored by WhatsApp, Facebook, Instagram, Meta or X Corp. WhatsApp, Facebook, Instagram and X are trademarks of their respective owners.
 ```
 
 ## Graphic assets

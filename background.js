@@ -223,6 +223,109 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
   }
 });
 
+// ─────────────── Instagram and X ───────────────
+// One post at a time ("socialRun"); content/social.js does the work in the Instagram or X tab.
+const IG_URL = 'https://www.instagram.com/';
+const IG_MATCH = ['https://www.instagram.com/*', 'https://instagram.com/*'];
+const X_COMPOSE = 'https://x.com/compose/post';
+const X_MATCH = ['https://x.com/*', 'https://twitter.com/*'];
+const STORY_RULE = 7101;
+const MOBILE_UA = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36';
+const SOCIAL_STALE_MS = 2 * 60 * 60 * 1000;
+
+const socialName = (p) => (p === 'x' ? 'X' : 'Instagram');
+const getSocialRun = async () => (await chrome.storage.local.get('socialRun')).socialRun || null;
+const socialActive = (r) => r && r.status === 'running' && Date.now() - (r.startedAt || 0) < SOCIAL_STALE_MS;
+
+async function findSocialTab(platform, preferWindowId) {
+  const tabs = await chrome.tabs.query({ url: platform === 'x' ? X_MATCH : IG_MATCH, windowType: 'normal' }).catch(() => []);
+  return tabs.find((t) => t.active && t.windowId === preferWindowId) || tabs.find((t) => t.windowId === preferWindowId) || tabs[0] || null;
+}
+
+/** Instagram only offers Stories in its phone layout: the Story window asks for it. */
+async function setStoryRule(tabId) {
+  if (!chrome.declarativeNetRequest) return;
+  const set = (header, value) => ({ header, operation: 'set', value });
+  await chrome.declarativeNetRequest.updateSessionRules({
+    removeRuleIds: [STORY_RULE],
+    addRules:
+      tabId === null
+        ? []
+        : [
+            {
+              id: STORY_RULE,
+              priority: 1,
+              action: { type: 'modifyHeaders', requestHeaders: [set('user-agent', MOBILE_UA), set('sec-ch-ua-mobile', '?1'), set('sec-ch-ua-platform', '"Android"')] },
+              condition: {
+                tabIds: [tabId],
+                requestDomains: ['instagram.com', 'cdninstagram.com'],
+                resourceTypes: ['main_frame', 'sub_frame', 'xmlhttprequest', 'script', 'stylesheet', 'image', 'media', 'font', 'websocket', 'other'],
+              },
+            },
+          ],
+  });
+}
+
+async function socialStart(run, windowId) {
+  if (!run || !['instagram', 'x'].includes(run.platform)) return { ok: false, error: 'Unknown platform.' };
+  const files = run.attachmentIds || [];
+  if (run.platform === 'instagram' && !files.length) return { ok: false, error: 'Instagram needs at least one photo or video.' };
+  if (run.platform === 'x' && !files.length && !(run.caption || run.thread?.some(Boolean))) return { ok: false, error: 'Write something or attach a photo first.' };
+  const cur = await getSocialRun();
+  if (socialActive(cur)) return { ok: false, error: `Another ${socialName(cur.platform)} post is still open. Finish or stop it first.` };
+
+  const fresh = { ...run, id: Date.now().toString(36), status: 'running', step: 'start', startedAt: Date.now(), error: '', errorShown: false };
+  if (run.platform === 'instagram' && run.kind === 'story') {
+    const win = await chrome.windows.create({ url: 'about:blank', type: 'popup', width: 430, height: 880, focused: true });
+    const tabId = win.tabs?.[0]?.id;
+    if (tabId === undefined) return { ok: false, error: 'Couldn’t open the Story window.' };
+    await setStoryRule(tabId).catch(() => {});
+    await chrome.storage.local.set({ socialRun: { ...fresh, tabId, windowId: win.id } });
+    await chrome.tabs.update(tabId, { url: `${IG_URL}#ritpost-story` });
+    return { ok: true };
+  }
+  const url = run.platform === 'x' ? X_COMPOSE : IG_URL;
+  let tab = await findSocialTab(run.platform, windowId);
+  if (tab) {
+    await chrome.storage.local.set({ socialRun: { ...fresh, tabId: tab.id } });
+    await chrome.tabs.update(tab.id, { url, active: true });
+  } else {
+    tab = await chrome.tabs.create({ url: 'about:blank', active: true, ...(windowId ? { windowId } : {}) });
+    await chrome.storage.local.set({ socialRun: { ...fresh, tabId: tab.id } });
+    await chrome.tabs.update(tab.id, { url });
+  }
+  await chrome.windows.update(tab.windowId, { focused: true }).catch(() => {});
+  return { ok: true };
+}
+
+async function socialStop() {
+  const r = await getSocialRun();
+  if (r?.status === 'running') await chrome.storage.local.set({ socialRun: { ...r, status: 'stopped', stopReason: 'Stopped by you', finishedAt: Date.now() } });
+  return { ok: true };
+}
+
+async function socialFocus(windowId, platform) {
+  const r = await getSocialRun();
+  let tab = r?.tabId ? await chrome.tabs.get(r.tabId).catch(() => null) : null;
+  const p = platform || r?.platform || 'instagram';
+  tab = tab || (await findSocialTab(p, windowId));
+  if (tab) await focusTab(tab);
+  else await chrome.tabs.create({ url: p === 'x' ? 'https://x.com/home' : IG_URL, active: true, ...(windowId ? { windowId } : {}) });
+  return { ok: true };
+}
+
+chrome.tabs.onRemoved.addListener(async (tabId) => {
+  const r = await getSocialRun();
+  if (r?.tabId !== tabId) return;
+  if (r.kind === 'story') setStoryRule(null).catch(() => {});
+  if (r.status === 'running') await chrome.storage.local.set({ socialRun: { ...r, status: 'stopped', stopReason: 'The tab was closed', finishedAt: Date.now() } });
+});
+chrome.storage.onChanged.addListener((changes, area) => {
+  const r = area === 'local' && changes.socialRun?.newValue;
+  // A finished Story run no longer needs the phone layout.
+  if (r && r.kind === 'story' && r.status !== 'running') setStoryRule(null).catch(() => {});
+});
+
 // ─────────────── Scheduled posts ───────────────
 // The side panel saves schedules in chrome.storage ("schedules"); this worker turns them into
 // chrome.alarms, starts the WhatsApp or Facebook run when one fires, and moves repeating ones on.
@@ -236,7 +339,8 @@ const BUSY_GIVE_UP_MS = 2 * 60 * 60 * 1000;
 
 const getSchedules = async () => (await chrome.storage.local.get('schedules')).schedules || [];
 const jobTitle = (j) => j.label || String(j.message || '').split('\n')[0].slice(0, 40) || (j.fileNames?.length ? `${j.fileNames.length} file(s)` : 'Scheduled post');
-const platformName = (j) => (j.platform === 'facebook' ? 'Facebook' : 'WhatsApp');
+const platformName = (j) => ({ facebook: 'Facebook', instagram: 'Instagram', x: 'X' })[j.platform] || 'WhatsApp';
+const isSocial = (p) => p === 'instagram' || p === 'x';
 
 /** Change one schedule (read–modify–write, so a panel edit made meanwhile isn't lost). */
 async function updateJob(id, fn) {
@@ -271,6 +375,7 @@ chrome.notifications?.onClicked.addListener((nid) => {
   const [, platform] = String(nid).split('|');
   if (platform === 'facebook') fbFocus(null).catch(() => {});
   else if (platform === 'whatsapp') openWhatsApp(null).catch(() => {});
+  else if (isSocial(platform)) socialFocus(null, platform).catch(() => {});
   chrome.notifications.clear(nid).catch(() => {});
 });
 
@@ -298,6 +403,10 @@ async function syncAlarms() {
 
 /** Why a new run can't start on this platform right now (or null). */
 async function platformBusy(platform) {
+  if (isSocial(platform)) {
+    const r = await getSocialRun();
+    return socialActive(r) ? `Another ${socialName(r.platform)} post is still open.` : null;
+  }
   if (platform === 'facebook') {
     const { fbRun } = await chrome.storage.local.get('fbRun');
     return fbRun && (fbRun.status === 'running' || fbRun.status === 'waiting') ? 'Another Facebook posting run is still going.' : null;
@@ -315,6 +424,7 @@ async function targetWindow() {
 
 async function startJob(job) {
   const windowId = await targetWindow();
+  if (isSocial(job.platform)) return socialStart({ ...job.social, platform: job.platform, mode: job.mode, attachmentIds: job.fileIds || [], scheduleId: job.id, scheduleTitle: jobTitle(job) }, windowId);
   if (job.platform === 'facebook') {
     const run = { ...job.fb, attachmentIds: job.fileIds || [], scheduleId: job.id, scheduleTitle: jobTitle(job) };
     return fbStart(run, windowId);
@@ -344,7 +454,7 @@ async function fireJob(id, { manual = false } = {}) {
   if (!manual && (job.status !== 'active' || !job.next)) return { ok: true };
   const now = Date.now();
   const due = job.next || now;
-  const who = `${platformName(job)} · ${job.targetsLabel || ''}`.trim();
+  const who = isSocial(job.platform) ? job.targetsLabel || platformName(job) : `${platformName(job)} · ${job.targetsLabel || ''}`.trim();
 
   if (!manual) {
     const late = now - due;
@@ -381,7 +491,15 @@ async function fireJob(id, { manual = false } = {}) {
   }
   if (res?.ok) {
     await addHistory(job, 'started', `${who}${manual ? ' (run now)' : ''}`);
-    const needsYou = job.platform === 'facebook' ? ' Click Post on each one when RitPost asks.' : job.mode === 'manual' ? ' Press Enter in each group.' : '';
+    const needsYou = isSocial(job.platform)
+      ? job.mode === 'manual'
+        ? ` Check it and click ${job.platform === 'x' ? 'Post' : 'Share'}.`
+        : ' RitPost posts it after a short review countdown.'
+      : job.platform === 'facebook'
+        ? ' Click Post on each one when RitPost asks.'
+        : job.mode === 'manual'
+          ? ' Press Enter in each group.'
+          : '';
     notify(job, `Posting now: ${jobTitle(job)}`, `${who}.${needsYou}`);
   } else {
     await addHistory(job, 'failed', res?.error || 'Couldn’t start.');
@@ -396,8 +514,16 @@ async function fireJob(id, { manual = false } = {}) {
 async function remindJob(id) {
   const job = (await getSchedules()).find((j) => j.id === id);
   if (!job || job.status !== 'active') return;
-  const extra = job.platform === 'facebook' ? ' You’ll click Post on each one.' : job.mode === 'manual' ? ' You’ll press Enter in each group.' : '';
-  notify(job, `In 5 minutes: ${jobTitle(job)}`, `${platformName(job)} · ${job.targetsLabel || ''}. Keep Chrome open.${extra}`);
+  const extra = isSocial(job.platform)
+    ? job.mode === 'manual'
+      ? ` You’ll click ${job.platform === 'x' ? 'Post' : 'Share'}.`
+      : ''
+    : job.platform === 'facebook'
+      ? ' You’ll click Post on each one.'
+      : job.mode === 'manual'
+        ? ' You’ll press Enter in each group.'
+        : '';
+  notify(job, `In 5 minutes: ${jobTitle(job)}`, `${isSocial(job.platform) ? job.targetsLabel || platformName(job) : `${platformName(job)} · ${job.targetsLabel || ''}`}. Keep Chrome open.${extra}`);
 }
 
 chrome.alarms?.onAlarm.addListener((a) => {
@@ -453,6 +579,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     BG_FB_OPEN: () => fbFocus(windowId),
     BG_FB_TABID: async () => ({ ok: true, tabId: sender.tab?.id ?? null }),
     BG_SCHED_RUN: () => fireJob(p.id, { manual: true }),
+    BG_SOCIAL_START: () => socialStart(p.run, windowId),
+    BG_SOCIAL_STOP: () => socialStop(),
+    BG_SOCIAL_OPEN: () => socialFocus(windowId, p.platform),
+    BG_SOCIAL_TABID: async () => ({ ok: true, tabId: sender.tab?.id ?? null }),
   };
   const handler = handlers[msg?.type];
   if (!handler) return false;
@@ -475,4 +605,7 @@ chrome.runtime.onInstalled.addListener(async ({ reason }) => {
   const fbTabs = await chrome.tabs.query({ url: FB_MATCH }).catch(() => []);
   for (const t of fbTabs)
     if (t.status === 'complete') chrome.scripting.executeScript({ target: { tabId: t.id }, files: ['content/facebook.js'] }).catch(() => {});
+  const socialTabs = await chrome.tabs.query({ url: [...IG_MATCH, ...X_MATCH] }).catch(() => []);
+  for (const t of socialTabs)
+    if (t.status === 'complete') chrome.scripting.executeScript({ target: { tabId: t.id }, files: ['content/social.js'] }).catch(() => {});
 });
