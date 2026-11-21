@@ -72,6 +72,7 @@ export function createApp({ adminHtml = '<!doctype html><title>RitPost AI</title
     const { results } = await env.DB.prepare('SELECT key, value FROM settings').all();
     const s = { ...DEFAULT_SETTINGS };
     for (const r of results || []) {
+      if (!(r.key in DEFAULT_SETTINGS)) continue; // e.g. admin_hash stays private
       try {
         s[r.key] = JSON.parse(r.value);
       } catch {
@@ -265,13 +266,22 @@ export function createApp({ adminHtml = '<!doctype html><title>RitPost AI</title
 
   // ─────────────── admin API ───────────────
   async function adminAuth(req, env) {
-    // Stray spaces / line breaks from pasting into the secret prompt don't count.
+    // Two ways to hold the password: a salted hash in the database (set by
+    // worker\set-admin-password.ps1, preferred) or the ADMIN_TOKEN secret.
+    // Stray spaces / line breaks don't count.
     const secret = String(env.ADMIN_TOKEN || '').trim();
-    if (!secret) return json({ ok: false, error: 'Set the ADMIN_TOKEN secret first (see worker/README.md).' }, 500);
+    let stored = '';
+    try {
+      stored = JSON.parse((await env.DB.prepare("SELECT value FROM settings WHERE key = 'admin_hash'").first())?.value || '""');
+    } catch {
+      stored = '';
+    }
+    const m = /^sha256:([0-9a-f]{16,64}):([0-9a-f]{64})$/.exec(String(stored));
+    if (!secret && !m) return json({ ok: false, error: 'No admin password is set yet. Run worker\\set-admin-password.ps1 (see worker/README.md).' }, 500);
     const ip = await ipHash(req, env);
     const day = today();
     // The lock is tied to the current password, so setting a new one unlocks you.
-    const failKey = `adminfail:${ip}:${(await sha(secret)).slice(0, 8)}`;
+    const failKey = `adminfail:${ip}:${(await sha(`${secret}|${stored}`)).slice(0, 8)}`;
     if ((await count(env, day, failKey)) >= 20) return json({ ok: false, error: 'Too many wrong passwords today. Set a new admin password (worker\\set-admin-password.ps1) or try again tomorrow.' }, 429);
     let token = (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
     try {
@@ -280,7 +290,9 @@ export function createApp({ adminHtml = '<!doctype html><title>RitPost AI</title
       /* sent as-is */
     }
     token = token.trim();
-    if (!safeEqual(token, secret)) {
+    const okHash = m && token ? safeEqual(await sha(m[1] + token), m[2]) : false;
+    const okSecret = secret ? safeEqual(token, secret) : false;
+    if (!okHash && !okSecret) {
       await bump(env, day, failKey).run();
       return json({ ok: false, error: 'Wrong admin password.' }, 401);
     }

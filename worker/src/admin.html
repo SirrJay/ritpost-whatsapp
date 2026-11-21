@@ -95,7 +95,10 @@ code,.mono{font-family:ui-monospace,Consolas,monospace;font-size:12.5px}
 <section id="loginView" class="login card" hidden>
   <h1>RitPost AI Admin</h1>
   <p class="muted" style="margin:0">Enter the admin password you set as the <code>ADMIN_TOKEN</code> secret.</p>
-  <label class="f">Admin password<input id="pw" type="password" autocomplete="current-password"></label>
+  <label class="f">Admin password
+    <span style="display:flex;gap:6px"><input id="pw" type="password" autocomplete="off" spellcheck="false"><button type="button" class="btn" id="pwShow">Show</button></span>
+    <small>Type the password you chose in set-admin-password.ps1. If Chrome filled the box in by itself, clear it first.</small>
+  </label>
   <button id="loginBtn" class="btn primary">Sign in</button>
   <p id="loginErr" class="note err" hidden></p>
 </section>
@@ -259,6 +262,7 @@ async function signIn() {
   catch (e) { $('loginErr').textContent = e.message; $('loginErr').hidden = false; $('loginView').hidden = false; }
 }
 $('loginBtn').onclick = signIn;
+$('pwShow').onclick = () => { const i = $('pw'); i.type = i.type === 'password' ? 'text' : 'password'; $('pwShow').textContent = i.type === 'password' ? 'Show' : 'Hide'; i.focus(); };
 $('pw').onkeydown = (e) => e.key === 'Enter' && signIn();
 $('logout').onclick = signOut;
 
