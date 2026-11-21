@@ -282,6 +282,17 @@ input:focus, select:focus { border-color: var(--brand-2); box-shadow: 0 0 0 3px 
 .about ol { margin: 0 0 8px; padding-left: 18px; color: var(--ink-2); }
 .about li { margin-bottom: 3px; }
 .about p { margin: 0; font-size: 12px; }
+.guide > p.muted { margin-bottom: 8px; line-height: 1.45; }
+.guide details { border-top: 1px solid var(--line); padding: 2px 0; }
+.guide summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 6px; font-weight: 700; font-size: 12.5px; color: var(--ink); padding: 7px 0; }
+.guide summary::-webkit-details-marker { display: none; }
+.guide summary::after { content: '›'; margin-left: auto; color: var(--muted); font-size: 15px; transition: transform .15s; }
+.guide details[open] > summary::after { transform: rotate(90deg); }
+.guide ul, .guide ol { margin: 0 0 8px; padding-left: 18px; color: var(--ink-2); font-size: 12px; line-height: 1.45; }
+.guide li { margin-bottom: 4px; }
+.guide code { font-size: 11px; }
+.g-ic { display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 4px; font-size: 10px; color: #fff; font-weight: 800; }
+.g-ic.wa { background: #25d366; } .g-ic.fb { background: #1877f2; } .g-ic.ig { background: linear-gradient(45deg, #f58529, #dd2a7b, #8134af); } .g-ic.x { background: #111; }
 .version { margin: 0; text-align: center; font-size: 11.5px; }
 kbd {
   display: inline-block; padding: 0 6px; border: 1px solid var(--line); border-bottom-width: 2px;
@@ -554,6 +565,7 @@ kbd {
 .fb-intro p { margin: 2px 0 0; }
 .fb-msg { white-space: pre-wrap; word-break: break-word; max-height: 110px; overflow: auto; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--ink-2); }
 .fb-msg.empty-msg { color: var(--muted); font-style: italic; }
+.editor > .fb-msg { max-height: 300px; min-height: 120px; border: 0; border-radius: 0; background: var(--bg); color: var(--ink); font-size: 14px; line-height: 1.45; padding: 10px 12px; }
 .link-note { margin: 6px 0 0; padding: 7px 10px; border-radius: var(--radius); background: var(--brand-soft); color: var(--ink-2); font-size: 12px; }
 .link-choice { display: grid; gap: 6px; margin: 10px 0 4px; }
 .link-choice label { display: flex; gap: 8px; align-items: flex-start; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius); cursor: pointer; font-size: 12.5px; color: var(--ink-2); }
@@ -609,6 +621,7 @@ body[data-tab="facebook"] #lastRun { display: none !important; }
 .menu.left { left: 0; right: auto; }
 textarea.following { color: var(--ink-2); background: var(--surface); }
 #socCount.over { color: var(--danger); font-weight: 700; }
+#fbCharCount { white-space: nowrap; }
 
 .soc-media { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 8px; }
 .soc-media li { position: relative; aspect-ratio: 1; border-radius: 10px; overflow: hidden; background: var(--soft); border: 2px solid transparent; }

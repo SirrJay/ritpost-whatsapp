@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "RitPost – Post to WhatsApp, Facebook, Instagram & X",
   "short_name": "RitPost",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "minimum_chrome_version": "116",
   "description": "Write once and post to WhatsApp groups, Facebook groups and Pages, Instagram and X. Rewrite with AI, edit photos, add emojis and schedule posts.",
   "icons": {

@@ -53,7 +53,7 @@
             <button type="button" class="tb token" id="insertToken" title="Insert the group's name">{group}</button>
             <span class="tb-sep"></span>
             <button type="button" class="tb emoji-btn" id="emojiBtn" title="Add an emoji" aria-label="Add an emoji">😊</button>
-            <button type="button" class="tb ai-btn" id="aiBtn" title="Rewrite with AI (OpenAI)">✨ AI</button>
+            <button type="button" class="tb ai-btn" id="aiBtn" title="Write or rewrite with AI">✨ AI</button>
             <span class="spacer"></span>
             <button type="button" class="tb toggle" id="previewToggle" title="Preview how it will look">
               <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4c4.2 0 7.3 3.4 8 6-.7 2.6-3.8 6-8 6s-7.3-3.4-8-6c.7-2.6 3.8-6 8-6Zm0 1.5c-3.2 0-5.7 2.4-6.4 4.5.7 2.1 3.2 4.5 6.4 4.5s5.7-2.4 6.4-4.5c-.7-2.1-3.2-4.5-6.4-4.5Zm0 1.8a2.7 2.7 0 1 1 0 5.4 2.7 2.7 0 0 1 0-5.4Z"/></svg>
@@ -185,19 +185,41 @@
       <div class="fb-intro">
         <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 1.5a8.5 8.5 0 0 0-1.33 16.9v-5.94H6.51V10h2.16V8.13c0-2.13 1.27-3.31 3.21-3.31.93 0 1.9.17 1.9.17v2.09h-1.07c-1.05 0-1.38.65-1.38 1.33V10h2.35l-.38 2.46h-1.97v5.94A8.5 8.5 0 0 0 10 1.5Z"/></svg>
         <div>
-          <b>Post the same message to Facebook</b>
-          <p class="muted">RitPost opens each group or Page, fills in your message and attaches your photos and videos. In <b>Manual</b> mode you click Post; in <b>Automatic</b> mode RitPost posts after a review countdown, with long pauses and a daily limit.</p>
+          <b>Post to your Facebook groups and Pages</b>
+          <p class="muted">Use your Compose message or write a Facebook post of its own. RitPost opens each group or Page, fills in your post and attaches your photos and videos. In <b>Manual</b> mode you click Post; in <b>Automatic</b> mode RitPost posts after a review countdown, with long pauses and a daily limit.</p>
         </div>
       </div>
 
       <div class="field">
         <div class="field-head">
-          <label>Message</label>
-          <button type="button" class="link" data-goto="compose">Edit in Compose</button>
+          <label for="fbCaption">Facebook post</label>
+          <label class="mini-check" title="Post the Compose message on Facebook"><input type="checkbox" id="fbSame"> Same as Compose</label>
         </div>
-        <div id="fbMsgPreview" class="fb-msg"></div>
+        <div class="editor">
+          <div class="toolbar">
+            <button type="button" class="tb emoji-btn" id="fbEmojiBtn" title="Add an emoji" aria-label="Add an emoji">😊</button>
+            <button type="button" class="tb ai-btn" id="fbAiBtn" title="Write or rewrite this Facebook post with AI">✨ AI</button>
+            <span class="tb-sep"></span>
+            <div class="menu-wrap">
+              <button type="button" class="tb" id="fbTagsBtn" title="Saved hashtag sets"># Hashtags</button>
+              <div id="fbTagsMenu" class="menu left" hidden></div>
+            </div>
+            <button type="button" class="tb" id="fbNameBtn" title="Insert {group}: each group or Page gets its own name here">+ Name</button>
+            <span class="spacer"></span>
+            <button type="button" class="tb toggle" id="fbPreviewToggle" title="See how it will look">
+              <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4c4.2 0 7.3 3.4 8 6-.7 2.6-3.8 6-8 6s-7.3-3.4-8-6c.7-2.6 3.8-6 8-6Zm0 1.5c-3.2 0-5.7 2.4-6.4 4.5.7 2.1 3.2 4.5 6.4 4.5s5.7-2.4 6.4-4.5c-.7-2.1-3.2-4.5-6.4-4.5Zm0 1.8a2.7 2.7 0 1 1 0 5.4 2.7 2.7 0 0 1 0-5.4Z"/></svg>
+              Preview
+            </button>
+          </div>
+          <textarea id="fbCaption" rows="6" placeholder="Write your Facebook post…"></textarea>
+          <div id="fbMsgPreview" class="fb-msg" hidden></div>
+        </div>
+        <div class="field-foot">
+          <span class="hint" id="fbCapHint"></span>
+          <span id="fbCharCount" class="muted">0</span>
+        </div>
         <p id="fbLinkNote" class="link-note" hidden></p>
-        <p class="hint">WhatsApp formatting marks (*bold*, _italic_) are removed for Facebook. Documents are only sent to WhatsApp.</p>
+        <p class="hint">Photos and videos come from Compose. WhatsApp marks (*bold*, _italic_) are removed for Facebook; documents are only sent to WhatsApp.</p>
       </div>
 
       <div class="seg fb-kind" id="fbKindSeg" role="tablist" aria-label="Groups or Pages">
@@ -325,7 +347,7 @@
         <div class="editor">
           <div class="toolbar">
             <button type="button" class="tb emoji-btn" id="socEmojiBtn" title="Add an emoji" aria-label="Add an emoji">😊</button>
-            <button type="button" class="tb ai-btn" id="socAiBtn" title="Rewrite this caption with AI (OpenAI)">✨ AI</button>
+            <button type="button" class="tb ai-btn" id="socAiBtn" title="Write or rewrite this caption with AI">✨ AI</button>
             <span class="tb-sep"></span>
             <div class="menu-wrap">
               <button type="button" class="tb" id="socTagsBtn" title="Saved hashtag sets"># Hashtags</button>
@@ -483,14 +505,113 @@
         <button type="button" id="resetBtn" class="btn danger sm">Reset</button>
       </div>
 
-      <div class="about">
+      <div class="about guide" id="guide">
         <h2>How it works</h2>
-        <ol>
-          <li>RitPost opens each selected group in WhatsApp Web.</li>
-          <li>It fills in your message, ready to go.</li>
-          <li>You press <kbd>Enter</kbd>, and the next group opens automatically.</li>
-        </ol>
-        <p class="muted"><b>Manual</b> mode: you press Enter for every message. <b>Automatic</b> mode: RitPost presses Send after a countdown. WhatsApp’s terms don’t allow automated messaging, so automatic mode can get your account restricted, whatever the interval. Shortcut: <kbd>Ctrl</kbd>+<kbd>Enter</kbd> starts sending.</p>
+        <p class="muted">Write once, post everywhere. RitPost opens WhatsApp Web, Facebook, Instagram and X in this Chrome window, fills in your post for you and moves on to the next group, so you never copy and paste. You stay signed in to your own accounts; RitPost never asks for your passwords.</p>
+
+        <details open>
+          <summary>🚀 Getting started</summary>
+          <ol>
+            <li>Sign in to <b>WhatsApp Web</b>, <b>Facebook</b>, <b>Instagram</b> and/or <b>X</b> in Chrome, as you normally do.</li>
+            <li>Write your message in <b>Compose</b> and attach photos, videos or files.</li>
+            <li>Choose where it goes: WhatsApp groups in Compose, groups and Pages in <b>Facebook</b>, and your account in <b>IG &amp; X</b>.</li>
+            <li>Pick <b>Manual</b> or <b>Automatic</b> and press <b>Start</b>, or click the clock to schedule it for later.</li>
+          </ol>
+        </details>
+
+        <details>
+          <summary>✍️ Compose</summary>
+          <ul>
+            <li>Format like WhatsApp: <b>*bold*</b>, <i>_italic_</i>, ~strike~, ```monospace``` (<kbd>Ctrl</kbd>+<kbd>B</kbd> / <kbd>Ctrl</kbd>+<kbd>I</kbd>).</li>
+            <li><b>{group}</b> is replaced by each group’s or Page’s name, so every post feels personal.</li>
+            <li><b>Templates</b> save messages you send often; <b>Preview</b> shows how it will look.</li>
+            <li>Attach up to 10 photos, videos or documents (16 MB each). <b>Edit photos</b> opens RitPost Studio.</li>
+            <li>Posting a link with photos? RitPost can send the text separately so the link preview shows.</li>
+          </ul>
+        </details>
+
+        <details>
+          <summary><span class="g-ic wa">●</span> WhatsApp groups</summary>
+          <ul>
+            <li><b>Groups → Import groups from WhatsApp Web</b> adds all your groups in one click (names must match WhatsApp exactly).</li>
+            <li>Save groups you post to together as <b>lists</b>, then pick a whole list in Compose.</li>
+            <li>RitPost opens each group and fills in your message and files. <b>Manual:</b> you press <kbd>Enter</kbd> and the next group opens. <b>Automatic:</b> RitPost presses Send after the countdown you choose.</li>
+            <li>Pause, resume or stop at any time from the bar at the bottom. <kbd>Ctrl</kbd>+<kbd>Enter</kbd> starts sending.</li>
+          </ul>
+        </details>
+
+        <details>
+          <summary><span class="g-ic fb">f</span> Facebook groups &amp; Pages</summary>
+          <ul>
+            <li><b>Import my Facebook groups</b> or <b>Pages</b>, or paste a link. Groups are posted as you; for Pages, RitPost switches to the Page’s profile first.</li>
+            <li>The <b>Facebook post</b> box follows your Compose message, or untick <b>Same as Compose</b> to write a different post with emoji, saved hashtags, <b>+ Name</b> and <b>✨ AI</b>.</li>
+            <li><b>Manual:</b> you click Post on each one, and the next opens after a short wait. <b>Automatic:</b> RitPost fills in each post with a review countdown, paces the posts with a pause between them and stops at the daily limit you set.</li>
+          </ul>
+        </details>
+
+        <details>
+          <summary><span class="g-ic ig">◎</span> Instagram &amp; <span class="g-ic x">𝕏</span> X</summary>
+          <ul>
+            <li><b>Instagram:</b> one photo or video makes a post (a single video becomes a Reel), 2–10 make a carousel, and Stories are in beta. Choose the crop.</li>
+            <li><b>X:</b> up to 4 photos or 1 video. Text over 280 characters can become a numbered <b>thread</b>.</li>
+            <li>Captions can follow Compose or be written separately for each platform, with saved hashtag sets and a live preview.</li>
+          </ul>
+        </details>
+
+        <details>
+          <summary>✨ AI writing assistant</summary>
+          <ul>
+            <li>Click <b>✨ AI</b> in Compose, Facebook or IG &amp; X to improve, shorten, lengthen, translate or fix your text, or to write it for another platform.</li>
+            <li>Set the tone, audience, type of post, length, emojis, hashtags, hook and call to action. Save favourite settings as <b>presets</b>.</li>
+            <li><b>All 4 platforms at once</b> writes a WhatsApp, Facebook, Instagram and X version in one go.</li>
+            <li>Describe your brand voice below so every rewrite sounds like you. Always check names, dates and prices before posting.</li>
+          </ul>
+        </details>
+
+        <details>
+          <summary>🎨 RitPost Studio</summary>
+          <ul>
+            <li>Crop (including Instagram and Story shapes), filters, light and colour, text, stickers and drawing, all on your computer.</li>
+            <li>Your original is kept, so you can reopen and change an edit at any time.</li>
+          </ul>
+        </details>
+
+        <details>
+          <summary>🕒 Scheduled posts</summary>
+          <ul>
+            <li>Post once at a set time, or repeat every day, on weekdays or on the days you choose, and stop after a number of times.</li>
+            <li>Each schedule keeps its own copy of the message and files. Pause, edit or post one now from the <b>Scheduled</b> tab.</li>
+            <li>Keep Chrome open (minimised is fine) and your computer awake. If Chrome was closed, you choose whether a post runs when Chrome opens (up to 6 hours late) or is skipped.</li>
+          </ul>
+        </details>
+
+        <details>
+          <summary>⭐ Your plan &amp; access codes</summary>
+          <ul>
+            <li>Everyone starts on the <b>Free plan</b>. A premium <b>access code</b> unlocks more posts per day, more groups per run, more platforms and more AI rewrites.</li>
+            <li>Activate a code above under <b>Your plan</b>. Codes look like <code>RP-ABCD-EFGH-JKLM</code>. A code’s time starts when you activate it.</li>
+            <li>The line under Start shows what’s left today. Daily limits reset at midnight UTC, and posts a stopped run didn’t make are given back.</li>
+          </ul>
+        </details>
+
+        <details>
+          <summary>💾 Backup &amp; your data</summary>
+          <ul>
+            <li>Your groups, messages and files stay in this browser. <b>Export</b> saves a backup file; <b>Import</b> restores it on any computer.</li>
+            <li>RitPost only contacts the RitPost server to check your plan (post counts, never content) and for AI rewrites you ask for.</li>
+          </ul>
+        </details>
+
+        <details open>
+          <summary>💡 Use it wisely</summary>
+          <ul>
+            <li>Post to groups and Pages where you’re a member and your post is welcome, and follow each group’s rules.</li>
+            <li>Make each post worth reading: use <b>{group}</b>, vary your wording with ✨ AI, and don’t repeat the same post too often.</li>
+            <li>Keep a comfortable pace. Longer intervals and sensible daily limits look natural and keep your audience engaged.</li>
+            <li>Start with Manual mode to check how your post looks, then switch to Automatic when you’re happy.</li>
+            <li>Respect the terms of each platform and the people you reach.</li>
+          </ul>
+        </details>
       </div>
       <p class="version muted" id="version"></p>
     </section>

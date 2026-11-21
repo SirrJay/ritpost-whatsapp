@@ -359,6 +359,7 @@ function togglePreview(on = !state.preview) {
 function closeMenu() {
   $('tplMenu').hidden = true;
   if ($('socTagsMenu')) $('socTagsMenu').hidden = true;
+  if ($('fbTagsMenu')) $('fbTagsMenu').hidden = true;
 }
 
 function renderTemplateMenu() {
@@ -1722,8 +1723,9 @@ async function start() {
 // ─────────────── Facebook ───────────────
 const FB_MIN_GAP = 30; // seconds, manual mode
 const FB_MIN_INTERVAL_MIN = 2; // minutes, automatic mode
-const FB_DEFAULTS = { mode: 'manual', gapSec: 60, intervalMin: 5, dailyLimit: 20, reviewSec: 10, linkPreview: true };
-const fb = { targets: [], selected: new Set(), settings: { ...FB_DEFAULTS }, run: null, filter: '', kind: 'group', daily: 0 };
+const FB_DEFAULTS = { mode: 'manual', gapSec: 60, intervalMin: 5, dailyLimit: 20, reviewSec: 10, linkPreview: true, same: true, text: '' };
+const FB_MAX_TEXT = 63206; // Facebook's post length limit
+const fb = { targets: [], selected: new Set(), settings: { ...FB_DEFAULTS }, run: null, filter: '', kind: 'group', daily: 0, preview: false };
 const isMedia = (a) => /^(image|video)\//.test(a?.type || '');
 /** Facebook shows a link preview only for posts without photos/videos. */
 const hasLink = (s) => /(https?:\/\/|www\.)\S+/i.test(s || '');
@@ -1773,6 +1775,8 @@ async function fbLoad() {
     dailyLimit: Math.min(50, Math.max(1, Number(s.dailyLimit) || 20)),
     reviewSec: Math.min(120, Math.max(5, Number(s.reviewSec) || 10)),
     linkPreview: s.linkPreview !== false,
+    same: s.same !== false,
+    text: typeof s.text === 'string' ? s.text.slice(0, FB_MAX_TEXT) : '',
   };
   fb.run = d.fbRun || null;
   fb.daily = d.fbDaily?.day === new Date().toISOString().slice(0, 10) ? d.fbDaily.count : 0;
@@ -1785,6 +1789,37 @@ function fbText(text) {
   return String(text || '')
     .replace(/```([\s\S]+?)```/g, '$1')
     .replace(/(^|[\s(])([*_~])(?=\S)([^\n]*?\S)\2(?=$|[\s).,!?:;])/gm, '$1$3');
+}
+
+/** The text posted on Facebook: the Compose message, or the separate Facebook post. */
+const fbMessage = () => (fb.settings.same ? fbText(state.message) : fb.settings.text);
+/** Start a separate Facebook post from the Compose message. */
+function fbDetach() {
+  if (!fb.settings.same) return;
+  fb.settings.text = fbText(state.message);
+  fb.settings.same = false;
+}
+function fbInsertAtCursor(text, { block = false } = {}) {
+  const ta = $('fbCaption');
+  fbDetach();
+  const cur = fb.settings.text;
+  const focused = ta.value === cur; // a textarea keeps its caret after losing focus
+  let s = focused ? ta.selectionStart : cur.length;
+  let e = focused ? ta.selectionEnd : cur.length;
+  let ins = text;
+  if (block && cur.trim()) {
+    const head = cur.slice(0, s).replace(/\s+$/, '');
+    fb.settings.text = `${head}\n\n${text}${cur.slice(e)}`;
+    s = e = head.length + 2 + text.length;
+  } else {
+    fb.settings.text = cur.slice(0, s) + ins + cur.slice(e);
+    s = e = s + ins.length;
+  }
+  fbSaveSettings();
+  renderFbMessage();
+  renderFbCounts();
+  ta.focus();
+  ta.setSelectionRange(s, e);
 }
 
 const fbOf = (kind) => fb.targets.filter((t) => t.kind === kind);
@@ -1911,12 +1946,32 @@ function renderFbList() {
 
 function renderFbMessage() {
   const el = $('fbMsgPreview');
-  const text = fbText(state.message.trim());
+  const ta = $('fbCaption');
+  const val = fbMessage();
+  if (document.activeElement !== ta || ta.value !== val) ta.value = val;
+  ta.classList.toggle('following', fb.settings.same);
+  ta.placeholder = fb.settings.same ? 'Write your message in Compose (or untick “Same as Compose” to write a separate Facebook post)' : 'Write your Facebook post…';
+  $('fbSame').checked = fb.settings.same;
+  ta.hidden = !!fb.preview;
+  el.hidden = !fb.preview;
+  $('fbPreviewToggle').classList.toggle('on', !!fb.preview);
+  const len = [...val].length;
+  const cnt = $('fbCharCount');
+  cnt.textContent = len > FB_MAX_TEXT ? `${len.toLocaleString()} / ${FB_MAX_TEXT.toLocaleString()}` : `${len.toLocaleString()} character${len === 1 ? '' : 's'}`;
+  cnt.classList.toggle('over', len > FB_MAX_TEXT);
+  const first = [...fbSelOf('group'), ...fbSelOf('page')][0];
+  const hasName = val.includes('{group}');
+  $('fbCapHint').textContent = fb.settings.same
+    ? 'Following your Compose message. Type here to write a different post for Facebook.'
+    : hasName
+    ? 'Each group or Page gets its own name where {group} is.'
+    : 'Your own Facebook post. Tick “Same as Compose” to follow the Compose message again.';
+  const text = (first ? val.replaceAll('{group}', first.name) : val).trim();
   const media = state.attachments.filter(isMedia).length;
   const conflict = media > 0 && hasLink(text);
   const dropMedia = conflict && fb.settings.linkPreview;
   const extra = media ? (dropMedia ? `📎 ${plural(media, 'photo/video')} (left out on Facebook, for the link preview)` : `📎 ${plural(media, 'photo/video')}`) : '';
-  el.textContent = text ? (extra ? `${text}\n\n${extra}` : text) : extra || 'Write your message in the Compose tab first.';
+  el.textContent = text ? (extra ? `${text}\n\n${extra}` : text) : extra || 'Write your Facebook post above, or your message in Compose.';
   el.classList.toggle('empty-msg', !text && !media);
   const note = $('fbLinkNote');
   note.hidden = !conflict;
@@ -1957,7 +2012,7 @@ function renderFbCounts() {
   $('fbPageCount').textContent = String(fbOf('page').length);
   $('fbSelCount').textContent = ofKind.length ? `(${selKind} of ${ofKind.length})` : '';
   $('fbSelSummary').textContent = n ? `Selected: ${fbWhat(g, p)}${g && p ? ' (groups first, then Pages)' : ''}` : '';
-  const hasContent = !!state.message.trim() || state.attachments.some(isMedia);
+  const hasContent = !!fbMessage().trim() || state.attachments.some(isMedia);
   $('fbStartBtn').disabled = !n || !hasContent || fbActive();
   $('fbStartLabel').textContent = fbActive()
     ? 'Posting to Facebook…'
@@ -2082,7 +2137,8 @@ function fbConfirmStart() {
   // Groups first (posted as you), then Pages (RitPost switches to each Page's profile).
   const items = [...fbSelOf('group'), ...fbSelOf('page')];
   if (!items.length) return;
-  const message = state.message.trim();
+  const message = fbMessage().trim();
+  if ([...message].length > FB_MAX_TEXT) return toast(`Facebook posts can be up to ${FB_MAX_TEXT.toLocaleString()} characters. Shorten the post first.`, true);
   const media = state.attachments.filter(isMedia);
   if (!message && !media.length) return;
   const g = fbSelOf('group').length;
@@ -2226,6 +2282,33 @@ function fbBind() {
   fbNumber('fbDailyLimit', 'dailyLimit', 1, 50, 20, 'Daily limit', 'posts');
   fbNumber('fbReview', 'reviewSec', 5, 120, 10, 'Review time', 's');
   $('fbStartBtn').addEventListener('click', fbConfirmStart);
+  $('fbSame').addEventListener('change', (e) => {
+    if (e.target.checked) fb.settings.same = true;
+    else fbDetach();
+    fbSaveSettings();
+    renderFbMessage();
+    renderFbCounts();
+  });
+  $('fbCaption').addEventListener('input', (e) => {
+    fb.settings.same = false;
+    fb.settings.text = e.target.value;
+    fbSaveSettings();
+    renderFbMessage();
+    renderFbCounts();
+  });
+  $('fbPreviewToggle').addEventListener('click', () => {
+    fb.preview = !fb.preview;
+    renderFbMessage();
+  });
+  $('fbNameBtn').addEventListener('click', () => fbInsertAtCursor('{group}'));
+  window.RitEmoji?.attach($('fbEmojiBtn'), { target: $('fbCaption'), align: 'left' });
+  $('fbTagsBtn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    const menu = $('fbTagsMenu');
+    if (menu.hidden) renderTagsMenu(menu, fbMessage, (t) => fbInsertAtCursor(t, { block: true }));
+    $('tplMenu').hidden = true;
+    menu.hidden = !menu.hidden;
+  });
   $('fbRunFocus').addEventListener('click', () => bg('BG_FB_OPEN'));
   $('fbRunStop').addEventListener('click', async () => {
     await bg('BG_FB_STOP');
@@ -2622,7 +2705,11 @@ function renderSoc() {
 }
 
 function renderSocTagsMenu() {
-  const menu = $('socTagsMenu');
+  renderTagsMenu($('socTagsMenu'), () => socCaption(), socInsert);
+}
+
+/** Saved hashtag sets (shared by Facebook, Instagram and X). */
+function renderTagsMenu(menu, getText, insert) {
   const tags = soc.settings.tags;
   setChildren(
     menu,
@@ -2630,7 +2717,7 @@ function renderSocTagsMenu() {
       ? tags.map((t) =>
           h(
             'button',
-            { type: 'button', class: 'menu-item', onclick: () => (closeMenu(), socInsert(t.text)) },
+            { type: 'button', class: 'menu-item', onclick: () => (closeMenu(), insert(t.text)) },
             h('span', { class: 'mi-text' }, h('span', { class: 'mi-name' }, t.name), h('span', { class: 'mi-sub' }, t.text)),
             h(
               'span',
@@ -2641,7 +2728,7 @@ function renderSocTagsMenu() {
                   e.stopPropagation();
                   soc.settings.tags = soc.settings.tags.filter((x) => x !== t);
                   socSave();
-                  renderSocTagsMenu();
+                  renderTagsMenu(menu, getText, insert);
                   toast(`Deleted “${t.name}”`, false, { label: 'Undo', run: () => (soc.settings.tags.push(t), socSave()) });
                 },
               },
@@ -2658,8 +2745,8 @@ function renderSocTagsMenu() {
         class: 'menu-item accent',
         onclick: async () => {
           closeMenu();
-          const found = [...new Set(socCaption().match(/#[\p{L}\p{N}_]+/gu) || [])];
-          if (!found.length) return toast('Type some #hashtags in the caption first, then save them as a set.', true);
+          const found = [...new Set(getText().match(/#[\p{L}\p{N}_]+/gu) || [])];
+          if (!found.length) return toast('Type some #hashtags in the post first, then save them as a set.', true);
           const name = await askName({ title: 'Save hashtag set', label: `${found.length} hashtags: ${short(found.join(' '), 60)}`, placeholder: 'e.g. Church events' });
           if (!name) return;
           soc.settings.tags = [...soc.settings.tags.filter((t) => keyOf(t.name) !== keyOf(name)), { name, text: found.join(' ') }];
@@ -2667,7 +2754,7 @@ function renderSocTagsMenu() {
           toast(`Saved “${name}”`);
         },
       },
-      '+ Save hashtags from the caption'
+      '+ Save hashtags from this post'
     )
   );
 }
@@ -3146,7 +3233,7 @@ function aiRequestOpts(o, platform) {
     cta: o.cta,
     ctaText: o.ctaText,
     hashtags: o.hashtags,
-    waFormat: o.waFormat,
+    waFormat: o.waFormat && (platform === 'whatsapp' || platform === 'all'),
     keep: o.keep,
     brand: o.useBrand ? ai.brand : '',
     custom: o.custom,
@@ -3161,14 +3248,15 @@ function aiRequestOpts(o, platform) {
 function openAIDialog({ target = 'compose' } = {}) {
   if (!window.RitAI) return toast('The AI module didn’t load. Reload RitPost.', true);
   const isCaption = target === 'caption';
-  const here = isCaption ? soc.settings.platform : 'whatsapp';
-  const source = () => (isCaption ? socCaption() : state.message);
+  const isFb = target === 'facebook';
+  const here = isCaption ? soc.settings.platform : isFb ? 'facebook' : 'whatsapp';
+  const source = () => (isCaption ? socCaption() : isFb ? fbMessage() : state.message);
   if (!window.RitAI.hasServer()) return toast('RitPost AI isn’t available in this copy of RitPost.', true);
   if (ai.plan && ai.plan.limit <= 0) return showUpgrade({ reason: `AI rewrites aren’t included in your ${planName()} plan.` });
-  if (!source().trim()) return toast(isCaption ? 'Write a caption first; AI improves the text you give it.' : 'Write your message first; AI improves the text you give it.', true);
+  if (!source().trim()) return toast(isCaption ? 'Write a caption first; AI improves the text you give it.' : isFb ? 'Write your Facebook post (or a few words about it) first; AI improves the text you give it.' : 'Write your message first; AI improves the text you give it.', true);
 
   const o = { ...ai.last };
-  if (isCaption && o.platform === 'whatsapp') o.platform = 'same';
+  if ((isCaption || isFb) && o.platform === 'whatsapp') o.platform = 'same';
   const sel = (label, key, options, blank = 'Any') =>
     h(
       'label',
@@ -3241,6 +3329,17 @@ function openAIDialog({ target = 'compose' } = {}) {
     );
 
   function applyText(text, mode) {
+    if (isFb) {
+      const wasSame = fb.settings.same;
+      fbDetach();
+      const before = fb.settings.text;
+      fb.settings.text = mode === 'insert' && before.trim() ? `${before.trimEnd()}\n\n${text}` : text;
+      fbSaveSettings();
+      renderFb();
+      closeDialog();
+      toast('Facebook post updated', false, { label: 'Undo', run: () => ((fb.settings.text = before), (fb.settings.same = wasSame), fbSaveSettings(), renderFb()) });
+      return;
+    }
     if (isCaption) {
       socDetach();
       const p = soc.settings.platform;
@@ -3262,20 +3361,30 @@ function openAIDialog({ target = 'compose' } = {}) {
   function applyAll(v) {
     const beforeMsg = state.message;
     const beforeSoc = JSON.stringify(soc.settings);
+    const beforeFb = { same: fb.settings.same, text: fb.settings.text };
     setMessage(v.whatsapp || v.facebook);
+    if (v.facebook) {
+      fb.settings.same = false;
+      fb.settings.text = v.facebook;
+      fbSaveSettings();
+    }
     socDetach();
     if (v.instagram) soc.settings.captions.instagram = v.instagram;
     if (v.x) soc.settings.captions.x = v.x;
     socSave();
     renderSoc();
+    renderFb();
     closeDialog();
-    toast('Compose, Instagram and X captions updated', false, {
+    toast('WhatsApp, Facebook, Instagram and X posts updated', false, {
       label: 'Undo',
       run: () => {
         setMessage(beforeMsg);
         soc.settings = JSON.parse(beforeSoc);
+        Object.assign(fb.settings, beforeFb);
         socSave();
+        fbSaveSettings();
         renderSoc();
+        renderFb();
       },
     });
   }
@@ -3304,7 +3413,7 @@ function openAIDialog({ target = 'compose' } = {}) {
           block('facebook', 'Facebook'),
           block('instagram', 'Instagram'),
           block('x', 'X'),
-          h('div', { class: 'ai-card-acts' }, h('button', { type: 'button', class: 'btn primary sm', onclick: () => applyAll(v) }, 'Use all four'), h('button', { type: 'button', class: 'btn secondary sm', onclick: () => applyText(v.whatsapp, 'replace') }, 'Use WhatsApp version'))
+          h('div', { class: 'ai-card-acts' }, h('button', { type: 'button', class: 'btn primary sm', onclick: () => applyAll(v) }, 'Use all four'), h('button', { type: 'button', class: 'btn secondary sm', onclick: () => applyText(v[here] || v.whatsapp, 'replace') }, `Use ${platLabel(here)} version`))
         );
       }
       return h(
@@ -3395,7 +3504,7 @@ function openAIDialog({ target = 'compose' } = {}) {
   renderPresets();
   const preview = source();
   openDialog({
-    title: isCaption ? `✨ Rewrite the ${platLabel(here)} caption` : '✨ Rewrite with AI',
+    title: isCaption ? `✨ Rewrite the ${platLabel(here)} caption` : isFb ? '✨ Write the Facebook post with AI' : '✨ Rewrite with AI',
     hideConfirm: true,
     body: h(
       'div',
@@ -3409,7 +3518,7 @@ function openAIDialog({ target = 'compose' } = {}) {
         h(
           'div',
           { class: 'ai-grid' },
-          sel('Write for', 'platform', [['same', isCaption ? `${platLabel(here)} (this caption)` : 'WhatsApp (this message)'], ['whatsapp', 'WhatsApp'], ['facebook', 'Facebook'], ['instagram', 'Instagram'], ['x', 'X (280 characters)'], ['all', 'All 4 platforms at once']], null),
+          sel('Write for', 'platform', [['same', isCaption ? `${platLabel(here)} (this caption)` : isFb ? 'Facebook (this post)' : 'WhatsApp (this message)'], ['whatsapp', 'WhatsApp'], ['facebook', 'Facebook'], ['instagram', 'Instagram'], ['x', 'X (280 characters)'], ['all', 'All 4 platforms at once']], null),
           sel('Tone', 'tone', AI_TONES),
           sel('Type of post', 'purpose', AI_PURPOSES),
           sel('Audience', 'audience', AI_AUDIENCES),
@@ -3425,7 +3534,7 @@ function openAIDialog({ target = 'compose' } = {}) {
           chk('hook', 'Strong opening hook'),
           chk('cta', 'Clear call to action', (on) => (ctaText.hidden = !on)),
           ctaText,
-          chk('waFormat', 'Use WhatsApp *bold* / _italic_'),
+          isCaption || isFb ? null : chk('waFormat', 'Use WhatsApp *bold* / _italic_'),
           chk('keep', 'Keep links, dates, prices, names and {group} exactly'),
           ai.brand ? chk('useBrand', 'Use my brand voice (from Settings)') : h('p', { class: 'hint' }, 'Tip: add “About you / your brand voice” in Settings so every rewrite sounds like you.')
         ),
@@ -3459,6 +3568,7 @@ function aiBind() {
   document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () => setTimeout(renderPlanNote, 0)));
   $('aiBtn').addEventListener('click', () => openAIDialog({ target: 'compose' }));
   $('socAiBtn').addEventListener('click', () => openAIDialog({ target: 'caption' }));
+  $('fbAiBtn').addEventListener('click', () => openAIDialog({ target: 'facebook' }));
   $('aiBrand').addEventListener('change', (e) => {
     ai.brand = e.target.value.trim();
     aiSave();
@@ -3538,20 +3648,21 @@ function schedSnapshot(platform, keepPreview) {
   }
   const items = [...fbSelOf('group'), ...fbSelOf('page')];
   const media = state.attachments.filter(isMedia);
+  const fbMsg = fbMessage().trim();
   if (!items.length) return { error: 'Select Facebook groups or Pages in the Facebook tab first.' };
-  if (!message && !media.length) return { error: 'Write a message or attach photos/videos in Compose first.' };
-  const conflict = media.length > 0 && hasLink(message);
+  if (!fbMsg && !media.length) return { error: 'Write the Facebook post or attach photos/videos in Compose first.' };
+  const conflict = media.length > 0 && hasLink(fbMsg);
   const sendMedia = !(conflict && keepPreview);
   return {
     platform,
-    message,
+    message: fbMsg,
     conflict,
     files: sendMedia ? media : [],
     leftOut: state.attachments.length - (sendMedia ? media.length : 0),
     names: items.map((t) => t.name),
     targetsLabel: fbWhat(fbSelOf('group').length, fbSelOf('page').length),
     fb: {
-      items: items.map((t) => ({ id: t.id, name: t.name, url: t.url, kind: t.kind, text: fbText(message.replaceAll('{group}', t.name)) })),
+      items: items.map((t) => ({ id: t.id, name: t.name, url: t.url, kind: t.kind, text: fbText(fbMsg.replaceAll('{group}', t.name)) })),
       linkPreview: !sendMedia || !media.length,
     },
   };

@@ -116,6 +116,21 @@ code,.mono{font-family:ui-monospace,Consolas,monospace;font-size:12.5px}
 .roles{display:grid;gap:8px;font-size:13px}
 .roles div{display:grid;grid-template-columns:90px 1fr;gap:8px}
 details.adv summary{cursor:pointer;font-weight:600;font-size:13px;color:var(--ink2)}
+.chip.unused{background:rgba(14,165,233,.12);color:#0284c7}
+.chip.lapsed{background:var(--warnsoft);color:var(--warn)}
+.chip.stock{background:var(--soft);color:var(--muted)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.seg button{border:0;background:var(--card);padding:7px 12px;font-weight:600;cursor:pointer;color:var(--ink2)}
+.seg button.on{background:var(--brandsoft);color:var(--brand)}
+.split{display:flex;height:8px;border-radius:6px;overflow:hidden;background:var(--soft);min-width:120px}
+.split i{display:block;height:100%}
+.legend{display:flex;gap:10px;flex-wrap:wrap;font-size:11.5px;color:var(--muted);margin-top:4px}
+.legend b{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:4px;vertical-align:middle}
+.summary{padding:10px 12px;border-radius:10px;background:var(--brandsoft);color:var(--brand);font-weight:600;font-size:13px}
+.menu-pop{position:absolute;right:0;top:100%;margin-top:4px;background:var(--card);border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.15);display:grid;min-width:230px;z-index:5;padding:4px}
+.menu-pop button{border:0;background:none;text-align:left;padding:8px 10px;border-radius:7px;cursor:pointer;color:var(--ink);font-size:13px}
+.menu-pop button:hover{background:var(--soft)}
+.menu-pop small{display:block;color:var(--muted);font-weight:400}
 @media (max-width:640px){main{padding:12px}.kpi .v{font-size:22px}.platrow{grid-template-columns:1fr}.who{display:none}}
 </style>
 </head>
@@ -204,7 +219,9 @@ details.adv summary{cursor:pointer;font-weight:600;font-size:13px;color:var(--in
           <label class="f">Customer<input id="cLabel" type="text" maxlength="80" placeholder="e.g. Grace Mensah"></label>
           <label class="f">Phone or email<input id="cContact" type="text" maxlength="120" placeholder="e.g. 024 000 0000"></label>
           <label class="f"><span>Amount paid <span id="cCur" class="muted"></span></span><input id="cAmount" type="number" min="0" step="0.01" placeholder="0"></label>
-          <label class="f">Expires<input id="cExpires" type="date"><small>Empty = never</small></label>
+          <label class="f">Time starts<select id="cStart"><option value="now">Now: expires on a date</option><option value="activation">When the customer activates it</option></select></label>
+          <label class="f" id="cExpWrap">Expires<input id="cExpires" type="date"><small>Empty = never</small></label>
+          <label class="f" id="cDurWrap" hidden>Valid for (days after activation)<input id="cDuration" type="number" min="0" max="3650"><small>0 = never expires</small></label>
           <label class="f">How many codes<input id="cQty" type="number" min="1" max="200" value="1"><small>More than one: the amount is split between them</small></label>
           <label class="f">Note (only the team sees it)<input id="cNote" type="text" maxlength="300" placeholder="e.g. MoMo ref 1234"></label>
         </div>
@@ -220,12 +237,23 @@ details.adv summary{cursor:pointer;font-weight:600;font-size:13px;color:var(--in
           <span class="sp"></span><button id="createBtn" class="btn primary">Create code</button>
         </div>
       </div>
+      <div class="card grid" id="bulkCard">
+        <div class="row">
+          <div><h2 style="margin:0">Bulk codes <span class="muted" id="batchCount"></span></h2>
+          <div class="muted small">Make many codes at once to send to customers or resellers, or to sell on your website or another shop. Each code’s time starts when the customer activates it.</div></div>
+          <span class="sp"></span>
+          <button id="bulkBtn" class="btn primary" data-perm="codes.create">Generate codes in bulk</button>
+        </div>
+        <div class="tablewrap" id="batchWrap"><table><thead><tr><th>Batch</th><th>Plan</th><th>Valid for</th><th>Codes</th><th>Price</th><th>Revenue</th><th>Created</th><th></th></tr></thead><tbody id="batchRows"></tbody></table></div>
+        <div id="batchEmpty" class="empty" hidden>No bulk codes yet. <b>Generate codes in bulk</b> to make stock you can sell anywhere: codes only start counting down when a customer activates them.</div>
+      </div>
       <div class="card grid">
         <div class="row">
           <h2 style="margin:0">Codes <span class="muted" id="codeCount"></span></h2><span class="sp"></span>
           <input id="codeSearch" type="search" placeholder="Search code, customer, phone or note" style="max-width:260px">
           <select id="codePlanFilter" style="width:auto"><option value="">All plans</option></select>
-          <select id="codeFilter" style="width:auto"><option value="">All</option><option value="active">Active</option><option value="expiring">Expiring in 7 days</option><option value="disabled">Disabled</option><option value="expired">Expired</option></select>
+          <select id="codeBatchFilter" style="width:auto"><option value="">All batches</option></select>
+          <select id="codeFilter" style="width:auto"><option value="">All (without unsold bulk codes)</option><option value="active">Active</option><option value="unused">Not activated yet</option><option value="expiring">Expiring in 7 days</option><option value="disabled">Disabled</option><option value="expired">Expired</option><option value="lapsed">Not activated in time</option><option value="stock">Bulk stock (not given out)</option><option value="everything">Everything</option></select>
           <button id="csvBtn" class="btn">Export CSV</button>
         </div>
         <div class="tablewrap"><table><thead><tr><th>Code</th><th>Customer</th><th>Plan</th><th>Status</th><th>Today</th><th>Devices</th><th>Expires</th><th>Paid</th><th>Sold by</th><th>Last used</th><th></th></tr></thead><tbody id="codeRows"></tbody></table></div>
@@ -464,7 +492,7 @@ async function loadDash() {
   $('kSales').textContent = cash(d.sales.month.amount);
   $('kSalesSub').textContent = `${fmt(d.sales.month.n)} codes this month · ${cash(d.sales.today.amount)} today${me.ownOnly ? ' (yours)' : ''}`;
   $('kCodes').textContent = fmt(d.codes.active);
-  $('kCodesSub').textContent = d.codes.expiring ? `${fmt(d.codes.expiring)} expire within 7 days` : `of ${fmt(d.codes.total)} created`;
+  $('kCodesSub').textContent = [d.codes.expiring ? `${fmt(d.codes.expiring)} expire within 7 days` : `${fmt(d.codes.activated7 || 0)} activated this week`, d.codes.stock ? `${fmt(d.codes.stock)} in bulk stock` : ''].filter(Boolean).join(' · ');
   $('kPosts').textContent = fmt(d.today.posts);
   $('kPostsSub').textContent = PLATS.filter((p) => d.today.byPlatform[p]).map((p) => `${fmt(d.today.byPlatform[p])} ${PNAME[p]}`).join(' · ') || `${fmt(d.week.posts)} in 7 days`;
   $('kToday').textContent = fmt(d.today.requests);
@@ -499,6 +527,22 @@ $('testBtn').addEventListener('click', async () => {
 
 // ── codes ──
 const paidPlans = () => plans.filter((p) => p.id !== 'free' && !p.archived);
+let batches = [];
+const STATUS_TXT = { active: 'active', unused: 'not activated', lapsed: 'not activated in time', expired: 'expired', disabled: 'disabled', stock: 'in stock' };
+const daysTxt = (d) => (!d ? 'No expiry' : d % 365 === 0 ? `${d / 365} year${d === 365 ? '' : 's'}` : d % 30 === 0 && d >= 60 ? `${d / 30} months` : `${d} day${d === 1 ? '' : 's'}`);
+const isStock = (c) => c.batchId && !c.issuedAt && !c.activatedAt;
+/** Bulk codes nobody has activated and no customer is named on (stock, or exported to a shop). */
+const isUnsold = (c) => c.batchId && !c.activatedAt && !c.label;
+const csvCell = (v) => { let s = String(v ?? ''); if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`; return `"${s.replace(/"/g, '""')}"`; };
+function download(name, text, type = 'text/csv') { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); }
+const slug = (s) => String(s || 'codes').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'codes';
+function validityLine(durationDays, expiresAt, redeemBy) {
+  const parts = [];
+  if (durationDays) parts.push(`Valid for ${daysTxt(durationDays).toLowerCase()} from the day you activate it.`);
+  else if (expiresAt) parts.push(`Valid until ${dateOnly(expiresAt)}.`);
+  if (redeemBy) parts.push(`Activate it before ${dateOnly(redeemBy)}.`);
+  return parts.join(' ');
+}
 function planDefaults() {
   const p = plans.find((x) => x.id === $('cPlan').value);
   if (!p) return;
@@ -506,10 +550,12 @@ function planDefaults() {
   $('cDaily').placeholder = `${p.features.ai} (plan)`;
   $('cDevices').placeholder = `${p.features.devices} (plan)`;
   $('cExpires').value = p.features.days ? dateInput(Date.now() + p.features.days * DAY) : '';
+  $('cDuration').value = p.features.days || 0;
   if (!$('cAmount').value && /\d/.test(p.price)) $('cAmount').placeholder = p.price;
 }
 $('cPlan').addEventListener('change', planDefaults);
-document.querySelectorAll('[data-exp]').forEach((b) => b.addEventListener('click', () => { const n = Number(b.dataset.exp); $('cExpires').value = n ? dateInput(Date.now() + n * DAY) : ''; }));
+document.querySelectorAll('[data-exp]').forEach((b) => b.addEventListener('click', () => { const n = Number(b.dataset.exp); $('cExpires').value = n ? dateInput(Date.now() + n * DAY) : ''; $('cDuration').value = n; }));
+$('cStart').addEventListener('change', () => { const act = $('cStart').value === 'activation'; $('cExpWrap').hidden = act; $('cDurWrap').hidden = !act; });
 async function loadCodes() {
   await Promise.all([ensurePlans(true), ensureSettings()]);
   $('cCur').textContent = settings.currency ? `(${settings.currency})` : '';
@@ -520,7 +566,14 @@ async function loadCodes() {
   const pf = $('codePlanFilter').value;
   $('codePlanFilter').replaceChildren(new Option('All plans', ''), ...plans.filter((p) => p.id !== 'free').map((p) => new Option(p.name, p.id)));
   $('codePlanFilter').value = pf;
-  codes = (await api('codes')).codes;
+  const [cr, br] = await Promise.all([api('codes'), api('batches')]);
+  codes = cr.codes;
+  batches = br.batches;
+  const bf = $('codeBatchFilter').value;
+  $('codeBatchFilter').replaceChildren(new Option('All batches', ''), new Option('Sold one by one', '-'), ...batches.map((b) => new Option(b.name, b.id)));
+  $('codeBatchFilter').value = [...$('codeBatchFilter').options].some((o) => o.value === bf) ? bf : '';
+  $('codeBatchFilter').hidden = !batches.length;
+  renderBatches();
   renderCodes();
 }
 function renderCodes() {
@@ -528,19 +581,27 @@ function renderCodes() {
   const f = $('codeFilter').value;
   const pf = $('codePlanFilter').value;
   const soon = Date.now() + 7 * DAY;
-  const list = codes.filter((c) => (!f || (f === 'expiring' ? c.status === 'active' && c.expiresAt && c.expiresAt < soon : c.status === f)) && (!pf || c.planId === pf) && (!q || `${c.code} ${c.label} ${c.note} ${c.contact}`.toLowerCase().includes(q)));
+  const bf = $('codeBatchFilter').value;
+  const byStatus = (c) => {
+    if (f === 'everything') return true;
+    if (f === 'stock') return isStock(c) && c.status === 'unused';
+    if (!f) return !isUnsold(c) || !!bf;
+    if (f === 'expiring') return c.status === 'active' && c.expiresAt && c.expiresAt < soon;
+    return c.status === f;
+  };
+  const list = codes.filter((c) => byStatus(c) && (!pf || c.planId === pf) && (!bf || (bf === '-' ? !c.batchId : c.batchId === bf)) && (!q || `${c.code} ${c.label} ${c.note} ${c.contact} ${c.batchName}`.toLowerCase().includes(q)));
   $('codeCount').textContent = `(${list.length}${list.length !== codes.length ? ` of ${codes.length}` : ''})`;
   $('codeEmpty').hidden = codes.length > 0;
   $('codeRows').innerHTML = list.map((c) => {
     const exp = c.expiresAt && c.status === 'active' && c.expiresAt < soon;
     return `<tr data-code="${c.raw}">
     <td style="white-space:nowrap"><code>${c.code}</code> <button class="btn sm" data-act="copy" title="Copy the code">Copy</button></td>
-    <td>${esc(c.label) || '<span class="muted">–</span>'}${c.contact ? `<div class="muted small">${esc(c.contact)}</div>` : ''}${c.note ? `<div class="muted small">${esc(c.note)}</div>` : ''}</td>
+    <td>${esc(c.label) || '<span class="muted">–</span>'}${c.contact ? `<div class="muted small">${esc(c.contact)}</div>` : ''}${c.note ? `<div class="muted small">${esc(c.note)}</div>` : ''}${c.batchId ? `<div class="muted small">📦 ${esc(c.batchName)}${isStock(c) ? ' · in stock' : c.issuedAt && !c.activatedAt ? ' · given out' : ''}</div>` : ''}</td>
     <td><span class="chip plan">${esc(c.planName)}</span></td>
-    <td><span class="chip ${c.status}">${c.status}</span></td>
+    <td><span class="chip ${c.status}">${STATUS_TXT[c.status] || c.status}</span>${c.activatedAt ? `<div class="muted small">since ${dateOnly(c.activatedAt)}</div>` : ''}</td>
     <td style="white-space:nowrap">${fmt(c.postsToday)} posts<div class="muted small">${fmt(c.usedToday)} / ${fmt(c.dailyLimit)} AI</div></td>
     <td>${c.devices} / ${c.maxDevices}</td>
-    <td style="white-space:nowrap${exp ? ';color:var(--warn);font-weight:600' : ''}">${dateOnly(c.expiresAt)}</td>
+    <td style="white-space:nowrap${exp ? ';color:var(--warn);font-weight:600' : ''}">${!c.activatedAt && c.durationDays && !c.expiresAt ? `<span class="muted">${daysTxt(c.durationDays)} after activation</span>` : dateOnly(c.expiresAt)}${!c.activatedAt && c.redeemBy ? `<div class="muted small">activate by ${dateOnly(c.redeemBy)}</div>` : ''}</td>
     <td style="white-space:nowrap">${c.amount ? cash(c.amount) : '<span class="muted">–</span>'}</td>
     <td>${esc(c.createdByName)}</td>
     <td>${when(c.lastUsedAt)}</td>
@@ -551,6 +612,7 @@ function renderCodes() {
 $('codeSearch').addEventListener('input', renderCodes);
 $('codeFilter').addEventListener('change', renderCodes);
 $('codePlanFilter').addEventListener('change', renderCodes);
+$('codeBatchFilter').addEventListener('change', renderCodes);
 $('codeRows').addEventListener('click', async (e) => {
   const b = e.target.closest('button[data-act]'); if (!b) return;
   const c = codes.find((x) => x.raw === b.closest('tr').dataset.code);
@@ -562,30 +624,38 @@ $('codeRows').addEventListener('click', async (e) => {
     if (b.dataset.act === 'edit') return editCode(c);
   } catch (err) { toast(err.message, true); }
 });
-function customerMessage(codeList, plan, exp) {
+function customerMessage(codeList, plan, exp, durationDays = 0, redeemBy = null) {
   const biz = settings.business_name || 'RitPost';
   const one = codeList.length === 1;
-  return `Your ${biz} ${plan.name} access code${one ? '' : 's'}:\n${codeList.join('\n')}\n\nIncludes: ${planSummary(plan)}.${exp ? `\nValid until ${dateOnly(exp)}.` : ''}\n\nTo activate: open RitPost → Settings (⚙) → Your plan → “Have an access code?”, paste the code and click Activate.`;
+  const valid = validityLine(durationDays, exp, redeemBy);
+  return `Your ${biz} ${plan.name} access code${one ? '' : 's'}:\n${codeList.join('\n')}\n\nIncludes: ${planSummary(plan)}.${valid ? `\n${valid}` : ''}\n\nTo activate: open RitPost → Settings (⚙) → Your plan → “Have an access code?”, paste the code and click Activate.`;
+}
+/** The codes with a ready message for the customer, Copy and Send on WhatsApp. */
+function codesReady(title, list, plan, { exp = null, durationDays = 0, redeemBy = null, contact = '' } = {}) {
+  openModal(`<h3>${esc(title)}</h3>
+    <div class="newcodes">${list.slice(0, 20).map((c) => `<div class="c"><code style="font-size:15px">${c}</code><button class="btn sm" data-copy="${c}">Copy</button></div>`).join('')}${list.length > 20 ? `<div class="muted small">and ${fmt(list.length - 20)} more (in the message below)</div>` : ''}</div>
+    <label class="f">Message to send your customer<textarea id="custMsg" rows="8">${esc(customerMessage(list, plan, exp, durationDays, redeemBy))}</textarea></label>
+    <div class="row"><span class="sp"></span><a class="btn" id="waSend" target="_blank" rel="noopener">Send on WhatsApp</a><button class="btn" id="copyMsg">Copy message</button><button class="btn primary" data-close>Done</button></div>`);
+  $('sheet').querySelectorAll('[data-copy]').forEach((x) => x.addEventListener('click', () => copy(x.dataset.copy)));
+  $('copyMsg').addEventListener('click', () => copy($('custMsg').value));
+  const wa = $('waSend');
+  // With a full international number (+233…) the chat opens directly; otherwise WhatsApp asks who to send it to.
+  const num = /^\+|^00/.test(contact.trim()) ? contact.replace(/\D/g, '').replace(/^00/, '') : '';
+  const upd = () => (wa.href = `https://wa.me/${num}?text=${encodeURIComponent($('custMsg').value)}`);
+  upd(); $('custMsg').addEventListener('input', upd);
 }
 $('createBtn').addEventListener('click', async () => {
   const exp = fromDateInput($('cExpires').value);
   const plan = plans.find((p) => p.id === $('cPlan').value);
   if (!plan) return toast('Create a paid plan first (Plans → New plan).', true);
+  const onAct = $('cStart').value === 'activation';
   $('createBtn').disabled = true;
   try {
-    const r = await api('codes', { method: 'POST', body: { planId: plan.id, label: $('cLabel').value, contact: $('cContact').value, amount: $('cAmount').value, note: $('cNote').value, dailyLimit: $('cDaily').value, maxDevices: $('cDevices').value, expiresAt: exp, quantity: $('cQty').value } });
-    openModal(`<h3>${r.codes.length === 1 ? 'Code created' : `${r.codes.length} codes created`} · ${esc(plan.name)}</h3>
-      <div class="newcodes">${r.codes.map((c) => `<div class="c"><code style="font-size:15px">${c}</code><button class="btn sm" data-copy="${c}">Copy</button></div>`).join('')}</div>
-      <label class="f">Message to send your customer<textarea id="custMsg" rows="8">${esc(customerMessage(r.codes, plan, exp))}</textarea></label>
-      <div class="row"><span class="sp"></span><a class="btn" id="waSend" target="_blank" rel="noopener">Send on WhatsApp</a><button class="btn" id="copyMsg">Copy message</button><button class="btn primary" data-close>Done</button></div>`);
-    $('sheet').querySelectorAll('[data-copy]').forEach((x) => x.addEventListener('click', () => copy(x.dataset.copy)));
-    $('copyMsg').addEventListener('click', () => copy($('custMsg').value));
-    const wa = $('waSend');
-    // With a full international number (+233…) the chat opens directly; otherwise WhatsApp asks who to send it to.
-    const raw = $('cContact').value.trim();
-    const num = /^\+|^00/.test(raw) ? raw.replace(/\D/g, '').replace(/^00/, '') : '';
-    const upd = () => (wa.href = `https://wa.me/${num}?text=${encodeURIComponent($('custMsg').value)}`);
-    upd(); $('custMsg').addEventListener('input', upd);
+    const body = { planId: plan.id, label: $('cLabel').value, contact: $('cContact').value, amount: $('cAmount').value, note: $('cNote').value, dailyLimit: $('cDaily').value, maxDevices: $('cDevices').value, quantity: $('cQty').value };
+    if (onAct) Object.assign(body, { startOn: 'activation', durationDays: $('cDuration').value });
+    else body.expiresAt = exp;
+    const r = await api('codes', { method: 'POST', body });
+    codesReady(`${r.codes.length === 1 ? 'Code created' : `${r.codes.length} codes created`} · ${plan.name}`, r.codes, plan, { exp: r.expiresAt, durationDays: r.durationDays, contact: $('cContact').value });
     ['cLabel', 'cContact', 'cAmount', 'cNote', 'cDaily', 'cDevices'].forEach((id) => ($(id).value = ''));
     $('cQty').value = 1; planDefaults();
     loadCodes();
@@ -600,7 +670,7 @@ function editCode(c) {
       <label class="f">Customer<input id="eLabel" type="text" maxlength="80" value="${esc(c.label)}"></label>
       <label class="f">Phone or email<input id="eContact" type="text" maxlength="120" value="${esc(c.contact)}"></label>
       <label class="f">Amount paid ${esc(settings.currency || '')}<input id="eAmount" type="number" min="0" step="0.01" value="${c.amount || ''}"></label>
-      <label class="f">Expires<input id="eExpires" type="date" value="${dateInput(c.expiresAt)}"><small>Empty = never</small></label>
+      ${!c.activatedAt && c.durationDays ? `<label class="f">Valid for (days after activation)<input id="eDuration" type="number" min="0" max="3650" value="${c.durationDays}"><small>Not activated yet${c.redeemBy ? ` · activate by ${dateOnly(c.redeemBy)}` : ''}</small></label>` : `<label class="f">Expires<input id="eExpires" type="date" value="${dateInput(c.expiresAt)}"><small>${c.activatedAt ? `Activated ${dateOnly(c.activatedAt)} · ` : ''}Empty = never</small></label>`}
       <label class="f">AI rewrites per day<input id="eDaily" type="number" min="0" value="${c.aiOverride ? c.dailyLimit : ''}" placeholder="plan’s"><small>Empty = the plan’s</small></label>
       <label class="f">Devices allowed<input id="eDevices" type="number" min="1" value="${c.devicesOverride ? c.maxDevices : ''}" placeholder="plan’s"><small>Empty = the plan’s</small></label>
     </div>
@@ -609,21 +679,236 @@ function editCode(c) {
     <div class="note ok small">Used on ${c.devices} of ${c.maxDevices} devices. If your customer changed computer, reset the devices so they can activate again.</div>
     <div class="row"><button class="btn" id="eReset">Reset devices</button><span class="sp"></span><button class="btn" data-close>Cancel</button><button class="btn primary" id="eSave">Save</button></div>`);
   $('sheet').querySelectorAll('[data-ext]').forEach((b) => b.addEventListener('click', async () => {
-    try { const r = await api(`codes/${c.raw}`, { method: 'PATCH', body: { extendDays: Number(b.dataset.ext) } }); $('eExpires').value = dateInput(r.expiresAt); c.expiresAt = r.expiresAt; toast(`Now valid until ${dateOnly(r.expiresAt)}`); loadCodes(); } catch (e) { toast(e.message, true); }
+    try {
+      const r = await api(`codes/${c.raw}`, { method: 'PATCH', body: { extendDays: Number(b.dataset.ext) } });
+      if (!r.activated && r.durationDays && !r.expiresAt) { if ($('eDuration')) $('eDuration').value = r.durationDays; c.durationDays = r.durationDays; toast(`Now valid for ${daysTxt(r.durationDays).toLowerCase()} after activation`); }
+      else { if ($('eExpires')) $('eExpires').value = dateInput(r.expiresAt); c.expiresAt = r.expiresAt; toast(`Now valid until ${dateOnly(r.expiresAt)}`); }
+      loadCodes();
+    } catch (e) { toast(e.message, true); }
   }));
   $('eReset').addEventListener('click', async () => { try { await api(`codes/${c.raw}/reset-devices`, { method: 'POST' }); toast('Devices reset'); closeModal(); loadCodes(); } catch (e) { toast(e.message, true); } });
   $('eSave').addEventListener('click', async () => {
     try {
-      await api(`codes/${c.raw}`, { method: 'PATCH', body: { planId: $('ePlan').value, label: $('eLabel').value, contact: $('eContact').value, amount: $('eAmount').value, note: $('eNote').value, dailyLimit: $('eDaily').value, maxDevices: $('eDevices').value, expiresAt: fromDateInput($('eExpires').value) } });
+      const body = { planId: $('ePlan').value, label: $('eLabel').value, contact: $('eContact').value, amount: $('eAmount').value, note: $('eNote').value, dailyLimit: $('eDaily').value, maxDevices: $('eDevices').value };
+      if ($('eDuration')) body.durationDays = $('eDuration').value; else body.expiresAt = fromDateInput($('eExpires').value);
+      await api(`codes/${c.raw}`, { method: 'PATCH', body });
       toast('Saved'); closeModal(); loadCodes();
     } catch (e) { toast(e.message, true); }
   });
 }
+const isoDay = (t) => (t ? new Date(t).toISOString().slice(0, 10) : '');
 $('csvBtn').addEventListener('click', () => {
-  const rows = [['code', 'customer', 'contact', 'plan', 'note', 'status', 'amount_paid', 'currency', 'sold_by', 'ai_per_day', 'ai_today', 'posts_today', 'devices', 'max_devices', 'expires', 'total_ai_uses', 'created', 'last_used']].concat(codes.map((c) => [c.code, c.label, c.contact, c.planName, c.note, c.status, c.amount, settings.currency || '', c.createdByName, c.dailyLimit, c.usedToday, c.postsToday, c.devices, c.maxDevices, c.expiresAt ? new Date(c.expiresAt).toISOString().slice(0, 10) : '', c.totalUses, new Date(c.createdAt).toISOString(), c.lastUsedAt ? new Date(c.lastUsedAt).toISOString() : '']));
-  const csv = rows.map((r) => r.map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
-  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = `ritpost-codes-${new Date().toISOString().slice(0, 10)}.csv`; a.click();
+  const rows = [['code', 'customer', 'contact', 'plan', 'note', 'status', 'batch', 'amount_paid', 'currency', 'sold_by', 'ai_per_day', 'ai_today', 'posts_today', 'devices', 'max_devices', 'valid_days_after_activation', 'activate_by', 'activated', 'expires', 'total_ai_uses', 'created', 'last_used']].concat(codes.map((c) => [c.code, c.label, c.contact, c.planName, c.note, STATUS_TXT[c.status] || c.status, c.batchName, c.amount, settings.currency || '', c.createdByName, c.dailyLimit, c.usedToday, c.postsToday, c.devices, c.maxDevices, c.durationDays || '', isoDay(c.redeemBy), isoDay(c.activatedAt), isoDay(c.expiresAt), c.totalUses, new Date(c.createdAt).toISOString(), c.lastUsedAt ? new Date(c.lastUsedAt).toISOString() : '']));
+  download(`ritpost-codes-${new Date().toISOString().slice(0, 10)}.csv`, rows.map((r) => r.map(csvCell).join(',')).join('\n'));
 });
+
+// ── bulk codes ──
+function renderBatches() {
+  $('batchCount').textContent = batches.length ? `(${batches.length})` : '';
+  $('batchEmpty').hidden = batches.length > 0;
+  $('batchWrap').hidden = !batches.length;
+  $('batchRows').innerHTML = batches.map((b) => {
+    const t = Math.max(1, b.total);
+    const seg = (n, color) => (n ? `<i style="width:${(n / t) * 100}%;background:${color}"></i>` : '');
+    return `<tr data-batch="${b.id}">
+      <td><b>${esc(b.name)}</b>${b.channel ? `<div class="muted small">🛒 ${esc(b.channel)}</div>` : ''}${b.note ? `<div class="muted small">${esc(b.note)}</div>` : ''}</td>
+      <td><span class="chip plan">${esc(b.planName)}</span></td>
+      <td style="white-space:nowrap">${daysTxt(b.durationDays)}<div class="muted small">${b.durationDays ? 'after activation' : ''}${b.redeemBy ? `${b.durationDays ? ' · ' : ''}activate by ${dateOnly(b.redeemBy)}` : ''}</div></td>
+      <td style="min-width:190px"><div class="split" title="${b.available} unused · ${b.issued} given out · ${b.activated} activated">${seg(b.activated, 'var(--brand2)')}${seg(b.issued, '#0ea5e9')}${seg(b.available, 'var(--line)')}</div>
+        <div class="legend"><span><b style="background:var(--brand2)"></b>${fmt(b.activated)} activated</span><span><b style="background:#0ea5e9"></b>${fmt(b.issued)} given out</span><span><b style="background:var(--line)"></b>${fmt(b.available)} unused</span>${b.disabled ? `<span style="color:var(--danger)">${fmt(b.disabled)} off</span>` : ''}${b.expired ? `<span style="color:var(--warn)">${fmt(b.expired)} expired</span>` : ''}</div></td>
+      <td style="white-space:nowrap">${b.price ? cash(b.price) : '<span class="muted">–</span>'}</td>
+      <td style="white-space:nowrap">${cash(b.revenue)}</td>
+      <td style="white-space:nowrap">${dateOnly(b.createdAt)}</td>
+      <td style="white-space:nowrap;position:relative">${can('codes.create') ? '<button class="btn sm primary" data-bact="give">Give out</button> <button class="btn sm" data-bact="export">Export</button>' : ''} <button class="btn sm" data-bact="more">⋯</button></td>
+    </tr>`;
+  }).join('');
+}
+document.addEventListener('click', (e) => { if (!e.target.closest('.menu-pop') && !e.target.closest('[data-bact="more"]')) document.querySelectorAll('.menu-pop').forEach((m) => m.remove()); });
+$('batchRows').addEventListener('click', async (e) => {
+  const btn = e.target.closest('[data-bact]'); if (!btn) return;
+  const b = batches.find((x) => x.id === btn.closest('tr').dataset.batch);
+  const act = btn.dataset.bact;
+  try {
+    if (act === 'give') return giveOut(b);
+    if (act === 'export') return exportBatch(b);
+    if (act === 'more') {
+      document.querySelectorAll('.menu-pop').forEach((m) => m.remove());
+      const m = document.createElement('div'); m.className = 'menu-pop';
+      const items = [['list', 'Download the full list (CSV)', 'Every code with its status, customer and dates'], ['view', 'Show these codes in the list', '']];
+      if (can('codes.edit')) items.push(['edit', 'Edit batch', 'Name, shop, price, activate-by date']);
+      if (can('codes.support')) items.push(b.disabled && b.disabled >= b.total - b.activated ? ['on', 'Turn unused codes back on', ''] : ['off', 'Turn off unused codes', 'Stock withdrawn from a shop? Customers already using a code keep it.']);
+      if (can('codes.delete')) items.push(['del', 'Delete unused codes', 'Activated codes are kept']);
+      m.innerHTML = items.map(([k, t, s]) => `<button data-m="${k}"${k === 'del' ? ' style="color:var(--danger)"' : ''}>${esc(t)}${s ? `<small>${esc(s)}</small>` : ''}</button>`).join('');
+      btn.parentElement.appendChild(m);
+      m.addEventListener('click', async (ev) => {
+        const k = ev.target.closest('[data-m]')?.dataset.m; if (!k) return; m.remove();
+        try {
+          if (k === 'list') {
+            const r = await api(`batches/${b.id}/codes`);
+            const rows = [['code', 'status', 'given_out', 'customer', 'contact', 'amount_paid', 'valid_days_after_activation', 'activate_by', 'activated', 'expires']].concat(r.codes.map((c) => [c.code, STATUS_TXT[c.status] || c.status, isoDay(c.issuedAt), c.label, c.contact, c.amount || '', c.durationDays || '', isoDay(c.redeemBy), isoDay(c.activatedAt), isoDay(c.expiresAt)]));
+            return download(`ritpost-${slug(b.name)}-all.csv`, rows.map((x) => x.map(csvCell).join(',')).join('\n'));
+          }
+          if (k === 'view') { $('codeBatchFilter').value = b.id; $('codeFilter').value = 'everything'; renderCodes(); return document.getElementById('codeRows').scrollIntoView({ behavior: 'smooth' }); }
+          if (k === 'edit') return editBatch(b);
+          if (k === 'off') return confirmBox(`Turn off unused codes in “${b.name}”?`, `${fmt(b.total - b.activated)} code(s) nobody has activated will stop working (including ones given out but not yet activated). Customers already using a code keep it. You can turn them back on later.`, 'Turn off', async () => { await api(`batches/${b.id}`, { method: 'PATCH', body: { unused: 'disabled' } }); toast('Unused codes turned off'); loadCodes(); });
+          if (k === 'on') { await api(`batches/${b.id}`, { method: 'PATCH', body: { unused: 'active' } }); toast('Unused codes turned back on'); return loadCodes(); }
+          if (k === 'del') return confirmBox(`Delete unused codes in “${b.name}”?`, `${fmt(b.total - b.activated)} code(s) nobody has activated will be deleted for good${b.issued ? `, including ${fmt(b.issued)} given out or exported to a shop` : ''}. ${b.activated ? `The ${fmt(b.activated)} activated code(s) keep working.` : ''} This can’t be undone.`, 'Delete', async () => { const r = await api(`batches/${b.id}`, { method: 'DELETE' }); toast(`${fmt(r.deleted)} unused codes deleted`); loadCodes(); });
+        } catch (err) { toast(err.message, true); }
+      });
+    }
+  } catch (err) { toast(err.message, true); }
+});
+
+$('bulkBtn').addEventListener('click', () => {
+  const pp = paidPlans();
+  if (!pp.length) return toast('Create a paid plan first (Plans → New plan).', true);
+  const minDate = dateInput(Date.now() + DAY);
+  openModal(`<h3>Generate codes in bulk</h3>
+    <div class="muted small" style="margin-top:-6px">Make stock to send to customers, give to resellers, or sell on your website or another shop. Each code is used by one customer, and its time only starts when they activate it.</div>
+    <div class="form">
+      <label class="f">Plan<select id="gPlan">${pp.map((p) => `<option value="${p.id}">${esc(p.name)}${p.price ? ` · ${esc(p.price)}` : ''}</option>`).join('')}</select><small id="gPlanSum"></small></label>
+      <label class="f">How many codes<input id="gQty" type="number" min="1" max="2000" value="50"><small>Up to 2,000 at a time</small></label>
+      <label class="f">Batch name<input id="gName" type="text" maxlength="80" placeholder="e.g. Website – November"></label>
+      <label class="f">Where you’ll sell them (optional)<input id="gChannel" type="text" maxlength="80" list="gChannels" placeholder="e.g. My website, Reseller Kofi"><datalist id="gChannels"><option>My website</option><option>WhatsApp sales</option><option>Reseller</option><option>Online shop</option><option>Event / promotion</option></datalist></label>
+      <label class="f">Valid for (days after activation)<input id="gDays" type="number" min="0" max="3650"><small>0 = never expires</small></label>
+      <label class="f">Must be activated by (optional)<input id="gBy" type="date" min="${minDate}"><small>Unused codes stop working after this date</small></label>
+      <label class="f"><span>Price per code <span class="muted">${esc(settings.currency || '')}</span></span><input id="gPrice" type="number" min="0" step="0.01" placeholder="0"><small>Counted as a sale when a code is given out or activated</small></label>
+      <label class="f">Note (only the team sees it)<input id="gNote" type="text" maxlength="300"></label>
+    </div>
+    <div class="row"><span class="muted small">Valid for:</span>${[[7, '1 week'], [30, '30 days'], [90, '3 months'], [180, '6 months'], [365, '1 year'], [0, 'No expiry']].map(([d, t]) => `<button class="btn sm" data-gd="${d}">${t}</button>`).join('')}</div>
+    <details class="adv"><summary>Change the limits for these codes (optional)</summary>
+      <div class="form" style="margin-top:10px">
+        <label class="f">AI rewrites per day<input id="gDaily" type="number" min="0"><small>Empty = the plan’s</small></label>
+        <label class="f">Devices per code<input id="gDevices" type="number" min="1"><small>Empty = the plan’s</small></label>
+      </div>
+    </details>
+    <div class="summary" id="gSum"></div>
+    <div class="row"><span class="sp"></span><button class="btn" data-close>Cancel</button><button class="btn primary" id="gGo">Generate</button></div>`);
+  const plan = () => plans.find((p) => p.id === $('gPlan').value);
+  const fill = () => { const p = plan(); $('gPlanSum').textContent = planSummary(p); $('gDays').value = p.features.days || 0; $('gDaily').placeholder = `${p.features.ai} (plan)`; $('gDevices').placeholder = `${p.features.devices} (plan)`; const n = Number(String(p.price).replace(/[^0-9.]/g, '')); $('gPrice').value = n > 0 ? n : ''; sum(); };
+  const sum = () => {
+    const n = Math.max(0, Math.min(2000, Math.round(Number($('gQty').value) || 0)));
+    const d = Math.round(Number($('gDays').value) || 0);
+    const by = $('gBy').value;
+    const price = Number($('gPrice').value) || 0;
+    $('gSum').textContent = `${fmt(n)} ${plan().name} code${n === 1 ? '' : 's'} · ${d ? `each valid ${daysTxt(d).toLowerCase()} from activation` : 'no expiry'}${by ? ` · activate by ${dateOnly(fromDateInput(by))}` : ''}${price ? ` · ${cash(price)} each (${cash(price * n)} if all sell)` : ''}`;
+  };
+  $('gPlan').addEventListener('change', fill);
+  ['gQty', 'gDays', 'gBy', 'gPrice'].forEach((id) => $(id).addEventListener('input', sum));
+  $('sheet').querySelectorAll('[data-gd]').forEach((b) => b.addEventListener('click', () => { $('gDays').value = b.dataset.gd; sum(); }));
+  fill();
+  $('gGo').addEventListener('click', async () => {
+    const qty = Math.round(Number($('gQty').value) || 0);
+    if (qty < 1 || qty > 2000) return toast('Choose between 1 and 2,000 codes.', true);
+    $('gGo').disabled = true; $('gGo').textContent = `Generating ${fmt(qty)}…`;
+    try {
+      const r = await api('batches', { method: 'POST', body: { planId: $('gPlan').value, quantity: qty, name: $('gName').value, channel: $('gChannel').value, durationDays: $('gDays').value, redeemBy: fromDateInput($('gBy').value), price: $('gPrice').value, note: $('gNote').value, dailyLimit: $('gDaily').value, maxDevices: $('gDevices').value } });
+      await loadCodes();
+      batchMade(r.batch, r.codes);
+    } catch (e) { toast(e.message, true); $('gGo').disabled = false; $('gGo').textContent = 'Generate'; }
+  });
+});
+
+function batchMade(b, list) {
+  openModal(`<h3>✅ ${fmt(list.length)} codes ready · ${esc(b.name)}</h3>
+    <div class="summary">${esc(b.planName)} · ${b.durationDays ? `valid ${esc(daysTxt(b.durationDays).toLowerCase())} from activation` : 'no expiry'}${b.redeemBy ? ` · activate by ${dateOnly(b.redeemBy)}` : ''}${b.price ? ` · ${cash(b.price)} each` : ''}</div>
+    <div class="newcodes">${list.slice(0, 5).map((c) => `<div class="c"><code style="font-size:15px">${c}</code></div>`).join('')}${list.length > 5 ? `<div class="muted small">and ${fmt(list.length - 5)} more</div>` : ''}</div>
+    <p class="muted small" style="margin:0">What next?</p>
+    <div class="grid" style="gap:8px">
+      <button class="btn" id="bmGive">🎁 Give some to a customer now <span class="muted small">(with a ready WhatsApp message)</span></button>
+      <button class="btn" id="bmExport">⬇️ Export codes for a shop or reseller <span class="muted small">(CSV, text file or printable cards)</span></button>
+    </div>
+    <div class="row"><span class="sp"></span><button class="btn primary" data-close>Done</button></div>`);
+  const fresh = () => batches.find((x) => x.id === b.id) || b;
+  $('bmGive').addEventListener('click', () => giveOut(fresh()));
+  $('bmExport').addEventListener('click', () => exportBatch(fresh()));
+}
+
+function giveOut(b) {
+  if (!b.available) return toast('No unused codes left in this batch. Generate more.', true);
+  const plan = plans.find((p) => p.id === b.planId) || { name: b.planName, features: { platforms: {} } };
+  openModal(`<h3>Give out codes · ${esc(b.name)}</h3>
+    <div class="muted small" style="margin-top:-6px">Takes the next unused codes from this batch (never the same code twice) and gives you a message for your customer.</div>
+    <div class="form">
+      <label class="f">How many<input id="iQty" type="number" min="1" max="${b.available}" value="1"><small>${fmt(b.available)} unused</small></label>
+      <label class="f">Customer<input id="iLabel" type="text" maxlength="80" placeholder="e.g. Grace Mensah"></label>
+      <label class="f">Phone or email<input id="iContact" type="text" maxlength="120" placeholder="+233 24 000 0000"></label>
+      <label class="f"><span>Amount paid <span class="muted">${esc(settings.currency || '')}</span></span><input id="iAmount" type="number" min="0" step="0.01" value="${b.price || ''}"></label>
+    </div>
+    <div class="row"><span class="sp"></span><button class="btn" data-close>Cancel</button><button class="btn primary" id="iGo">Give out</button></div>`);
+  $('iQty').addEventListener('input', () => { const n = Math.max(1, Number($('iQty').value) || 1); if (b.price) $('iAmount').value = +(b.price * n).toFixed(2); });
+  $('iGo').addEventListener('click', async () => {
+    $('iGo').disabled = true;
+    try {
+      const contact = $('iContact').value;
+      const r = await api(`batches/${b.id}/issue`, { method: 'POST', body: { count: $('iQty').value, label: $('iLabel').value, contact, amount: $('iAmount').value } });
+      loadCodes();
+      codesReady(`${r.codes.length === 1 ? 'Code' : `${r.codes.length} codes`} for ${$('iLabel').value || 'your customer'}${r.short ? ' (all that were left)' : ''}`, r.codes, plan, { durationDays: r.durationDays, redeemBy: r.redeemBy, contact });
+    } catch (e) { toast(e.message, true); $('iGo').disabled = false; }
+  });
+}
+
+function exportBatch(b) {
+  if (!b.available) return toast('No unused codes left in this batch. Use ⋯ → Download the full list, or generate more.', true);
+  openModal(`<h3>Export codes · ${esc(b.name)}</h3>
+    <div class="muted small" style="margin-top:-6px">For a website, online shop or reseller: upload the file, or print the codes as cards. Exported codes are marked as given out, so you never sell the same code twice. They count as a sale when the buyer activates them.</div>
+    <div class="form">
+      <label class="f">How many<input id="xQty" type="number" min="1" max="${b.available}" value="${b.available}"><small>${fmt(b.available)} unused</small></label>
+      <label class="f">Format<select id="xFmt"><option value="csv">CSV (Excel, Shopify, WooCommerce…)</option><option value="txt">Text file, one code per line</option><option value="cards">Printable cards</option></select></label>
+    </div>
+    <div class="row"><span class="sp"></span><button class="btn" data-close>Cancel</button><button class="btn primary" id="xGo">Export</button></div>`);
+  $('xGo').addEventListener('click', async () => {
+    $('xGo').disabled = true;
+    try {
+      const r = await api(`batches/${b.id}/issue`, { method: 'POST', body: { count: $('xQty').value, sale: false } });
+      const fmtSel = $('xFmt').value;
+      const valid = validityLine(r.durationDays, null, r.redeemBy);
+      const stamp = new Date().toISOString().slice(0, 10);
+      if (fmtSel === 'csv') download(`ritpost-${slug(b.name)}-${stamp}.csv`, [['code', 'plan', 'valid_days_after_activation', 'activate_by', 'how_to_activate']].concat(r.codes.map((c) => [c, b.planName, r.durationDays || 'no expiry', isoDay(r.redeemBy), 'RitPost → Settings → Your plan → Have an access code? → paste → Activate'])).map((x) => x.map(csvCell).join(',')).join('\n'));
+      else if (fmtSel === 'txt') download(`ritpost-${slug(b.name)}-${stamp}.txt`, r.codes.join('\n') + '\n', 'text/plain');
+      else printCards(r.codes, b, valid);
+      closeModal();
+      toast(`${fmt(r.codes.length)} codes exported and marked as given out`);
+      loadCodes();
+    } catch (e) { toast(e.message, true); $('xGo').disabled = false; }
+  });
+}
+
+function printCards(list, b, valid) {
+  const biz = esc(settings.business_name || 'RitPost');
+  const w = window.open('', '_blank');
+  if (!w) return toast('Allow pop-ups for this page to print cards.', true);
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${biz} access codes · ${esc(b.name)}</title><style>
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;margin:12mm;color:#0f172a}
+    .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:4mm}
+    .card{border:1px dashed #94a3b8;border-radius:3mm;padding:4mm;break-inside:avoid;min-height:30mm;display:flex;flex-direction:column;gap:1.5mm}
+    .b{font-weight:800;color:#0e7c66;font-size:11pt}.p{font-size:9pt;color:#334155;font-weight:600}
+    .c{font-family:ui-monospace,Consolas,monospace;font-size:13pt;font-weight:700;letter-spacing:.5px;padding:1.5mm 0}
+    .s{font-size:7.5pt;color:#475569;line-height:1.35}
+    @media print{body{margin:8mm}}
+  </style></head><body><div class="grid">${list.map((c) => `<div class="card"><div class="b">${biz}</div><div class="p">${esc(b.planName)} access code</div><div class="c">${c}</div><div class="s">${esc(valid)}<br>Activate: RitPost → Settings (⚙) → Your plan → “Have an access code?” → paste → Activate</div></div>`).join('')}</div></body></html>`);
+  w.document.close();
+  w.focus();
+  setTimeout(() => w.print(), 300);
+}
+
+function editBatch(b) {
+  openModal(`<h3>Edit batch</h3>
+    <div class="form">
+      <label class="f">Batch name<input id="ebName" type="text" maxlength="80" value="${esc(b.name)}"></label>
+      <label class="f">Where you sell them<input id="ebChannel" type="text" maxlength="80" value="${esc(b.channel)}"></label>
+      <label class="f"><span>Price per code <span class="muted">${esc(settings.currency || '')}</span></span><input id="ebPrice" type="number" min="0" step="0.01" value="${b.price || ''}"><small>For codes sold from now on</small></label>
+      <label class="f">Must be activated by<input id="ebBy" type="date" value="${dateInput(b.redeemBy)}"><small>Empty = any time. Applies to codes not activated yet.</small></label>
+    </div>
+    <label class="f">Note<input id="ebNote" type="text" maxlength="300" value="${esc(b.note)}"></label>
+    <div class="row"><span class="sp"></span><button class="btn" data-close>Cancel</button><button class="btn primary" id="ebSave">Save</button></div>`);
+  $('ebSave').addEventListener('click', async () => {
+    try {
+      await api(`batches/${b.id}`, { method: 'PATCH', body: { name: $('ebName').value, channel: $('ebChannel').value, price: $('ebPrice').value, note: $('ebNote').value, redeemBy: fromDateInput($('ebBy').value) } });
+      toast('Saved'); closeModal(); loadCodes();
+    } catch (e) { toast(e.message, true); }
+  });
+}
 
 // ── plans ──
 async function loadPlans() {

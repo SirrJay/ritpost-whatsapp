@@ -70,10 +70,14 @@ export const ROLES = {
 };
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O, 1/I
+const MAX_BATCH = 2000; // codes in one bulk batch
 const DAY_MS = 86400000;
 const today = (t = Date.now()) => new Date(t).toISOString().slice(0, 10);
 const daysAgo = (n) => today(Date.now() - n * DAY_MS);
-const normCode = (c) => String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, '').replace(/^RP/, '');
+const normCode = (c) => {
+  const s = String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return s.length === 14 && s.startsWith('RP') ? s.slice(2) : s; // a code may itself start with RP
+};
 const fmtCode = (raw) => `RP-${raw.slice(0, 4)}-${raw.slice(4, 8)}-${raw.slice(8, 12)}`;
 const plural = (n, [one, many]) => `${n} ${n === 1 ? one : many}`;
 const hex = (buf) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
@@ -175,6 +179,7 @@ export function createApp({ adminHtml = '<!doctype html><title>RitPost Admin</ti
       'CREATE TABLE IF NOT EXISTS post_log (id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL, day TEXT NOT NULL, tier TEXT NOT NULL, plan_id TEXT, code TEXT, install_id TEXT, ip_hash TEXT, platform TEXT NOT NULL, count INTEGER NOT NULL DEFAULT 1, kind TEXT NOT NULL DEFAULT \'claim\', status TEXT NOT NULL, reason TEXT)',
       'CREATE INDEX IF NOT EXISTS post_log_day ON post_log (day)',
       'CREATE TABLE IF NOT EXISTS admin_sessions (hash TEXT PRIMARY KEY, expires_at INTEGER NOT NULL, member_id TEXT NOT NULL DEFAULT \'owner\')',
+      'CREATE TABLE IF NOT EXISTS batches (id TEXT PRIMARY KEY, name TEXT NOT NULL, plan_id TEXT NOT NULL, quantity INTEGER NOT NULL, duration_days INTEGER NOT NULL DEFAULT 0, redeem_by INTEGER, channel TEXT NOT NULL DEFAULT \'\', price REAL NOT NULL DEFAULT 0, note TEXT NOT NULL DEFAULT \'\', created_at INTEGER NOT NULL, created_by TEXT NOT NULL DEFAULT \'owner\')',
     ];
     for (const sql of create) await db.prepare(sql).run();
     const cols = async (t) => {
@@ -185,11 +190,12 @@ export function createApp({ adminHtml = '<!doctype html><title>RitPost Admin</ti
       }
     };
     const add = async (table, have, name, def) => {
-      if (have && have.has(name)) return;
+      if (have && have.has(name)) return false;
       try {
         await db.prepare(`ALTER TABLE ${table} ADD COLUMN ${name} ${def}`).run();
+        return true;
       } catch {
-        /* another request added it first */
+        return false; /* another request added it first */
       }
     };
     const c = await cols('codes');
@@ -197,6 +203,14 @@ export function createApp({ adminHtml = '<!doctype html><title>RitPost Admin</ti
     await add('codes', c, 'created_by', "TEXT NOT NULL DEFAULT 'owner'");
     await add('codes', c, 'contact', "TEXT NOT NULL DEFAULT ''");
     await add('codes', c, 'amount', 'REAL NOT NULL DEFAULT 0');
+    await add('codes', c, 'duration_days', 'INTEGER NOT NULL DEFAULT 0');
+    await add('codes', c, 'batch_id', 'TEXT');
+    await add('codes', c, 'redeem_by', 'INTEGER');
+    await add('codes', c, 'issued_at', 'INTEGER');
+    // Codes made before 2.4 were sold when created, and are active once a device uses them.
+    if (await add('codes', c, 'sold_at', 'INTEGER')) await db.prepare('UPDATE codes SET sold_at = created_at WHERE sold_at IS NULL AND batch_id IS NULL').run();
+    if (await add('codes', c, 'activated_at', 'INTEGER')) await db.prepare('UPDATE codes SET activated_at = COALESCE(last_used_at, created_at) WHERE activated_at IS NULL AND code IN (SELECT code FROM code_devices)').run();
+    await db.prepare('CREATE INDEX IF NOT EXISTS codes_batch ON codes (batch_id)').run();
     await add('admin_sessions', await cols('admin_sessions'), 'member_id', "TEXT NOT NULL DEFAULT 'owner'");
     const n = (await db.prepare('SELECT COUNT(*) AS n FROM plans').first())?.n || 0;
     if (!n) {
@@ -284,6 +298,17 @@ export function createApp({ adminHtml = '<!doctype html><title>RitPost Admin</ti
     if (c.length !== 12) return null;
     return env.DB.prepare('SELECT * FROM codes WHERE code = ?').bind(c).first();
   }
+  /** First use of a code: its time starts now (codes valid "N days from activation"); an unsold batch code becomes a sale. */
+  async function activate(env, code) {
+    const now = Date.now();
+    const expires = code.duration_days > 0 ? now + code.duration_days * DAY_MS : code.expires_at;
+    let price = 0;
+    if (code.batch_id && !code.sold_at && !code.amount) price = (await env.DB.prepare('SELECT price FROM batches WHERE id = ?').bind(code.batch_id).first())?.price || 0;
+    await env.DB.prepare('UPDATE codes SET activated_at = ?, expires_at = ?, sold_at = COALESCE(sold_at, ?), amount = CASE WHEN amount > 0 THEN amount ELSE ? END WHERE code = ? AND activated_at IS NULL')
+      .bind(now, expires, now, price, code.code)
+      .run();
+    return (await env.DB.prepare('SELECT * FROM codes WHERE code = ?').bind(code.code).first()) || { ...code, activated_at: now, expires_at: expires };
+  }
   const codeAi = (code, plan) => (code.daily_limit >= 0 ? code.daily_limit : plan.features.ai);
   const codeDevices = (code, plan) => (code.max_devices > 0 ? code.max_devices : plan.features.devices);
 
@@ -297,6 +322,8 @@ export function createApp({ adminHtml = '<!doctype html><title>RitPost Admin</ti
       if (!code) return { error: 'That access code isn’t valid. Check it and try again.', code: 'invalid_code' };
       if (code.status !== 'active') return { error: 'This access code has been turned off. Contact the person who gave it to you.', code: 'code_disabled' };
       if (code.expires_at && code.expires_at < Date.now()) return { error: 'This access code has expired. Renew it to keep your premium plan.', code: 'code_expired' };
+      if (!code.activated_at && code.redeem_by && code.redeem_by < Date.now())
+        return { error: `This access code had to be activated by ${new Date(code.redeem_by).toISOString().slice(0, 10)}. Contact the person who sold it to you.`, code: 'code_lapsed' };
       const plan = plans[code.plan_id] || plans.premium || plans.free;
       const maxDev = codeDevices(code, plan);
       const dev = await env.DB.prepare('SELECT 1 AS x FROM code_devices WHERE code = ? AND install_id = ?').bind(code.code, installId).first();
@@ -305,6 +332,7 @@ export function createApp({ adminHtml = '<!doctype html><title>RitPost Admin</ti
         if (n >= maxDev) return { error: `This access code is already used on ${maxDev} device${maxDev === 1 ? '' : 's'}, its limit.`, code: 'code_devices' };
         if (register) await env.DB.prepare('INSERT OR IGNORE INTO code_devices (code, install_id, added_at) VALUES (?, ?, ?)').bind(code.code, installId, Date.now()).run();
       }
+      if (register && !code.activated_at) Object.assign(code, await activate(env, code));
       p = { tier: 'premium', plan, code: code.code, label: code.label, limit: codeAi(code, plan), expiresAt: code.expires_at || null, subject: `c:${code.code}` };
     } else {
       const plan = plans.free;
@@ -776,10 +804,12 @@ export function createApp({ adminHtml = '<!doctype html><title>RitPost Admin</ti
       const installs7 = (await devs(daysAgo(6), day))?.n || 0;
       const own = me.ownOnly ? ' AND created_by = ?' : '';
       const ownArgs = me.ownOnly ? [me.id] : [];
-      const codes = await env.DB.prepare(`SELECT COUNT(*) AS total, SUM(CASE WHEN status = 'active' AND (expires_at IS NULL OR expires_at > ?) THEN 1 ELSE 0 END) AS active, SUM(CASE WHEN status = 'active' AND expires_at > ? AND expires_at < ? THEN 1 ELSE 0 END) AS expiring FROM codes WHERE 1 = 1${own}`).bind(Date.now(), Date.now(), Date.now() + 7 * DAY_MS, ...ownArgs).first();
-      const sales = async (from) => (await env.DB.prepare(`SELECT COUNT(*) AS n, COALESCE(SUM(amount), 0) AS amount FROM codes WHERE created_at >= ?${own}`).bind(from, ...ownArgs).first()) || { n: 0, amount: 0 };
+      const codes = await env.DB.prepare(
+        `SELECT COUNT(*) AS total, SUM(CASE WHEN status = 'active' AND activated_at IS NOT NULL AND (expires_at IS NULL OR expires_at > ?) THEN 1 ELSE 0 END) AS active, SUM(CASE WHEN status = 'active' AND expires_at > ? AND expires_at < ? THEN 1 ELSE 0 END) AS expiring, SUM(CASE WHEN status = 'active' AND activated_at IS NULL AND batch_id IS NOT NULL AND issued_at IS NULL AND (redeem_by IS NULL OR redeem_by > ?) THEN 1 ELSE 0 END) AS stock, SUM(CASE WHEN activated_at >= ? THEN 1 ELSE 0 END) AS activated7 FROM codes WHERE 1 = 1${own}`
+      ).bind(Date.now(), Date.now(), Date.now() + 7 * DAY_MS, Date.now(), Date.now() - 7 * DAY_MS, ...ownArgs).first();
+      const sales = async (from) => (await env.DB.prepare(`SELECT COUNT(*) AS n, COALESCE(SUM(amount), 0) AS amount FROM codes WHERE sold_at >= ?${own}`).bind(from, ...ownArgs).first()) || { n: 0, amount: 0 };
       const monthStart = Date.parse(`${day.slice(0, 7)}-01T00:00:00Z`);
-      const { results: byPlan } = await env.DB.prepare(`SELECT plan_id, COUNT(*) AS n, COALESCE(SUM(amount), 0) AS amount, SUM(CASE WHEN status = 'active' AND (expires_at IS NULL OR expires_at > ?) THEN 1 ELSE 0 END) AS active FROM codes WHERE 1 = 1${own} GROUP BY plan_id`).bind(Date.now(), ...ownArgs).all();
+      const { results: byPlan } = await env.DB.prepare(`SELECT plan_id, COUNT(*) AS n, COALESCE(SUM(amount), 0) AS amount, SUM(CASE WHEN status = 'active' AND activated_at IS NOT NULL AND (expires_at IS NULL OR expires_at > ?) THEN 1 ELSE 0 END) AS active FROM codes WHERE 1 = 1${own} GROUP BY plan_id`).bind(Date.now(), ...ownArgs).all();
       const cost = (tin, tout) => (tin * Number(s.price_in || 0) + tout * Number(s.price_out || 0)) / 1e6;
       const t = series.at(-1);
       const sum = (k, n) => series.slice(-n).reduce((a, x) => a + x[k], 0);
@@ -789,7 +819,7 @@ export function createApp({ adminHtml = '<!doctype html><title>RitPost Admin</ti
         week: { requests: sum('requests', 7), posts: sum('posts', 7), installs: installs7, cost: cost(sum('tokensIn', 7), sum('tokensOut', 7)) },
         month: { requests: sum('requests', 14), cost: cost(sum('tokensIn', 14), sum('tokensOut', 14)) },
         series,
-        codes: { total: codes?.total || 0, active: codes?.active || 0, expiring: codes?.expiring || 0 },
+        codes: { total: codes?.total || 0, active: codes?.active || 0, expiring: codes?.expiring || 0, stock: codes?.stock || 0, activated7: codes?.activated7 || 0 },
         sales: { today: await sales(Date.parse(`${day}T00:00:00Z`)), month: await sales(monthStart), days30: await sales(Date.now() - 30 * DAY_MS) },
         plans: Object.values(plans).map((p) => {
           const r = byPlan.find((x) => x.plan_id === p.id) || {};
@@ -803,7 +833,7 @@ export function createApp({ adminHtml = '<!doctype html><title>RitPost Admin</ti
 
     // ── plans ──
     if (path === 'plans' && method === 'GET') {
-      const { results } = await env.DB.prepare("SELECT plan_id, COUNT(*) AS n, SUM(CASE WHEN status = 'active' AND (expires_at IS NULL OR expires_at > ?) THEN 1 ELSE 0 END) AS active FROM codes GROUP BY plan_id").bind(Date.now()).all();
+      const { results } = await env.DB.prepare("SELECT plan_id, COUNT(*) AS n, SUM(CASE WHEN status = 'active' AND activated_at IS NOT NULL AND (expires_at IS NULL OR expires_at > ?) THEN 1 ELSE 0 END) AS active FROM codes GROUP BY plan_id").bind(Date.now()).all();
       return json({ ok: true, plans: Object.values(plans).map((p) => ({ ...p, codes: results.find((r) => r.plan_id === p.id)?.n || 0, activeCodes: results.find((r) => r.plan_id === p.id)?.active || 0 })), platforms: PLATFORMS });
     }
     const planMatch = /^plans(?:\/([a-z0-9-]{1,32}))?$/.exec(path);
@@ -859,6 +889,12 @@ export function createApp({ adminHtml = '<!doctype html><title>RitPost Admin</ti
       return Object.fromEntries((results || []).map((m) => [m.id, m]));
     };
     const ownerName = (await ownerMe(env)).name;
+    const codeStatus = (c, now = Date.now()) => {
+      if (c.status !== 'active') return c.status;
+      if (c.expires_at && c.expires_at < now) return 'expired';
+      if (!c.activated_at) return c.redeem_by && c.redeem_by < now ? 'lapsed' : 'unused';
+      return 'active';
+    };
     const codeRow = (c, ctx) => {
       const plan = plans[c.plan_id] || plans.premium || plans.free;
       return {
@@ -875,7 +911,14 @@ export function createApp({ adminHtml = '<!doctype html><title>RitPost Admin</ti
         devicesOverride: c.max_devices > 0,
         devices: ctx.devices,
         expiresAt: c.expires_at,
-        status: c.status === 'active' && c.expires_at && c.expires_at < Date.now() ? 'expired' : c.status,
+        status: codeStatus(c),
+        durationDays: c.duration_days || 0,
+        activatedAt: c.activated_at || null,
+        redeemBy: c.redeem_by || null,
+        batchId: c.batch_id || '',
+        batchName: c.batch_id ? ctx.batches?.[c.batch_id]?.name || 'Batch' : '',
+        issuedAt: c.issued_at || null,
+        soldAt: c.sold_at || null,
         createdAt: c.created_at,
         createdBy: c.created_by || 'owner',
         createdByName: c.created_by === 'owner' || !c.created_by ? ownerName : ctx.members[c.created_by]?.name || 'Removed member',
@@ -887,6 +930,7 @@ export function createApp({ adminHtml = '<!doctype html><title>RitPost Admin</ti
       };
     };
     const mayTouch = (row) => !me.ownOnly || row.created_by === me.id;
+    const batchNames = async () => Object.fromEntries(((await env.DB.prepare('SELECT id, name FROM batches').all()).results || []).map((b) => [b.id, b]));
 
     if (path === 'codes' && method === 'GET') {
       const { results } = me.ownOnly ? await env.DB.prepare('SELECT * FROM codes WHERE created_by = ? ORDER BY created_at DESC').bind(me.id).all() : await env.DB.prepare('SELECT * FROM codes ORDER BY created_at DESC').all();
@@ -900,7 +944,9 @@ export function createApp({ adminHtml = '<!doctype html><title>RitPost Admin</ti
         else ai[u.subject.slice(2)] = u.count;
       }
       const mem = await members();
-      return json({ ok: true, codes: results.map((c) => codeRow(c, { used: ai[c.code] || 0, posts: posts[c.code] || 0, devices: devs.find((d) => d.code === c.code)?.n || 0, members: mem })), currency: s.currency || '' });
+      const bat = await batchNames();
+      const devN = Object.fromEntries(devs.map((d) => [d.code, d.n]));
+      return json({ ok: true, codes: results.map((c) => codeRow(c, { used: ai[c.code] || 0, posts: posts[c.code] || 0, devices: devN[c.code] || 0, members: mem, batches: bat })), currency: s.currency || '' });
     }
 
     if (path === 'codes' && method === 'POST') {
@@ -911,7 +957,9 @@ export function createApp({ adminHtml = '<!doctype html><title>RitPost Admin</ti
       const qty = int(b.quantity, 1, 200, 1);
       const daily = b.dailyLimit === '' || b.dailyLimit === null || b.dailyLimit === undefined ? -1 : int(b.dailyLimit, 0, 100000, -1);
       const devices = b.maxDevices === '' || b.maxDevices === null || b.maxDevices === undefined ? -1 : int(b.maxDevices, 1, 1000, -1);
-      const expires = b.expiresAt === undefined ? (plan.features.days ? Date.now() + plan.features.days * DAY_MS : null) : b.expiresAt ? Number(b.expiresAt) || null : null;
+      const onActivation = b.startOn === 'activation';
+      const durationDays = onActivation ? int(b.durationDays, 0, 3650, plan.features.days || 0) : 0;
+      const expires = onActivation ? null : b.expiresAt === undefined ? (plan.features.days ? Date.now() + plan.features.days * DAY_MS : null) : b.expiresAt ? Number(b.expiresAt) || null : null;
       const label = String(b.label || '').trim().slice(0, 80);
       const contact = String(b.contact || '').trim().slice(0, 120);
       const note = String(b.note || '').trim().slice(0, 300);
@@ -920,7 +968,7 @@ export function createApp({ adminHtml = '<!doctype html><title>RitPost Admin</ti
       for (let i = 0; i < qty; i++) made.push(newCode());
       await env.DB.batch(
         made.map((c, i) =>
-          env.DB.prepare('INSERT INTO codes (code, label, note, daily_limit, max_devices, expires_at, status, created_at, plan_id, created_by, contact, amount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(
+          env.DB.prepare('INSERT INTO codes (code, label, note, daily_limit, max_devices, expires_at, status, created_at, plan_id, created_by, contact, amount, duration_days, sold_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(
             c,
             qty > 1 ? `${label}${label ? ' ' : ''}#${i + 1}` : label,
             note,
@@ -932,12 +980,14 @@ export function createApp({ adminHtml = '<!doctype html><title>RitPost Admin</ti
             plan.id,
             me.id,
             contact,
-            qty > 1 ? amount / qty : amount
+            qty > 1 ? amount / qty : amount,
+            durationDays,
+            Date.now()
           )
         )
       );
       await audit(env, me, qty > 1 ? `Created ${qty} access codes` : 'Created an access code', `${plan.name}${label ? ` · ${label}` : ''}${amount ? ` · ${s.currency} ${amount}` : ''}`);
-      return json({ ok: true, codes: made.map(fmtCode), plan: { id: plan.id, name: plan.name }, expiresAt: expires });
+      return json({ ok: true, codes: made.map(fmtCode), plan: { id: plan.id, name: plan.name }, expiresAt: expires, durationDays });
     }
 
     const codeMatch = /^codes\/([A-Za-z0-9-]+)(\/reset-devices)?$/.exec(path);
@@ -960,7 +1010,14 @@ export function createApp({ adminHtml = '<!doctype html><title>RitPost Admin</ti
         const onlyStatus = Object.keys(b).every((k) => k === 'status');
         if (!can(onlyStatus ? 'codes.support' : 'codes.edit')) return forbid();
         let expires = b.expiresAt !== undefined ? (b.expiresAt ? Number(b.expiresAt) : null) : row.expires_at;
-        if (b.extendDays) expires = Math.max(expires || 0, Date.now()) + int(b.extendDays, 1, 3650, 30) * DAY_MS;
+        // Not activated yet and valid "N days from activation": renewing adds days, a fixed date replaces the countdown.
+        const pending = !row.activated_at && row.duration_days > 0;
+        let duration = row.duration_days || 0;
+        if (b.durationDays !== undefined) duration = int(b.durationDays, 0, 3650, duration);
+        if (pending && b.expiresAt !== undefined && b.expiresAt) duration = 0;
+        if (b.extendDays && pending && !(b.expiresAt !== undefined && b.expiresAt)) duration += int(b.extendDays, 1, 3650, 30);
+        else if (b.extendDays) expires = Math.max(expires || 0, Date.now()) + int(b.extendDays, 1, 3650, 30) * DAY_MS;
+        if (pending && duration > 0 && !(b.expiresAt !== undefined && b.expiresAt)) expires = null;
         const plan = b.planId !== undefined ? plans[b.planId] : null;
         if (b.planId !== undefined && (!plan || plan.id === 'free')) return json({ ok: false, error: 'Pick a paid plan.' }, 400);
         const next = {
@@ -973,19 +1030,186 @@ export function createApp({ adminHtml = '<!doctype html><title>RitPost Admin</ti
           status: b.status === 'disabled' || b.status === 'active' ? b.status : row.status,
           plan_id: plan ? plan.id : row.plan_id,
           amount: b.amount !== undefined ? Math.max(0, Math.min(1e9, Number(b.amount) || 0)) : row.amount,
+          duration_days: duration,
         };
-        await env.DB.prepare('UPDATE codes SET label = ?, contact = ?, note = ?, daily_limit = ?, max_devices = ?, expires_at = ?, status = ?, plan_id = ?, amount = ? WHERE code = ?')
-          .bind(next.label, next.contact, next.note, next.daily_limit, next.max_devices, next.expires_at, next.status, next.plan_id, next.amount, c)
+        await env.DB.prepare('UPDATE codes SET label = ?, contact = ?, note = ?, daily_limit = ?, max_devices = ?, expires_at = ?, status = ?, plan_id = ?, amount = ?, duration_days = ? WHERE code = ?')
+          .bind(next.label, next.contact, next.note, next.daily_limit, next.max_devices, next.expires_at, next.status, next.plan_id, next.amount, next.duration_days, c)
           .run();
         const what = onlyStatus ? (next.status === 'disabled' ? 'Disabled an access code' : 'Enabled an access code') : b.extendDays ? `Extended an access code by ${int(b.extendDays, 1, 3650, 30)} days` : 'Edited an access code';
         await audit(env, me, what, `${fmtCode(c)}${next.label ? ` · ${next.label}` : ''}`);
-        return json({ ok: true, expiresAt: next.expires_at });
+        return json({ ok: true, expiresAt: next.expires_at, durationDays: next.duration_days, activated: !!row.activated_at });
       }
       if (method === 'DELETE') {
         if (!can('codes.delete')) return forbid();
         await env.DB.batch([env.DB.prepare('DELETE FROM codes WHERE code = ?').bind(c), env.DB.prepare('DELETE FROM code_devices WHERE code = ?').bind(c)]);
         await audit(env, me, 'Deleted an access code', `${fmtCode(c)}${row.label ? ` · ${row.label}` : ''}`);
         return json({ ok: true });
+      }
+    }
+
+    // ── bulk batches ──
+    const batchRow = (bt, st = {}) => {
+      const plan = plans[bt.plan_id] || plans.premium || plans.free;
+      return {
+        id: bt.id,
+        name: bt.name,
+        planId: plan.id,
+        planName: plan.name,
+        quantity: bt.quantity,
+        durationDays: bt.duration_days || 0,
+        redeemBy: bt.redeem_by || null,
+        channel: bt.channel || '',
+        price: bt.price || 0,
+        note: bt.note || '',
+        createdAt: bt.created_at,
+        createdBy: bt.created_by,
+        total: st.total || 0,
+        available: st.available || 0,
+        issued: st.issued || 0,
+        activated: st.activated || 0,
+        active: st.active || 0,
+        expired: st.expired || 0,
+        disabled: st.disabled || 0,
+        revenue: st.revenue || 0,
+      };
+    };
+    const batchStats = async (id) => {
+      const now = Date.now();
+      const sql = `SELECT batch_id, COUNT(*) AS total,
+        SUM(CASE WHEN status = 'active' AND activated_at IS NULL AND issued_at IS NULL AND (redeem_by IS NULL OR redeem_by > ?) THEN 1 ELSE 0 END) AS available,
+        SUM(CASE WHEN activated_at IS NULL AND issued_at IS NOT NULL AND status = 'active' THEN 1 ELSE 0 END) AS issued,
+        SUM(CASE WHEN activated_at IS NOT NULL THEN 1 ELSE 0 END) AS activated,
+        SUM(CASE WHEN activated_at IS NOT NULL AND status = 'active' AND (expires_at IS NULL OR expires_at > ?) THEN 1 ELSE 0 END) AS active,
+        SUM(CASE WHEN status = 'active' AND ((expires_at IS NOT NULL AND expires_at <= ?) OR (activated_at IS NULL AND redeem_by IS NOT NULL AND redeem_by <= ?)) THEN 1 ELSE 0 END) AS expired,
+        SUM(CASE WHEN status = 'disabled' THEN 1 ELSE 0 END) AS disabled,
+        COALESCE(SUM(CASE WHEN sold_at IS NOT NULL THEN amount ELSE 0 END), 0) AS revenue
+        FROM codes WHERE batch_id ${id ? '= ?' : 'IS NOT NULL'} GROUP BY batch_id`;
+      const { results } = await env.DB.prepare(sql).bind(now, now, now, now, ...(id ? [id] : [])).all();
+      return Object.fromEntries((results || []).map((r) => [r.batch_id, r]));
+    };
+    if (path === 'batches' && method === 'GET') {
+      const { results } = me.ownOnly ? await env.DB.prepare('SELECT * FROM batches WHERE created_by = ? ORDER BY created_at DESC').bind(me.id).all() : await env.DB.prepare('SELECT * FROM batches ORDER BY created_at DESC').all();
+      const st = await batchStats();
+      return json({ ok: true, batches: (results || []).map((bt) => batchRow(bt, st[bt.id])), currency: s.currency || '' });
+    }
+    if (path === 'batches' && method === 'POST') {
+      if (!can('codes.create')) return forbid();
+      const b = (await readBody(req)) || {};
+      const plan = plans[b.planId];
+      if (!plan || plan.id === 'free' || plan.archived) return json({ ok: false, error: 'Pick a paid plan for the codes.' }, 400);
+      const qty = Number(b.quantity) >= 1 ? int(b.quantity, 1, MAX_BATCH, 0) : 0;
+      if (!qty) return json({ ok: false, error: `Choose how many codes to make (1–${MAX_BATCH}).` }, 400);
+      const name = String(b.name || '').trim().slice(0, 80) || `${plan.name} · ${today()}`;
+      const durationDays = int(b.durationDays, 0, 3650, plan.features.days || 0);
+      const redeemBy = b.redeemBy ? Number(b.redeemBy) || null : null;
+      if (redeemBy && redeemBy < Date.now()) return json({ ok: false, error: 'The “activate by” date has already passed.' }, 400);
+      const price = Math.max(0, Math.min(1e9, Number(b.price) || 0));
+      const channel = String(b.channel || '').trim().slice(0, 80);
+      const note = String(b.note || '').trim().slice(0, 300);
+      const daily = b.dailyLimit === '' || b.dailyLimit === null || b.dailyLimit === undefined ? -1 : int(b.dailyLimit, 0, 100000, -1);
+      const devices = b.maxDevices === '' || b.maxDevices === null || b.maxDevices === undefined ? -1 : int(b.maxDevices, 1, 1000, -1);
+      const id = `b${Date.now().toString(36)}${randomHex(3)}`;
+      const now = Date.now();
+      const made = new Set();
+      while (made.size < qty) made.add(newCode());
+      const list = [...made];
+      await env.DB.prepare('INSERT INTO batches (id, name, plan_id, quantity, duration_days, redeem_by, channel, price, note, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(id, name, plan.id, qty, durationDays, redeemBy, channel, price, note, now, me.id).run();
+      for (let i = 0; i < list.length; i += 100) {
+        await env.DB.batch(
+          list.slice(i, i + 100).map((c) =>
+            env.DB.prepare("INSERT INTO codes (code, label, note, daily_limit, max_devices, expires_at, status, created_at, plan_id, created_by, contact, amount, duration_days, batch_id, redeem_by) VALUES (?, '', ?, ?, ?, NULL, 'active', ?, ?, ?, '', 0, ?, ?, ?)").bind(c, '', daily, devices, now, plan.id, me.id, durationDays, id, redeemBy)
+          )
+        );
+      }
+      await audit(env, me, `Generated ${plural(qty, ['access code', 'access codes'])} in bulk`, `${name} · ${plan.name}${durationDays ? ` · ${durationDays} days from activation` : ' · no expiry'}${channel ? ` · ${channel}` : ''}`);
+      const st = await batchStats(id);
+      const bt = await env.DB.prepare('SELECT * FROM batches WHERE id = ?').bind(id).first();
+      return json({ ok: true, batch: batchRow(bt, st[id]), codes: list.map(fmtCode) });
+    }
+    const batchMatch = /^batches\/([a-z0-9]{4,40})(?:\/(codes|issue))?$/.exec(path);
+    if (batchMatch) {
+      const bt = await env.DB.prepare('SELECT * FROM batches WHERE id = ?').bind(batchMatch[1]).first();
+      if (!bt || !mayTouch(bt)) return json({ ok: false, error: 'No such batch.' }, 404);
+      const sub = batchMatch[2];
+      if (sub === 'codes' && method === 'GET') {
+        const { results } = await env.DB.prepare('SELECT * FROM codes WHERE batch_id = ? ORDER BY created_at, code').bind(bt.id).all();
+        const mem = await members();
+        return json({ ok: true, batch: batchRow(bt, (await batchStats(bt.id))[bt.id]), codes: (results || []).map((c) => codeRow(c, { used: 0, posts: 0, devices: 0, members: mem, batches: { [bt.id]: bt } })) });
+      }
+      // Hand out the next unused codes (to a customer, or for export to a shop), so no code is given twice.
+      if (sub === 'issue' && method === 'POST') {
+        if (!can('codes.create')) return forbid();
+        const b = (await readBody(req)) || {};
+        const n = int(b.count, 1, MAX_BATCH, 1);
+        const { results } = await env.DB.prepare("SELECT code FROM codes WHERE batch_id = ? AND status = 'active' AND activated_at IS NULL AND issued_at IS NULL AND (redeem_by IS NULL OR redeem_by > ?) ORDER BY created_at, code LIMIT ?").bind(bt.id, Date.now(), n).all();
+        const picked = (results || []).map((r) => r.code);
+        if (!picked.length) return json({ ok: false, error: 'No unused codes left in this batch. Generate more.' }, 400);
+        const label = String(b.label || '').trim().slice(0, 80);
+        const contact = String(b.contact || '').trim().slice(0, 120);
+        const sale = b.sale !== false; // exported for a shop: counts as a sale when activated instead
+        const total = b.amount === undefined || b.amount === '' || b.amount === null ? bt.price * picked.length : Math.max(0, Math.min(1e9, Number(b.amount) || 0));
+        const each = picked.length ? total / picked.length : 0;
+        const now = Date.now();
+        for (let i = 0; i < picked.length; i += 100) {
+          await env.DB.batch(
+            picked.slice(i, i + 100).map((c) =>
+              sale
+                ? env.DB.prepare('UPDATE codes SET issued_at = ?, label = ?, contact = ?, amount = ?, sold_at = ? WHERE code = ?').bind(now, label, contact, each, now, c)
+                : env.DB.prepare('UPDATE codes SET issued_at = ? WHERE code = ?').bind(now, c)
+            )
+          );
+        }
+        await audit(env, me, sale ? `Gave out ${picked.length} code${picked.length === 1 ? '' : 's'} from a batch` : `Exported ${picked.length} code${picked.length === 1 ? '' : 's'} from a batch`, `${bt.name}${label ? ` · ${label}` : ''}`);
+        return json({ ok: true, codes: picked.map(fmtCode), short: picked.length < n, plan: { id: bt.plan_id, name: (plans[bt.plan_id] || {}).name || '' }, durationDays: bt.duration_days || 0, redeemBy: bt.redeem_by || null });
+      }
+      if (!sub && method === 'PATCH') {
+        const b = (await readBody(req)) || {};
+        const writes = [];
+        let what = 'Changed a batch';
+        if (b.name !== undefined || b.channel !== undefined || b.note !== undefined || b.price !== undefined) {
+          if (!can('codes.edit')) return forbid();
+          writes.push(
+            env.DB.prepare('UPDATE batches SET name = ?, channel = ?, note = ?, price = ? WHERE id = ?').bind(
+              b.name !== undefined ? String(b.name).trim().slice(0, 80) || bt.name : bt.name,
+              b.channel !== undefined ? String(b.channel).trim().slice(0, 80) : bt.channel,
+              b.note !== undefined ? String(b.note).trim().slice(0, 300) : bt.note,
+              b.price !== undefined ? Math.max(0, Math.min(1e9, Number(b.price) || 0)) : bt.price,
+              bt.id
+            )
+          );
+        }
+        if (b.redeemBy !== undefined) {
+          if (!can('codes.edit')) return forbid();
+          const rb = b.redeemBy ? Number(b.redeemBy) || null : null;
+          writes.push(env.DB.prepare('UPDATE batches SET redeem_by = ? WHERE id = ?').bind(rb, bt.id), env.DB.prepare('UPDATE codes SET redeem_by = ? WHERE batch_id = ? AND activated_at IS NULL').bind(rb, bt.id));
+          what = 'Changed a batch’s activate-by date';
+        }
+        // Turn the codes nobody has activated yet off (e.g. stock withdrawn from a shop) or back on.
+        if (b.unused === 'disabled' || b.unused === 'active') {
+          if (!can('codes.support')) return forbid();
+          writes.push(env.DB.prepare('UPDATE codes SET status = ? WHERE batch_id = ? AND activated_at IS NULL').bind(b.unused, bt.id));
+          what = b.unused === 'disabled' ? 'Turned off a batch’s unused codes' : 'Turned on a batch’s unused codes';
+        }
+        if (b.all === 'disabled' || b.all === 'active') {
+          if (!can('codes.support')) return forbid();
+          writes.push(env.DB.prepare('UPDATE codes SET status = ? WHERE batch_id = ?').bind(b.all, bt.id));
+          what = b.all === 'disabled' ? 'Turned off all codes in a batch' : 'Turned on all codes in a batch';
+        }
+        if (!writes.length) return json({ ok: false, error: 'Nothing to change.' }, 400);
+        await env.DB.batch(writes);
+        await audit(env, me, what, bt.name);
+        return json({ ok: true });
+      }
+      if (!sub && method === 'DELETE') {
+        if (!can('codes.delete')) return forbid();
+        // Only codes nobody has activated are deleted; customers keep theirs.
+        const left = (await env.DB.prepare('SELECT COUNT(*) AS n FROM codes WHERE batch_id = ? AND activated_at IS NOT NULL').bind(bt.id).first())?.n || 0;
+        const gone = (await env.DB.prepare('SELECT COUNT(*) AS n FROM codes WHERE batch_id = ? AND activated_at IS NULL').bind(bt.id).first())?.n || 0;
+        const writes = [env.DB.prepare('DELETE FROM codes WHERE batch_id = ? AND activated_at IS NULL').bind(bt.id)];
+        if (!left) writes.push(env.DB.prepare('DELETE FROM batches WHERE id = ?').bind(bt.id));
+        await env.DB.batch(writes);
+        await audit(env, me, 'Deleted a batch’s unused codes', `${bt.name} · ${gone} deleted${left ? `, ${left} in use kept` : ''}`);
+        return json({ ok: true, deleted: gone, kept: left });
       }
     }
 
@@ -1107,7 +1331,7 @@ export function createApp({ adminHtml = '<!doctype html><title>RitPost Admin</ti
     if (path === 'team' && method === 'GET') {
       if (!can('team')) return forbid();
       const { results } = await env.DB.prepare('SELECT * FROM members ORDER BY created_at').all();
-      const { results: sold } = await env.DB.prepare('SELECT created_by, COUNT(*) AS n, COALESCE(SUM(amount), 0) AS amount, SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) AS n30, COALESCE(SUM(CASE WHEN created_at >= ? THEN amount ELSE 0 END), 0) AS amount30 FROM codes GROUP BY created_by').bind(Date.now() - 30 * DAY_MS, Date.now() - 30 * DAY_MS).all();
+      const { results: sold } = await env.DB.prepare('SELECT created_by, COUNT(*) AS n, COALESCE(SUM(amount), 0) AS amount, SUM(CASE WHEN sold_at >= ? THEN 1 ELSE 0 END) AS n30, COALESCE(SUM(CASE WHEN sold_at >= ? THEN amount ELSE 0 END), 0) AS amount30 FROM codes WHERE sold_at IS NOT NULL GROUP BY created_by').bind(Date.now() - 30 * DAY_MS, Date.now() - 30 * DAY_MS).all();
       const st = (id) => sold.find((x) => (x.created_by || 'owner') === id) || {};
       const row = (m) => ({ id: m.id, name: m.name, email: m.email, role: m.role, roleName: ROLES[m.role]?.name || m.role, status: m.status === 'invited' && m.invite_exp && m.invite_exp < Date.now() ? 'expired' : m.status, ownOnly: !!m.own_only, createdAt: m.created_at, lastLoginAt: m.last_login_at, codes: st(m.id).n || 0, amount: st(m.id).amount || 0, codes30: st(m.id).n30 || 0, amount30: st(m.id).amount30 || 0 });
       const owner = await ownerMe(env);

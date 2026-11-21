@@ -33,7 +33,29 @@ CREATE TABLE IF NOT EXISTS codes (
   plan_id TEXT,
   created_by TEXT NOT NULL DEFAULT 'owner',  -- team member id, or 'owner'
   contact TEXT NOT NULL DEFAULT '',
-  amount REAL NOT NULL DEFAULT 0             -- amount paid
+  amount REAL NOT NULL DEFAULT 0,            -- amount paid
+  duration_days INTEGER NOT NULL DEFAULT 0,  -- >0: valid this many days from activation
+  activated_at INTEGER,                      -- first use on a device
+  batch_id TEXT,                             -- made in a bulk batch
+  redeem_by INTEGER,                         -- must be activated before this (ms), NULL = any time
+  issued_at INTEGER,                         -- batch code handed out / exported
+  sold_at INTEGER                            -- counts as a sale from this time (NULL = unsold stock)
+);
+CREATE INDEX IF NOT EXISTS codes_batch ON codes (batch_id);
+
+-- Codes made in bulk (to send out, or sell on other websites).
+CREATE TABLE IF NOT EXISTS batches (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  plan_id TEXT NOT NULL,
+  quantity INTEGER NOT NULL,
+  duration_days INTEGER NOT NULL DEFAULT 0,
+  redeem_by INTEGER,
+  channel TEXT NOT NULL DEFAULT '',
+  price REAL NOT NULL DEFAULT 0,       -- per code
+  note TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL,
+  created_by TEXT NOT NULL DEFAULT 'owner'
 );
 
 -- Which RitPost installs use a code (for the device limit).

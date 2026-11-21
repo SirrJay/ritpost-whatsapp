@@ -72,14 +72,16 @@ Choose the mode in the switch above the Start button.
 
 ## Facebook groups and Pages
 
-RitPost can post the same message to your Facebook groups and the Facebook Pages you manage.
+RitPost can post to your Facebook groups and the Facebook Pages you manage, with your Compose message or a Facebook post of its own.
+
+**Facebook post box.** At the top of the Facebook tab, the post follows your Compose message (without WhatsApp marks). Untick **Same as Compose**, or just start typing, to write a separate Facebook post. The toolbar has 😊 emoji, **✨ AI** (write or rewrite the post for Facebook, with the same options as Compose), **# Hashtags** (your saved hashtag sets, shared with Instagram and X), **+ Name** (inserts `{group}`, replaced by each group's or Page's name) and **Preview** (shows the post as the first selected group will get it). Tick **Same as Compose** again to follow Compose. *All 4 platforms at once* in the AI window also fills in the Facebook post.
 
 1. Open the **Facebook** tab in the side panel. Groups and Pages have separate lists: switch with **Groups | Pages**.
 2. Add where to post:
    - **Import my Facebook groups** reads the groups you've joined (Facebook's "Your groups" page).
    - **Import Pages I manage** (on the Pages list) reads your Pages (Facebook's "Your Pages" page).
    - Or paste a group or Page link and click **Add**.
-3. Tick groups and Pages, choose **Manual** or **Automatic**, then click **Post to …** (for example "Post to 3 groups + 1 Page"). The message and photos/videos come from the **Compose** tab.
+3. Tick groups and Pages, choose **Manual** or **Automatic**, then click **Post to …** (for example "Post to 3 groups + 1 Page"). The text comes from the Facebook post box; photos and videos come from the **Compose** tab.
 4. For each one, RitPost opens it, opens the post box ("Write something…" / "What's on your mind?"), fills in your message and attaches your photos and videos. If Facebook ignores RitPost's click on the post box, the panel asks you to click it once and RitPost carries on by itself.
 5. A panel in the corner of Facebook shows progress, with **Skip** and **Stop**.
 
@@ -176,7 +178,7 @@ RitPost is connected to the publisher's RitPost server (see `worker/README.md`).
 - **AI rewrites** per day,
 - **scheduled posts**, **Automatic mode** and **RitPost Studio**.
 
-**Settings (⚙) → Your plan** shows your plan, how many posts and rewrites you have left today on each platform, and when your code expires. To activate a code: paste it under *Have an access code?* and click **Activate** (codes look like `RP-ABCD-EFGH-JKLM`). **See plans & upgrade** lists the plans on offer and the publisher's **Get premium** link.
+**Settings (⚙) → Your plan** shows your plan, how many posts and rewrites you have left today on each platform, and when your code expires. To activate a code: paste it under *Have an access code?* and click **Activate** (codes look like `RP-ABCD-EFGH-JKLM`). Most codes start counting down when you activate them, so a code bought today and activated next month still gives you its full time. **See plans & upgrade** lists the plans on offer and the publisher's **Get premium** link.
 
 A small line under the Start button shows what's left for the platform you're posting to. If a run doesn't fit your plan (too many groups, today's posts used up, a platform or feature not included), RitPost explains why and how to upgrade before anything is opened. A "post" is one WhatsApp group, one Facebook group or Page, or one Instagram / X post; posts a stopped run didn't make are given back. Daily limits reset at midnight UTC. If the RitPost server can't be reached, RitPost uses the last plan it saw.
 

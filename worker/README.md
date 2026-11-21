@@ -75,9 +75,26 @@ Changes reach RitPost within a few minutes.
 
 ### Access codes
 
-**Sell an access code:** pick the plan (expiry and limits fill in), the customer's name, phone or email, the amount paid, a private note (e.g. the MoMo reference), and how many codes. Optionally change this customer's AI rewrites or devices. You get the code with a ready message to copy, or **Send on WhatsApp** (opens the chat directly when the phone number starts with `+` and the country code).
+**Sell an access code:** pick the plan (expiry and limits fill in), when its **time starts** (*now*, with an expiry date, or *when the customer activates it*, with a number of days), the customer's name, phone or email, the amount paid, a private note (e.g. the MoMo reference), and how many codes. Optionally change this customer's AI rewrites or devices. You get the code with a ready message to copy, or **Send on WhatsApp** (opens the chat directly when the phone number starts with `+` and the country code).
 
 The list shows each code's plan, status, posts and AI used today, devices, expiry (codes expiring within 7 days are highlighted), amount paid, who sold it and last use. Search; filter by plan or status (including *Expiring in 7 days*); **Edit** (change plan, customer, amount, limits, expiry; **renew +30 days / +3 months / +1 year**; reset devices); **Disable / Enable**; **Delete**; **Export CSV**.
+
+### Bulk codes
+
+**Generate codes in bulk** makes up to 2,000 codes at once, to send to customers, give to resellers, or sell on your website or another online shop. Choose:
+
+- the **plan**, how many codes, a **batch name** and where you'll sell them,
+- **Valid for (days after activation)**: each code's time starts when its buyer activates it, not when you make it, so stock never goes stale (0 = never expires),
+- **Must be activated by** (optional): unused codes stop working after this date,
+- the **price per code** (for your sales figures), and optional AI / device limits.
+
+Each batch shows how many codes are **activated**, **given out** and **unused**, its price and revenue. Then:
+
+- **Give out:** takes the next unused codes (never the same code twice) for a customer, with a ready message to copy or **Send on WhatsApp**. They count as a sale straight away.
+- **Export:** for a shop or reseller, as a **CSV** (Excel, Shopify, WooCommerce…), a **text file** (one code per line) or **printable cards** with your business name and how to activate. Exported codes are marked as given out, and count as a sale when the buyer activates them.
+- **⋯** → download the full list, show the batch's codes, edit the batch (name, shop, price, activate-by date), **turn off unused codes** (for example stock withdrawn from a shop; customers already using a code keep it) or turn them back on, and **delete unused codes** (activated ones are kept).
+
+Unsold bulk codes stay out of the main code list; pick **Bulk stock** or a batch in the filters to see them. A code that isn't activated yet shows *not activated* and *30 days after activation*; renewing it adds days.
 
 ### Activity and devices
 
@@ -92,8 +109,8 @@ Add people to help you sell and support customers. **Add a team member** (name, 
 |---|---|
 | Owner | Everything, including the team and the owner password (you) |
 | Admin | Everything except managing the team |
-| Sales | Sell codes: create, edit, renew, turn off, reset devices; sees the dashboard |
-| Support | Reset devices, turn codes on/off, block abusers; can't sell |
+| Sales | Sell codes: create, generate in bulk, give out, export, edit, renew, turn off, reset devices; sees the dashboard |
+| Support | Reset devices, turn codes (and a batch's unused codes) on/off, block abusers; can't sell |
 | Viewer | Look at everything, change nothing |
 
 Tick **Only sees the codes they sell** for resellers or agents. The team list shows each person's codes sold and sales for the last 30 days. **Reset password** makes a new link; **Turn off** signs them out straight away; **Remove** deletes their account (their codes keep working). The **Activity log** records who did what (kept a year).

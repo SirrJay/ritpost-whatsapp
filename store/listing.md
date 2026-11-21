@@ -56,6 +56,7 @@ FEATURES
 • Post the same message to Facebook groups and the Pages you manage, manually or automatically with safe pacing
 • Post to Instagram (photos, carousels, Reels and Stories) and X (posts with photos or video, and threads), with a preview and a final edit before publishing
 • RitPost Studio photo editor: crop for posts and Stories, fit with a blurred background, 15 filters, adjustments, text, emoji stickers, labels and drawing
+• Write a separate Facebook post with emoji, saved hashtags, the group's name and AI, or reuse your Compose message
 • Free plan for everyone, premium plans with an access code: more posts a day, more groups per run, more AI rewrites
 • AI writing assistant included, no OpenAI account needed: improve, make professional, shorten, translate or write versions for WhatsApp, Facebook, Instagram and X at once, with tone, audience, call to action, hashtags, brand voice and presets
 • Emoji picker everywhere you write, saved hashtag sets and live character counters
