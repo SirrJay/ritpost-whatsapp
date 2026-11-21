@@ -94,7 +94,7 @@ code,.mono{font-family:ui-monospace,Consolas,monospace;font-size:12.5px}
 
 <section id="loginView" class="login card" hidden>
   <h1>RitPost AI Admin</h1>
-  <p class="muted" style="margin:0">Enter the admin password you chose when you ran <code>set-admin-password.ps1</code>.</p>
+  <p class="muted" style="margin:0">Enter your admin password, or sign in without one: run <code>open-admin.ps1</code> in the RitPost <code>worker</code> folder on your computer.</p>
   <label class="f">Admin password
     <span style="display:flex;gap:6px"><input id="pw" type="password" autocomplete="off" spellcheck="false"><button type="button" class="btn" id="pwShow">Show</button></span>
     <small>Type the password you chose in set-admin-password.ps1. If Chrome filled the box in by itself, clear it first.</small>
@@ -225,6 +225,15 @@ code,.mono{font-family:ui-monospace,Consolas,monospace;font-size:12.5px}
         <label class="f">Upgrade link <small>Where to buy a premium code (WhatsApp link, website…), optional</small><input id="sUpUrl" type="url" maxlength="300" placeholder="https://wa.me/233…"></label>
       </div>
       <div class="row"><span class="sp"></span><button id="saveSettings" class="btn primary">Save settings</button></div>
+      <div class="card grid">
+        <h2>Admin password</h2>
+        <p class="muted" style="margin:0;font-size:13px">Set the password for this portal. It's shown as you type, so you can check it. You can always get in without it by running <code>open-admin.ps1</code> on your computer.</p>
+        <div class="form">
+          <label class="f">New password<input id="np1" type="text" autocomplete="off" spellcheck="false" maxlength="200"></label>
+          <label class="f">Type it again<input id="np2" type="text" autocomplete="off" spellcheck="false" maxlength="200"></label>
+        </div>
+        <div class="row"><span class="sp"></span><button id="savePw" class="btn primary">Save password</button></div>
+      </div>
     </section>
   </main>
 </div>
@@ -265,8 +274,8 @@ async function signIn() {
 $('loginBtn').onclick = signIn;
 $('pw').addEventListener('keyup', (e) => ($('capsWarn').hidden = !e.getModifierState?.('CapsLock')));
 $('pwShow').onclick = () => { const i = $('pw'); i.type = i.type === 'password' ? 'text' : 'password'; $('pwShow').textContent = i.type === 'password' ? 'Show' : 'Hide'; i.focus(); };
-$('pw').onkeydown = (e) => e.key === 'Enter' && signIn();
-$('logout').onclick = signOut;
+$('pw').addEventListener('keydown', (e) => { if (e.key === 'Enter') signIn(); });
+$('logout').onclick = () => { api('logout', { method: 'POST' }).catch(() => {}).finally(signOut); };
 
 // ── views ──
 const loaders = { dash: loadDash, codes: loadCodes, activity: loadActivity, devices: loadDevices, settings: loadSettings };
@@ -446,15 +455,34 @@ $('saveSettings').onclick = async () => {
 // ── modal ──
 function openModal(html) { $('sheet').innerHTML = html; $('modal').hidden = false; $('sheet').querySelectorAll('[data-close]').forEach((b) => (b.onclick = closeModal)); }
 function closeModal() { $('modal').hidden = true; }
-$('modal').onclick = (e) => e.target.id === 'modal' && closeModal();
-document.onkeydown = (e) => e.key === 'Escape' && closeModal();
+$('modal').addEventListener('click', (e) => { if (e.target.id === 'modal') closeModal(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
 function confirmBox(title, text, okLabel, run) {
   openModal(`<h3>${esc(title)}</h3><p style="margin:0">${esc(text)}</p><div class="row"><span class="sp"></span><button class="btn" data-close>Cancel</button><button class="btn primary" id="okBtn" style="background:var(--danger)">${esc(okLabel)}</button></div>`);
   $('okBtn').onclick = async () => { closeModal(); try { await run(); } catch (e) { toast(e.message, true); } };
 }
 
 function start() { $('loginView').hidden = true; $('app').hidden = false; show('dash'); }
-if (token) api('login').then(start, () => signOut()); else signOut();
+$('savePw').onclick = async () => {
+  const a = $('np1').value.trim(), b = $('np2').value.trim();
+  if (a.length < 8) return toast('Use at least 8 characters.', true);
+  if (a !== b) return toast('The two passwords are different.', true);
+  try { await api('password', { method: 'PUT', body: { password: a } }); $('np1').value = ''; $('np2').value = ''; toast('Admin password saved'); } catch (e) { toast(e.message, true); }
+};
+
+// One-time sign-in link from open-admin.ps1: #login=<token>
+async function magic() {
+  const m = /[#&]login=([0-9a-f]{64})/.exec(location.hash);
+  if (!m) return false;
+  history.replaceState(null, '', location.pathname);
+  try {
+    const r = await fetch('/admin/magic', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: m[1] }) }).then((x) => x.json());
+    if (!r.ok) throw new Error(r.error || 'This sign-in link did not work.');
+    token = r.session; store.set('rp-admin', token); start(); toast('Signed in');
+  } catch (e) { signOut(); $('loginErr').textContent = e.message; $('loginErr').hidden = false; }
+  return true;
+}
+magic().then((used) => { if (used) return; if (token) api('login').then(start, () => signOut()); else signOut(); });
 </script>
 </body>
 </html>

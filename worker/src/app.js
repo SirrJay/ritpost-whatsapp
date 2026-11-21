@@ -292,7 +292,8 @@ export function createApp({ adminHtml = '<!doctype html><title>RitPost AI</title
     token = token.trim();
     const okHash = m && token ? safeEqual(await sha(m[1] + token), m[2]) : false;
     const okSecret = secret ? safeEqual(token, secret) : false;
-    if (!okHash && !okSecret) {
+    const okSession = !okHash && !okSecret && /^[0-9a-f]{64}$/.test(token) ? await validSession(env, token) : false;
+    if (!okHash && !okSecret && !okSession) {
       await bump(env, day, failKey).run();
       return json({ ok: false, error: 'Wrong admin password.' }, 401);
     }
@@ -320,6 +321,50 @@ export function createApp({ adminHtml = '<!doctype html><title>RitPost AI</title
     usedToday,
   });
 
+  // ── Sign-in sessions and one-time sign-in links (from worker\open-admin.ps1) ──
+  const SESSION_MS = 12 * 60 * 60 * 1000;
+  async function sessionsTable(env) {
+    await env.DB.prepare('CREATE TABLE IF NOT EXISTS admin_sessions (hash TEXT PRIMARY KEY, expires_at INTEGER NOT NULL)').run();
+  }
+  async function validSession(env, token) {
+    await sessionsTable(env);
+    const r = await env.DB.prepare('SELECT expires_at FROM admin_sessions WHERE hash = ?').bind(await sha(token)).first();
+    return !!r && r.expires_at > Date.now();
+  }
+  function randomHex(n = 32) {
+    return [...crypto.getRandomValues(new Uint8Array(n))].map((b) => b.toString(16).padStart(2, '0')).join('');
+  }
+  async function newSession(env) {
+    await sessionsTable(env);
+    const token = randomHex();
+    await env.DB.batch([
+      env.DB.prepare('DELETE FROM admin_sessions WHERE expires_at < ?').bind(Date.now()),
+      env.DB.prepare('INSERT INTO admin_sessions (hash, expires_at) VALUES (?, ?)').bind(await sha(token), Date.now() + SESSION_MS),
+    ]);
+    return token;
+  }
+  /** POST /admin/magic { token } → a sign-in session, if the one-time link is valid. */
+  async function magicLogin(req, env) {
+    const b = (await readBody(req)) || {};
+    const ip = await ipHash(req, env);
+    const day = today();
+    if ((await count(env, day, `magicfail:${ip}`)) >= 20) return json({ ok: false, error: 'Too many tries. Run open-admin.ps1 again tomorrow.' }, 429);
+    let stored = null;
+    try {
+      stored = JSON.parse((await env.DB.prepare("SELECT value FROM settings WHERE key = 'admin_magic'").first())?.value || 'null');
+    } catch {
+      stored = null;
+    }
+    const tok = String(b.token || '');
+    const ok = stored && /^[0-9a-f]{64}$/.test(tok) && stored.exp > Date.now() && safeEqual(await sha(tok), stored.hash);
+    if (!ok) {
+      await bump(env, day, `magicfail:${ip}`).run();
+      return json({ ok: false, error: 'This sign-in link has expired or was already used. Run open-admin.ps1 again.' }, 401);
+    }
+    await env.DB.prepare("DELETE FROM settings WHERE key = 'admin_magic'").run(); // single use
+    return json({ ok: true, session: await newSession(env) });
+  }
+
   async function admin(req, env, path) {
     const denied = await adminAuth(req, env);
     if (denied) return denied;
@@ -328,6 +373,24 @@ export function createApp({ adminHtml = '<!doctype html><title>RitPost AI</title
     const day = today();
 
     if (path === 'login') return json({ ok: true });
+
+    if (path === 'password' && method === 'PUT') {
+      const b = (await readBody(req)) || {};
+      const pw = String(b.password || '').trim();
+      if (pw.length < 8) return json({ ok: false, error: 'Use at least 8 characters.' }, 400);
+      const salt = randomHex(16);
+      await env.DB.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('admin_hash', ?)").bind(JSON.stringify(`sha256:${salt}:${await sha(salt + pw)}`)).run();
+      return json({ ok: true });
+    }
+
+    if (path === 'logout' && method === 'POST') {
+      const tok = (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '').trim();
+      if (/^[0-9a-f]{64}$/.test(tok)) {
+        await sessionsTable(env);
+        await env.DB.prepare('DELETE FROM admin_sessions WHERE hash = ?').bind(await sha(tok)).run();
+      }
+      return json({ ok: true });
+    }
 
     if (path === 'overview' && method === 'GET') {
       const since = daysAgo(13);
@@ -504,6 +567,7 @@ export function createApp({ adminHtml = '<!doctype html><title>RitPost AI</title
     };
     try {
       if (path === '/admin') return new Response(adminHtml, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'no-referrer', 'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'" } });
+      if (path === '/admin/magic' && req.method === 'POST') return withCors(await magicLogin(req, env));
       if (path.startsWith('/admin/api/')) return withCors(await admin(req, env, path.slice('/admin/api/'.length)));
       if (req.method === 'POST' && path === '/v1/status') return withCors(await apiStatus(req, env));
       if (req.method === 'POST' && path === '/v1/redeem') return withCors(await apiStatus(req, env, { register: true }));

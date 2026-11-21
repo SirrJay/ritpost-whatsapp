@@ -36,6 +36,8 @@ If PowerShell refuses to run the script, run `Set-ExecutionPolicy -Scope Process
 
 Open `https://<your-server>/admin` and sign in with your admin password.
 
+**Sign in without a password:** run `.\open-admin.ps1` in this folder. It opens the portal already signed in (a one-time link that works once, within 10 minutes; only a computer signed in to your Cloudflare account can make one). You can then set or change the password in **Settings → Admin password**, where it's shown as you type.
+
 - **Dashboard**: rewrites today (free/premium), active devices, cost today / 7 days (after you enter prices), active codes, errors, a 14-day chart, the model in use, and **Run a test rewrite**.
 - **Access codes**: create codes for customers (name, rewrites per day, devices allowed, expiry such as 30 days / 3 months / 1 year / never, a private note such as the payment reference), one or many at a time. Each new code comes with a ready message to send your customer. The list shows today's use, devices, expiry, total uses and last use; search, filter, edit, disable/enable, reset devices (customer changed computer), delete, export CSV.
 - **Activity**: the last 300 AI requests with plan, code, device, platform, model, tokens and errors.
