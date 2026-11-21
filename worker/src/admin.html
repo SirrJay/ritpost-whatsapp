@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>RitPost AI Admin</title>
+<style>
+:root{--bg:#f4f6f9;--card:#fff;--ink:#0f172a;--ink2:#334155;--muted:#64748b;--line:#e2e8f0;--soft:#f1f5f9;--brand:#0e7c66;--brand2:#14b88a;--brandsoft:rgba(20,184,138,.12);--violet:#7c3aed;--danger:#dc2626;--dangersoft:#fee2e2;--warn:#b45309;--warnsoft:#fef3c7;color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--bg:#0b1220;--card:#111a2c;--ink:#e6edf7;--ink2:#c3cee0;--muted:#8a9ab5;--line:#26344f;--soft:#1a2539;--brandsoft:rgba(20,184,138,.16);--dangersoft:rgba(248,113,113,.14);--danger:#f87171;--warnsoft:rgba(251,191,36,.14);--warn:#fbbf24;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 "Segoe UI",-apple-system,Roboto,Helvetica,Arial,sans-serif}
+button,input,select,textarea{font:inherit;color:inherit}
+[hidden]{display:none!important}
+.muted{color:var(--muted)}
+header{display:flex;align-items:center;gap:12px;padding:12px 20px;background:radial-gradient(120% 160% at 0 0,#17c896 0,var(--brand) 55%,#0a5a4b 100%);color:#fff;flex-wrap:wrap}
+header b{font-size:16px}
+header .sub{opacity:.85;font-size:12.5px}
+header .sp{flex:1}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;background:rgba(255,255,255,.18);font-size:12px;font-weight:600}
+.pill i{width:8px;height:8px;border-radius:50%;background:#86efac}
+.pill.off i{background:#fca5a5}
+header button{background:rgba(255,255,255,.18);border:0;color:#fff;padding:6px 12px;border-radius:8px;cursor:pointer;font-weight:600}
+nav{display:flex;gap:4px;padding:0 20px;background:var(--card);border-bottom:1px solid var(--line);overflow-x:auto}
+nav button{border:0;background:none;padding:12px 14px;cursor:pointer;color:var(--muted);font-weight:600;border-bottom:2px solid transparent;white-space:nowrap}
+nav button.on{color:var(--brand);border-bottom-color:var(--brand2)}
+main{max-width:1180px;margin:0 auto;padding:20px}
+.grid{display:grid;gap:14px}
+.kpis{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;box-shadow:0 1px 2px rgba(15,23,42,.05)}
+.kpi .v{font-size:26px;font-weight:700;margin-top:2px}
+.kpi .l{font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.kpi .s{font-size:12px;color:var(--muted)}
+h2{font-size:15px;margin:0 0 10px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.sp{flex:1}
+.btn{border:1px solid var(--line);background:var(--card);border-radius:9px;padding:7px 13px;cursor:pointer;font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.btn:hover{background:var(--soft)}
+.btn.primary{background:linear-gradient(180deg,#17a787,var(--brand));border-color:transparent;color:#fff}
+.btn.danger{color:var(--danger)}
+.btn.sm{padding:4px 9px;font-size:12.5px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+input[type=text],input[type=password],input[type=number],input[type=date],input[type=url],input[type=search],select,textarea{border:1px solid var(--line);border-radius:9px;background:var(--card);padding:7px 10px;outline:none;width:100%}
+input:focus,select:focus,textarea:focus{border-color:var(--brand2);box-shadow:0 0 0 3px var(--brandsoft)}
+label.f{display:grid;gap:4px;font-size:12.5px;font-weight:600;color:var(--ink2)}
+label.f small{font-weight:400;color:var(--muted)}
+.form{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:700;padding:8px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
+tr:hover td{background:var(--soft)}
+.tablewrap{overflow-x:auto}
+code,.mono{font-family:ui-monospace,Consolas,monospace;font-size:12.5px}
+.chip{display:inline-block;padding:1px 8px;border-radius:999px;font-size:11.5px;font-weight:700;background:var(--soft);color:var(--muted)}
+.chip.active,.chip.ok,.chip.premium{background:var(--brandsoft);color:var(--brand)}
+.chip.disabled,.chip.error,.chip.blocked{background:var(--dangersoft);color:var(--danger)}
+.chip.expired{background:var(--warnsoft);color:var(--warn)}
+.chip.free{background:rgba(124,58,237,.12);color:var(--violet)}
+.bar{height:6px;border-radius:6px;background:var(--soft);overflow:hidden;min-width:60px}
+.bar>i{display:block;height:100%;background:var(--brand2)}
+.chart{display:flex;align-items:flex-end;gap:6px;height:180px;padding-top:10px}
+.chart .c{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0}
+.chart .st{width:100%;display:flex;flex-direction:column-reverse;border-radius:6px 6px 0 0;overflow:hidden;min-height:2px}
+.chart .st i{display:block}
+.chart .d{font-size:10.5px;color:var(--muted);white-space:nowrap}
+.chart .n{font-size:10.5px;color:var(--ink2);font-weight:600}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--muted)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+.note{padding:10px 12px;border-radius:10px;font-size:13px}
+.note.warn{background:var(--warnsoft);color:var(--warn)}
+.note.ok{background:var(--brandsoft);color:var(--ink2)}
+.note.err{background:var(--dangersoft);color:var(--danger)}
+.login{max-width:380px;margin:12vh auto;display:grid;gap:14px}
+.login h1{margin:0;font-size:20px}
+.switch{display:flex;align-items:center;gap:10px;font-weight:600;font-size:13px;cursor:pointer}
+.switch input{width:38px;height:22px;appearance:none;background:#cbd5e1;border-radius:999px;position:relative;cursor:pointer;transition:background .15s;flex:none}
+.switch input::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:transform .15s}
+.switch input:checked{background:var(--brand2)}
+.switch input:checked::after{transform:translateX(16px)}
+.modal{position:fixed;inset:0;background:rgba(15,23,42,.5);display:grid;place-items:center;padding:16px;z-index:20}
+.sheet{background:var(--card);border-radius:16px;max-width:560px;width:100%;max-height:90vh;overflow:auto;padding:18px;display:grid;gap:12px;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+.sheet h3{margin:0;font-size:16px}
+.newcodes{display:grid;gap:6px}
+.newcodes .c{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border:1px dashed var(--brand2);border-radius:9px;background:var(--brandsoft)}
+.toast{position:fixed;left:50%;bottom:22px;transform:translate(-50%,10px);background:#0f172a;color:#fff;padding:10px 16px;border-radius:10px;font-weight:600;opacity:0;pointer-events:none;transition:.2s;z-index:30}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+.toast.err{background:var(--danger)}
+.empty{text-align:center;padding:30px;color:var(--muted)}
+@media (max-width:640px){main{padding:12px}.kpi .v{font-size:22px}}
+</style>
+</head>
+<body>
+<div id="toast" class="toast"></div>
+
+<section id="loginView" class="login card" hidden>
+  <h1>RitPost AI Admin</h1>
+  <p class="muted" style="margin:0">Enter the admin password you set as the <code>ADMIN_TOKEN</code> secret.</p>
+  <label class="f">Admin password<input id="pw" type="password" autocomplete="current-password"></label>
+  <button id="loginBtn" class="btn primary">Sign in</button>
+  <p id="loginErr" class="note err" hidden></p>
+</section>
+
+<div id="app" hidden>
+  <header>
+    <div><b>RitPost AI Admin</b><div class="sub">Free tier, premium access codes and usage</div></div>
+    <span class="sp"></span>
+    <span id="svcPill" class="pill"><i></i><span>Service on</span></span>
+    <button id="logout">Sign out</button>
+  </header>
+  <nav>
+    <button data-v="dash" class="on">Dashboard</button>
+    <button data-v="codes">Access codes</button>
+    <button data-v="activity">Activity</button>
+    <button data-v="devices">Devices</button>
+    <button data-v="settings">Settings</button>
+  </nav>
+  <main>
+    <!-- Dashboard -->
+    <section id="v-dash" class="grid">
+      <div id="warns" class="grid"></div>
+      <div class="grid kpis">
+        <div class="card kpi"><div class="l">Rewrites today</div><div class="v" id="kToday">–</div><div class="s" id="kTodaySplit"></div></div>
+        <div class="card kpi"><div class="l">Active devices</div><div class="v" id="kDevices">–</div><div class="s" id="kDevices7"></div></div>
+        <div class="card kpi"><div class="l">Cost today</div><div class="v" id="kCost">–</div><div class="s" id="kCost7"></div></div>
+        <div class="card kpi"><div class="l">Premium codes</div><div class="v" id="kCodes">–</div><div class="s" id="kCodesSub"></div></div>
+        <div class="card kpi"><div class="l">Errors today</div><div class="v" id="kErr">–</div><div class="s">failed AI requests</div></div>
+      </div>
+      <div class="card">
+        <div class="row"><h2 style="margin:0">Last 14 days</h2><span class="sp"></span><div class="legend"><span><i style="background:#a78bfa"></i>Free</span><span><i style="background:var(--brand2)"></i>Premium</span></div></div>
+        <div id="chart" class="chart"></div>
+      </div>
+      <div class="card grid">
+        <div class="row"><h2 style="margin:0">AI model</h2><span class="muted" id="modelNow"></span><span class="sp"></span><button id="testBtn" class="btn">Run a test rewrite</button></div>
+        <div id="testOut" class="note ok" hidden></div>
+      </div>
+    </section>
+
+    <!-- Codes -->
+    <section id="v-codes" class="grid" hidden>
+      <div class="card grid">
+        <h2>Create premium access codes</h2>
+        <div class="form">
+          <label class="f">Customer or label<input id="cLabel" type="text" maxlength="80" placeholder="e.g. Grace Mensah, or March promo"></label>
+          <label class="f">Rewrites per day<input id="cDaily" type="number" min="1"></label>
+          <label class="f">Devices allowed<input id="cDevices" type="number" min="1"></label>
+          <label class="f">Expires<input id="cExpires" type="date"><small>Leave empty for no expiry</small></label>
+          <label class="f">How many codes<input id="cQty" type="number" min="1" max="200" value="1"></label>
+          <label class="f">Note (only you see it)<input id="cNote" type="text" maxlength="300" placeholder="e.g. paid GHS 50, MoMo ref 1234"></label>
+        </div>
+        <div class="row">
+          <span class="muted" style="font-size:12.5px">Quick expiry:</span>
+          <button class="btn sm" data-exp="30">30 days</button><button class="btn sm" data-exp="90">3 months</button><button class="btn sm" data-exp="365">1 year</button><button class="btn sm" data-exp="0">Never</button>
+          <span class="sp"></span><button id="createBtn" class="btn primary">Create code</button>
+        </div>
+      </div>
+      <div class="card grid">
+        <div class="row">
+          <h2 style="margin:0">Codes <span class="muted" id="codeCount"></span></h2><span class="sp"></span>
+          <input id="codeSearch" type="search" placeholder="Search code, customer or note" style="max-width:260px">
+          <select id="codeFilter" style="width:auto"><option value="">All</option><option value="active">Active</option><option value="disabled">Disabled</option><option value="expired">Expired</option></select>
+          <button id="csvBtn" class="btn">Export CSV</button>
+        </div>
+        <div class="tablewrap"><table><thead><tr><th>Code</th><th>Customer</th><th>Status</th><th>Today</th><th>Devices</th><th>Expires</th><th>Total</th><th>Last used</th><th></th></tr></thead><tbody id="codeRows"></tbody></table></div>
+        <div id="codeEmpty" class="empty" hidden>No access codes yet. Create one above and send it to your customer.</div>
+      </div>
+    </section>
+
+    <!-- Activity -->
+    <section id="v-activity" class="grid" hidden>
+      <div class="card grid">
+        <div class="row"><h2 style="margin:0">Recent AI requests</h2><span class="sp"></span><label class="switch"><input id="errOnly" type="checkbox"> Errors only</label><button id="actRefresh" class="btn">Refresh</button></div>
+        <div class="tablewrap"><table><thead><tr><th>Time</th><th>Plan</th><th>Code</th><th>Device</th><th>For</th><th>Model</th><th>Tokens</th><th>Status</th></tr></thead><tbody id="actRows"></tbody></table></div>
+        <div id="actEmpty" class="empty" hidden>No requests yet.</div>
+      </div>
+    </section>
+
+    <!-- Devices -->
+    <section id="v-devices" class="grid" hidden>
+      <div class="card grid">
+        <div class="row"><h2 style="margin:0">Most active devices (7 days)</h2><span class="sp"></span><span class="muted" style="font-size:12.5px">Block a device or network that abuses the free tier.</span></div>
+        <div class="tablewrap"><table><thead><tr><th>Device</th><th>Plan</th><th>Today</th><th>7 days</th><th>Last used</th><th>Network</th><th></th></tr></thead><tbody id="devRows"></tbody></table></div>
+        <div id="devEmpty" class="empty" hidden>No devices have used RitPost AI in the last 7 days.</div>
+      </div>
+      <div class="card grid">
+        <h2>Blocked</h2>
+        <div class="tablewrap"><table><thead><tr><th>Blocked</th><th>Reason</th><th>Since</th><th></th></tr></thead><tbody id="blockRows"></tbody></table></div>
+        <div id="blockEmpty" class="empty" hidden>Nothing is blocked.</div>
+      </div>
+    </section>
+
+    <!-- Settings -->
+    <section id="v-settings" class="grid" hidden>
+      <div class="card grid">
+        <h2>Service</h2>
+        <label class="switch"><input id="sService" type="checkbox"> RitPost AI is on (turn off to pause all AI rewrites)</label>
+        <label class="switch"><input id="sFree" type="checkbox"> Free tier for everyone with RitPost</label>
+      </div>
+      <div class="card grid">
+        <h2>Limits</h2>
+        <div class="form">
+          <label class="f">Free rewrites per device per day<input id="sFreeDaily" type="number" min="0"></label>
+          <label class="f">Free rewrites per network per day<input id="sFreeIp" type="number" min="0"><small>Stops people reinstalling to get more</small></label>
+          <label class="f">Default premium rewrites per day<input id="sPremDaily" type="number" min="1"><small>For new codes</small></label>
+          <label class="f">Default devices per code<input id="sPremDev" type="number" min="1"></label>
+          <label class="f">All users together per day<input id="sGlobal" type="number" min="0"><small>Your spending safety net</small></label>
+          <label class="f">Longest post accepted (characters)<input id="sMaxChars" type="number" min="200"></label>
+        </div>
+      </div>
+      <div class="card grid">
+        <h2>AI model and costs</h2>
+        <div class="form">
+          <label class="f">Model<select id="sModel"><option value="">Newest in my OpenAI account (automatic)</option></select><small><button id="loadModels" class="btn sm" type="button" style="margin-top:4px">Load models from OpenAI</button></small></label>
+          <label class="f">Price per 1M input tokens (USD)<input id="sPriceIn" type="number" min="0" step="0.01"><small>From openai.com/api/pricing, for the cost estimate</small></label>
+          <label class="f">Price per 1M output tokens (USD)<input id="sPriceOut" type="number" min="0" step="0.01"></label>
+        </div>
+      </div>
+      <div class="card grid">
+        <h2>Messages shown in RitPost</h2>
+        <label class="f">Announcement <small>Short note in RitPost’s AI settings, e.g. “New: Twi translations!” (empty = none)</small><input id="sAnn" type="text" maxlength="200"></label>
+        <label class="f">Upgrade message <small>Shown when someone runs out of free rewrites</small><input id="sUpText" type="text" maxlength="200"></label>
+        <label class="f">Upgrade link <small>Where to buy a premium code (WhatsApp link, website…), optional</small><input id="sUpUrl" type="url" maxlength="300" placeholder="https://wa.me/233…"></label>
+      </div>
+      <div class="row"><span class="sp"></span><button id="saveSettings" class="btn primary">Save settings</button></div>
+    </section>
+  </main>
+</div>
+
+<div id="modal" class="modal" hidden><div class="sheet" id="sheet"></div></div>
+
+<script>
+'use strict';
+const $ = (id) => document.getElementById(id);
+const store = { get: (k) => { try { return sessionStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { v === null ? sessionStorage.removeItem(k) : sessionStorage.setItem(k, v); } catch {} } };
+let token = store.get('rp-admin') || '';
+let codes = [];
+let settings = {};
+const fmt = (n) => Number(n || 0).toLocaleString();
+const money = (n) => (n >= 1 ? `$${n.toFixed(2)}` : n > 0 ? `$${n.toFixed(4)}` : '$0');
+const when = (t) => (t ? new Date(t).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '–');
+const dateOnly = (t) => (t ? new Date(t).toLocaleDateString([], { dateStyle: 'medium' }) : 'Never');
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+function toast(t, err = false) { const el = $('toast'); el.textContent = t; el.className = `toast show${err ? ' err' : ''}`; clearTimeout(toast.t); toast.t = setTimeout(() => (el.className = 'toast'), 2600); }
+const copy = (t) => navigator.clipboard.writeText(t).then(() => toast('Copied'), () => toast('Couldn’t copy', true));
+
+async function api(path, { method = 'GET', body } = {}) {
+  const r = await fetch(`/admin/api/${path}`, { method, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+  const data = await r.json().catch(() => ({ ok: false, error: `Error ${r.status}` }));
+  if (r.status === 401) { signOut(); throw new Error(data.error || 'Signed out'); }
+  if (!data.ok) throw new Error(data.error || `Error ${r.status}`);
+  return data;
+}
+
+// ── sign in ──
+function signOut() { token = ''; store.set('rp-admin', null); $('app').hidden = true; $('loginView').hidden = false; }
+async function signIn() {
+  token = $('pw').value.trim();
+  $('loginErr').hidden = true;
+  try { await api('login'); store.set('rp-admin', token); $('pw').value = ''; start(); }
+  catch (e) { $('loginErr').textContent = e.message; $('loginErr').hidden = false; $('loginView').hidden = false; }
+}
+$('loginBtn').onclick = signIn;
+$('pw').onkeydown = (e) => e.key === 'Enter' && signIn();
+$('logout').onclick = signOut;
+
+// ── views ──
+const loaders = { dash: loadDash, codes: loadCodes, activity: loadActivity, devices: loadDevices, settings: loadSettings };
+function show(v) {
+  document.querySelectorAll('nav button').forEach((b) => b.classList.toggle('on', b.dataset.v === v));
+  document.querySelectorAll('main > section').forEach((s) => (s.hidden = s.id !== `v-${v}`));
+  loaders[v]().catch((e) => toast(e.message, true));
+}
+document.querySelectorAll('nav button').forEach((b) => (b.onclick = () => show(b.dataset.v)));
+
+function pill(s) { const p = $('svcPill'); p.classList.toggle('off', !s.service_on); p.lastElementChild.textContent = s.service_on ? (s.free_on ? 'Service on' : 'Premium only') : 'Paused'; }
+
+async function loadDash() {
+  const d = await api('overview');
+  settings = d.settings; pill(settings);
+  $('kToday').textContent = fmt(d.today.requests);
+  $('kTodaySplit').textContent = `${fmt(d.today.free)} free · ${fmt(d.today.premium)} premium`;
+  $('kDevices').textContent = fmt(d.today.installs);
+  $('kDevices7').textContent = `${fmt(d.week.installs)} in the last 7 days`;
+  const priced = Number(settings.price_in) > 0 || Number(settings.price_out) > 0;
+  $('kCost').textContent = priced ? money(d.today.cost) : '—';
+  $('kCost7').textContent = priced ? `${money(d.week.cost)} in 7 days · ${money(d.month.cost)} in 14 days` : `${fmt(d.today.tokensIn + d.today.tokensOut)} tokens today`;
+  $('kCodes').textContent = fmt(d.codes.active);
+  $('kCodesSub').textContent = `active of ${fmt(d.codes.total)} created`;
+  $('kErr').textContent = fmt(d.today.errors);
+  $('modelNow').textContent = d.model;
+  const w = [];
+  if (!d.keySet) w.push('<div class="note err">The OPENAI_API_KEY secret isn’t set, so AI rewrites will fail. Run <code>npx wrangler secret put OPENAI_API_KEY</code>.</div>');
+  if (!settings.service_on) w.push('<div class="note warn">RitPost AI is paused. Turn it back on in Settings.</div>');
+  if (!priced) w.push('<div class="note warn">Add your model’s prices in Settings to see what RitPost AI costs you.</div>');
+  if (d.today.requests >= settings.global_daily * 0.8 && settings.global_daily) w.push(`<div class="note warn">Today’s usage is close to your daily cap of ${fmt(settings.global_daily)}.</div>`);
+  $('warns').innerHTML = w.join('');
+  const max = Math.max(1, ...d.series.map((x) => x.requests));
+  $('chart').innerHTML = d.series.map((x) => `<div class="c" title="${x.day}: ${x.free} free, ${x.premium} premium, ${x.errors} errors"><span class="n">${x.requests || ''}</span><div class="st" style="height:${Math.round((x.requests / max) * 140)}px"><i style="height:${x.requests ? (x.free / x.requests) * 100 : 0}%;background:#a78bfa"></i><i style="height:${x.requests ? (x.premium / x.requests) * 100 : 0}%;background:var(--brand2)"></i></div><span class="d">${x.day.slice(5)}</span></div>`).join('');
+}
+$('testBtn').onclick = async () => {
+  const out = $('testOut'); out.hidden = false; out.className = 'note ok'; out.textContent = 'Asking OpenAI…'; $('testBtn').disabled = true;
+  try { const r = await api('test', { method: 'POST', body: { text: 'join us sunday 9am for service all are welcome' } }); out.innerHTML = `<b>Works.</b> ${esc(r.model)} · ${fmt(r.tokens)} tokens<br>“${esc(r.text)}”`; }
+  catch (e) { out.className = 'note err'; out.textContent = e.message; }
+  finally { $('testBtn').disabled = false; }
+};
+
+// ── codes ──
+const DAY = 86400000;
+document.querySelectorAll('[data-exp]').forEach((b) => (b.onclick = () => { const n = Number(b.dataset.exp); $('cExpires').value = n ? new Date(Date.now() + n * DAY).toISOString().slice(0, 10) : ''; }));
+async function loadCodes() {
+  if (!settings.premium_daily) settings = (await api('settings')).settings;
+  pill(settings);
+  if (!$('cDaily').value) $('cDaily').value = settings.premium_daily;
+  if (!$('cDevices').value) $('cDevices').value = settings.premium_devices;
+  codes = (await api('codes')).codes;
+  renderCodes();
+}
+function renderCodes() {
+  const q = $('codeSearch').value.trim().toLowerCase();
+  const f = $('codeFilter').value;
+  const list = codes.filter((c) => (!f || c.status === f) && (!q || `${c.code} ${c.label} ${c.note}`.toLowerCase().includes(q)));
+  $('codeCount').textContent = `(${list.length}${list.length !== codes.length ? ` of ${codes.length}` : ''})`;
+  $('codeEmpty').hidden = codes.length > 0;
+  $('codeRows').innerHTML = list.map((c) => `<tr data-code="${c.raw}">
+    <td><code>${c.code}</code> <button class="btn sm" data-act="copy" title="Copy">Copy</button></td>
+    <td>${esc(c.label) || '<span class="muted">–</span>'}${c.note ? `<div class="muted" style="font-size:12px">${esc(c.note)}</div>` : ''}</td>
+    <td><span class="chip ${c.status}">${c.status}</span></td>
+    <td>${fmt(c.usedToday)} / ${fmt(c.dailyLimit)}<div class="bar"><i style="width:${Math.min(100, (c.usedToday / c.dailyLimit) * 100)}%"></i></div></td>
+    <td>${c.devices} / ${c.maxDevices}</td>
+    <td>${dateOnly(c.expiresAt)}</td>
+    <td>${fmt(c.totalUses)}</td>
+    <td>${when(c.lastUsedAt)}</td>
+    <td style="white-space:nowrap"><button class="btn sm" data-act="edit">Edit</button> <button class="btn sm" data-act="toggle">${c.status === 'disabled' ? 'Enable' : 'Disable'}</button> <button class="btn sm danger" data-act="delete">Delete</button></td>
+  </tr>`).join('');
+}
+$('codeSearch').oninput = renderCodes;
+$('codeFilter').onchange = renderCodes;
+$('codeRows').onclick = async (e) => {
+  const b = e.target.closest('button[data-act]'); if (!b) return;
+  const c = codes.find((x) => x.raw === b.closest('tr').dataset.code);
+  try {
+    if (b.dataset.act === 'copy') return copy(c.code);
+    if (b.dataset.act === 'toggle') { await api(`codes/${c.raw}`, { method: 'PATCH', body: { status: c.status === 'disabled' ? 'active' : 'disabled' } }); toast(c.status === 'disabled' ? 'Code enabled' : 'Code disabled'); return loadCodes(); }
+    if (b.dataset.act === 'delete') return confirmBox(`Delete ${c.code}?`, 'Anyone using it loses premium straight away. This can’t be undone. To pause it instead, use Disable.', 'Delete', async () => { await api(`codes/${c.raw}`, { method: 'DELETE' }); toast('Code deleted'); loadCodes(); });
+    if (b.dataset.act === 'edit') return editCode(c);
+  } catch (err) { toast(err.message, true); }
+};
+$('createBtn').onclick = async () => {
+  const exp = $('cExpires').value ? new Date(`${$('cExpires').value}T23:59:59`).getTime() : null;
+  try {
+    const r = await api('codes', { method: 'POST', body: { label: $('cLabel').value, note: $('cNote').value, dailyLimit: $('cDaily').value, maxDevices: $('cDevices').value, expiresAt: exp, quantity: $('cQty').value } });
+    const msg = (code) => `Your RitPost Premium access code: ${code}\n\nOpen RitPost → Settings (⚙) → AI writing assistant → “Have an access code?”, paste it and click Activate.${exp ? `\nValid until ${dateOnly(exp)}.` : ''}`;
+    openModal(`<h3>${r.codes.length === 1 ? 'Code created' : `${r.codes.length} codes created`}</h3>
+      <div class="newcodes">${r.codes.map((c) => `<div class="c"><code style="font-size:15px">${c}</code><button class="btn sm" data-copy="${c}">Copy</button></div>`).join('')}</div>
+      <label class="f">Message to send your customer<textarea id="custMsg" rows="5">${esc(r.codes.length === 1 ? msg(r.codes[0]) : r.codes.join('\n'))}</textarea></label>
+      <div class="row"><span class="sp"></span><button class="btn" id="copyMsg">Copy message</button><button class="btn primary" data-close>Done</button></div>`);
+    $('sheet').querySelectorAll('[data-copy]').forEach((x) => (x.onclick = () => copy(x.dataset.copy)));
+    $('copyMsg').onclick = () => copy($('custMsg').value);
+    $('cLabel').value = ''; $('cNote').value = ''; $('cQty').value = 1;
+    loadCodes();
+  } catch (e) { toast(e.message, true); }
+};
+function editCode(c) {
+  openModal(`<h3>Edit ${c.code}</h3>
+    <div class="form">
+      <label class="f">Customer or label<input id="eLabel" type="text" maxlength="80" value="${esc(c.label)}"></label>
+      <label class="f">Rewrites per day<input id="eDaily" type="number" min="1" value="${c.dailyLimit}"></label>
+      <label class="f">Devices allowed<input id="eDevices" type="number" min="1" value="${c.maxDevices}"></label>
+      <label class="f">Expires<input id="eExpires" type="date" value="${c.expiresAt ? new Date(c.expiresAt).toISOString().slice(0, 10) : ''}"><small>Empty = never</small></label>
+    </div>
+    <label class="f">Note<input id="eNote" type="text" maxlength="300" value="${esc(c.note)}"></label>
+    <div class="note ok" style="font-size:12.5px">Used on ${c.devices} of ${c.maxDevices} devices. If your customer changed computer, reset the devices so they can activate again.</div>
+    <div class="row"><button class="btn" id="eReset">Reset devices</button><span class="sp"></span><button class="btn" data-close>Cancel</button><button class="btn primary" id="eSave">Save</button></div>`);
+  $('eReset').onclick = async () => { try { await api(`codes/${c.raw}/reset-devices`, { method: 'POST' }); toast('Devices reset'); closeModal(); loadCodes(); } catch (e) { toast(e.message, true); } };
+  $('eSave').onclick = async () => {
+    try {
+      await api(`codes/${c.raw}`, { method: 'PATCH', body: { label: $('eLabel').value, note: $('eNote').value, dailyLimit: $('eDaily').value, maxDevices: $('eDevices').value, expiresAt: $('eExpires').value ? new Date(`${$('eExpires').value}T23:59:59`).getTime() : null } });
+      toast('Saved'); closeModal(); loadCodes();
+    } catch (e) { toast(e.message, true); }
+  };
+}
+$('csvBtn').onclick = () => {
+  const rows = [['code', 'customer', 'note', 'status', 'daily_limit', 'used_today', 'devices', 'max_devices', 'expires', 'total_uses', 'created', 'last_used']].concat(codes.map((c) => [c.code, c.label, c.note, c.status, c.dailyLimit, c.usedToday, c.devices, c.maxDevices, c.expiresAt ? new Date(c.expiresAt).toISOString().slice(0, 10) : '', c.totalUses, new Date(c.createdAt).toISOString(), c.lastUsedAt ? new Date(c.lastUsedAt).toISOString() : '']));
+  const csv = rows.map((r) => r.map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = `ritpost-codes-${new Date().toISOString().slice(0, 10)}.csv`; a.click();
+};
+
+// ── activity ──
+let acts = [];
+async function loadActivity() { acts = (await api('requests')).requests; renderActivity(); }
+function renderActivity() {
+  const list = $('errOnly').checked ? acts.filter((a) => a.status !== 'ok') : acts;
+  $('actEmpty').hidden = list.length > 0;
+  $('actRows').innerHTML = list.map((a) => `<tr><td>${when(a.at)}</td><td><span class="chip ${a.tier}">${a.tier}</span></td><td>${a.code ? `<code>${a.code}</code>` : '–'}</td><td class="mono">${esc(a.install)}</td><td>${esc(a.platform || '')}</td><td>${esc(a.model || '')}</td><td>${fmt(a.tokens)}</td><td><span class="chip ${a.status}">${a.status}</span>${a.error ? `<div class="muted" style="font-size:12px;max-width:320px">${esc(a.error)}</div>` : ''}</td></tr>`).join('');
+}
+$('errOnly').onchange = renderActivity;
+$('actRefresh').onclick = () => loadActivity().catch((e) => toast(e.message, true));
+
+// ── devices ──
+async function loadDevices() {
+  const d = await api('devices');
+  $('devEmpty').hidden = d.devices.length > 0;
+  $('devRows').innerHTML = d.devices.map((x) => `<tr data-i="${x.installId}" data-ip="${x.ip}"><td class="mono">${esc(x.install)}${x.blocked ? ' <span class="chip blocked">blocked</span>' : ''}</td><td><span class="chip ${x.tier}">${x.tier}</span>${x.code ? ` <code>${x.code}</code>` : ''}</td><td>${fmt(x.today)}</td><td>${fmt(x.week)}</td><td>${when(x.last)}</td><td class="mono">${esc((x.ip || '').slice(0, 8))}${x.ipBlocked ? ' <span class="chip blocked">blocked</span>' : ''}</td>
+    <td style="white-space:nowrap">${x.blocked ? '' : '<button class="btn sm danger" data-b="i">Block device</button>'} ${x.ipBlocked ? '' : '<button class="btn sm danger" data-b="ip">Block network</button>'}</td></tr>`).join('');
+  $('blockEmpty').hidden = d.blocks.length > 0;
+  $('blockRows').innerHTML = d.blocks.map((b) => `<tr data-s="${esc(b.subject)}"><td class="mono">${b.subject.startsWith('ip:') ? 'Network ' : 'Device '}${esc(b.subject.slice(b.subject.indexOf(':') + 1, b.subject.indexOf(':') + 9))}</td><td>${esc(b.reason) || '–'}</td><td>${when(b.at)}</td><td><button class="btn sm" data-u>Unblock</button></td></tr>`).join('');
+}
+$('devRows').onclick = async (e) => {
+  const b = e.target.closest('button[data-b]'); if (!b) return;
+  const tr = b.closest('tr');
+  const subject = b.dataset.b === 'i' ? `i:${tr.dataset.i}` : `ip:${tr.dataset.ip}`;
+  try { await api('blocks', { method: 'POST', body: { subject, reason: 'Blocked from the admin portal' } }); toast('Blocked'); loadDevices(); } catch (err) { toast(err.message, true); }
+};
+$('blockRows').onclick = async (e) => {
+  if (!e.target.closest('[data-u]')) return;
+  try { await api(`blocks/${encodeURIComponent(e.target.closest('tr').dataset.s)}`, { method: 'DELETE' }); toast('Unblocked'); loadDevices(); } catch (err) { toast(err.message, true); }
+};
+
+// ── settings ──
+const FIELDS = { sService: 'service_on', sFree: 'free_on', sFreeDaily: 'free_daily', sFreeIp: 'free_ip_daily', sPremDaily: 'premium_daily', sPremDev: 'premium_devices', sGlobal: 'global_daily', sMaxChars: 'max_chars', sModel: 'model', sPriceIn: 'price_in', sPriceOut: 'price_out', sAnn: 'announcement', sUpText: 'upgrade_text', sUpUrl: 'upgrade_url' };
+async function loadSettings() {
+  settings = (await api('settings')).settings; pill(settings);
+  if (settings.model && ![...$('sModel').options].some((o) => o.value === settings.model)) $('sModel').append(new Option(settings.model, settings.model));
+  for (const [id, k] of Object.entries(FIELDS)) { const el = $(id); if (el.type === 'checkbox') el.checked = !!settings[k]; else el.value = settings[k] ?? ''; }
+}
+$('loadModels').onclick = async () => {
+  try {
+    const { models } = await api('models');
+    const cur = $('sModel').value;
+    $('sModel').replaceChildren(new Option('Newest in my OpenAI account (automatic)', ''), ...models.map((m) => new Option(m, m)));
+    $('sModel').value = cur;
+    toast(`${models.length} models found`);
+  } catch (e) { toast(e.message, true); }
+};
+$('saveSettings').onclick = async () => {
+  const body = {};
+  for (const [id, k] of Object.entries(FIELDS)) { const el = $(id); body[k] = el.type === 'checkbox' ? el.checked : el.type === 'number' ? Number(el.value) : el.value; }
+  try { settings = (await api('settings', { method: 'PUT', body })).settings; pill(settings); toast('Settings saved'); } catch (e) { toast(e.message, true); }
+};
+
+// ── modal ──
+function openModal(html) { $('sheet').innerHTML = html; $('modal').hidden = false; $('sheet').querySelectorAll('[data-close]').forEach((b) => (b.onclick = closeModal)); }
+function closeModal() { $('modal').hidden = true; }
+$('modal').onclick = (e) => e.target.id === 'modal' && closeModal();
+document.onkeydown = (e) => e.key === 'Escape' && closeModal();
+function confirmBox(title, text, okLabel, run) {
+  openModal(`<h3>${esc(title)}</h3><p style="margin:0">${esc(text)}</p><div class="row"><span class="sp"></span><button class="btn" data-close>Cancel</button><button class="btn primary" id="okBtn" style="background:var(--danger)">${esc(okLabel)}</button></div>`);
+  $('okBtn').onclick = async () => { closeModal(); try { await run(); } catch (e) { toast(e.message, true); } };
+}
+
+function start() { $('loginView').hidden = true; $('app').hidden = false; show('dash'); }
+if (token) api('login').then(start, () => signOut()); else signOut();
+</script>
+</body>
+</html>

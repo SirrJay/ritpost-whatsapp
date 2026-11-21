@@ -442,8 +442,20 @@
       </div>
 
       <div class="ai-setting" id="aiSetting">
-        <div class="s-title">✨ AI writing assistant (OpenAI)</div>
-        <div class="muted">Rewrites your posts with your own OpenAI account. Paste an API key from <b>platform.openai.com → API keys</b>. The key stays in this browser; your text is sent to OpenAI only when you click <b>Generate</b>, and OpenAI bills your account.</div>
+        <div class="s-title">✨ AI writing assistant</div>
+        <div id="rpaiBox" class="rpai-box" hidden>
+          <div class="rpai-head"><b>RitPost AI</b> <span id="rpaiTier" class="chip"></span><span class="spacer"></span><button type="button" class="link" id="rpaiRefresh">Refresh</button></div>
+          <div id="rpaiUsage" class="rpai-usage"></div>
+          <div class="run-bar"><div id="rpaiFill"></div></div>
+          <p id="rpaiAnn" class="link-note" hidden></p>
+          <div id="rpaiCodeRow" class="ai-key-row">
+            <input id="rpaiCode" type="text" placeholder="Have an access code? RP-XXXX-XXXX-XXXX" autocomplete="off" spellcheck="false" aria-label="Premium access code">
+            <button type="button" id="rpaiActivate" class="btn primary sm">Activate</button>
+          </div>
+          <div id="rpaiPremium" class="rpai-premium" hidden><span id="rpaiPremText"></span> <button type="button" class="link danger" id="rpaiRemove">Remove code</button></div>
+          <p class="hint" id="rpaiHint"></p>
+        </div>
+        <div class="muted" id="ownKeyIntro">Use your own OpenAI account. Paste an API key from <b>platform.openai.com → API keys</b>. The key stays in this browser; your text is sent to OpenAI only when you click <b>Generate</b>, and OpenAI bills your account.</div>
         <div class="ai-key-row">
           <input id="aiKey" type="password" placeholder="Paste your OpenAI API key (sk-…)" autocomplete="off" spellcheck="false" aria-label="OpenAI API key">
           <button type="button" id="aiKeyShow" class="btn secondary sm" title="Show or hide the key">Show</button>
@@ -550,6 +562,8 @@
 
   <script src="../lib/schedule.js"></script>
   <script src="../lib/emoji.js"></script>
+  <script src="../lib/config.js"></script>
+  <script src="../lib/ai-prompt.js"></script>
   <script src="../lib/ai.js"></script>
   <script src="popup.js"></script>
 </body>

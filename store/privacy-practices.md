@@ -73,13 +73,18 @@ Used only when the user posts to X from RitPost. RitPost opens X's composer, fil
 Used only by the optional AI writing assistant, with the user's own OpenAI API key. When the user clicks "Check & save", RitPost lists the models in their account; when the user clicks "Generate", it sends the post text they asked to rewrite (and their optional brand-voice note) to OpenAI and shows the rewrites. Nothing is sent otherwise.
 ```
 
+**RitPost AI server (no host permission needed; the server allows RitPost's origin)**
+```
+When the user clicks Generate without their own OpenAI key, RitPost sends the text to rewrite and the chosen options to the publisher's RitPost AI server (a Cloudflare Worker), which calls OpenAI and returns the rewrites. The server stores no post text; it keeps a 90-day usage log (time, random device id, plan, access code, token counts, hashed network address) to enforce free and premium daily limits.
+```
+
 ## Remote code
 
 **No, I am not using remote code.** All JavaScript is included in the package. RitPost loads no external scripts, uses no eval of downloaded code, and has no servers.
 
 ## Data usage
 
-RitPost reads **website content** (chat names and the message being written) on WhatsApp Web, the names and links of the user's Facebook groups (when the user imports them), and keeps any files the user attaches. Everything is processed and stored **only on the user's device**, with one user-initiated exception: if the user sets up the optional AI writing assistant with their own OpenAI API key, the text they choose to rewrite is sent to OpenAI when they click Generate. Nothing is transmitted to the developer.
+RitPost reads **website content** (chat names and the message being written) on WhatsApp Web, the names and links of the user's Facebook groups (when the user imports them), and keeps any files the user attaches. Everything is processed and stored **only on the user's device**, with one user-initiated exception: when the user clicks Generate in the AI writing assistant, the text they chose to rewrite is sent to OpenAI, either directly with their own key or through the publisher's RitPost AI server, which keeps a usage log (no post text) to enforce daily limits.
 
 Tick in the dashboard:
 
@@ -94,7 +99,7 @@ Tick in the dashboard:
 - [ ] Web history
 - [ ] User activity
 
-> Note: Google defines "collect" as transmitting data off the device. RitPost transmits nothing to the developer; the only transmission is the optional, user-initiated AI rewrite sent to OpenAI with the user's own key, which is why Website content and Authentication information are ticked above. If you'd rather be conservative, also tick **Personal communications**, since the tool composes messages. It does no harm when the privacy policy clearly says everything stays local.
+> Note: Google defines "collect" as transmitting data off the device. The only transmission is the user-initiated AI rewrite (to the RitPost AI server and OpenAI, or to OpenAI with the user's own key), which is why Website content and Authentication information are ticked above. If you'd rather be conservative, also tick **Personal communications**, since the tool composes messages. It does no harm when the privacy policy clearly says everything stays local.
 
 Certify all three:
 

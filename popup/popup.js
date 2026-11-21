@@ -2902,10 +2902,12 @@ const AI_PURPOSES = ['Announcement', 'Event invitation', 'Reminder', 'Promotion 
 const AI_AUDIENCES = ['Everyone', 'Customers', 'Church members', 'Community or group members', 'Professionals and business people', 'Young people', 'Parents and families', 'Students'];
 const AI_LANGS = ['English', 'French', 'Spanish', 'Portuguese', 'German', 'Arabic', 'Swahili', 'Hausa', 'Yoruba', 'Igbo', 'Twi', 'Ewe', 'Pidgin English', 'Chinese', 'Hindi'];
 const AI_DEFAULTS = { action: 'improve', platform: 'same', tone: '', purpose: '', audience: '', length: '', format: '', emoji: '', language: 'same', hook: false, cta: false, ctaText: '', hashtags: 0, waFormat: false, keep: true, useBrand: true, custom: '', count: 3 };
-const ai = { key: '', model: '', models: [], brand: '', last: { ...AI_DEFAULTS }, presets: [], busy: null };
+const ai = { key: '', model: '', models: [], brand: '', last: { ...AI_DEFAULTS }, presets: [], busy: null, installId: '', code: '', plan: null, info: {}, codeError: '' };
 
 async function aiLoad() {
-  const { aiSettings } = await chrome.storage.local.get('aiSettings');
+  const { aiSettings, aiInstallId } = await chrome.storage.local.get(['aiSettings', 'aiInstallId']);
+  ai.installId = typeof aiInstallId === 'string' && /^[A-Za-z0-9_-]{16,64}$/.test(aiInstallId) ? aiInstallId : (crypto.randomUUID?.() || `${uid()}${uid()}`).replace(/[^A-Za-z0-9-]/g, '');
+  if (ai.installId !== aiInstallId) chrome.storage.local.set({ aiInstallId: ai.installId });
   const s = aiSettings || {};
   Object.assign(ai, {
     key: typeof s.key === 'string' ? s.key : '',
@@ -2914,9 +2916,10 @@ async function aiLoad() {
     brand: s.brand || '',
     last: { ...AI_DEFAULTS, ...(s.last || {}) },
     presets: Array.isArray(s.presets) ? s.presets.filter((p) => p?.name && p?.opts) : [],
+    code: typeof s.code === 'string' ? s.code : '',
   });
 }
-const aiSave = () => persist({ aiSettings: { key: ai.key, model: ai.model, models: ai.models, brand: ai.brand, last: ai.last, presets: ai.presets } });
+const aiSave = () => persist({ aiSettings: { key: ai.key, model: ai.model, models: ai.models, brand: ai.brand, last: ai.last, presets: ai.presets, code: ai.code } });
 const maskKey = (k) => (k ? `${k.slice(0, 5)}…${k.slice(-4)}` : '');
 
 function renderAiSettings() {
@@ -2928,8 +2931,86 @@ function renderAiSettings() {
   $('aiModelRow').hidden = !ai.key || !ai.models.length;
   $('aiModel').replaceChildren(...ai.models.map((m) => h('option', { value: m, selected: m === ai.model }, m)));
   $('aiBrand').value = ai.brand;
-  $('aiStatus').textContent = ai.key ? `Connected · ${ai.model || 'no model chosen'}` : 'Not set up yet.';
+  const hasServer = !!window.RitAI?.hasServer();
+  $('aiStatus').textContent = ai.key ? `Connected · ${ai.model || 'no model chosen'}${hasServer ? ' · used instead of RitPost AI' : ''}` : hasServer ? 'Optional: only if you want to use your own OpenAI account.' : 'Not set up yet.';
   $('aiStatus').classList.toggle('ok', !!ai.key);
+  $('ownKeyIntro').innerHTML = hasServer
+    ? '<b>Or use your own OpenAI key</b> (no daily limit; OpenAI bills you). Paste a key from platform.openai.com → API keys. It stays in this browser.'
+    : 'Use your own OpenAI account. Paste an API key from <b>platform.openai.com → API keys</b>. The key stays in this browser; your text is sent to OpenAI only when you click <b>Generate</b>, and OpenAI bills your account.';
+  renderRitpostAI();
+}
+
+const fmtResets = () => {
+  const d = new Date();
+  const next = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1);
+  return new Date(next).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+};
+/** One line about the RitPost AI plan, e.g. "Free plan: 28 of 30 rewrites left today". */
+function planLine(p = ai.plan) {
+  if (!p) return '';
+  return p.tier === 'premium'
+    ? `Premium${p.label ? ` (${p.label})` : ''}: ${p.remaining} of ${p.limit} rewrites left today`
+    : `Free plan: ${p.remaining} of ${p.limit} rewrites left today`;
+}
+
+function renderRitpostAI() {
+  const box = $('rpaiBox');
+  box.hidden = !window.RitAI?.hasServer();
+  if (box.hidden) return;
+  const p = ai.plan;
+  const premium = p?.tier === 'premium';
+  $('rpaiTier').textContent = premium ? 'Premium' : p ? 'Free' : '';
+  $('rpaiTier').className = `chip ${premium ? 'active' : ''}`;
+  $('rpaiUsage').textContent = p ? planLine(p) : ai.info.error || 'Checking your plan…';
+  $('rpaiFill').style.width = p ? `${Math.min(100, Math.round((p.used / Math.max(1, p.limit)) * 100))}%` : '0%';
+  $('rpaiAnn').hidden = !ai.info.announcement;
+  $('rpaiAnn').textContent = ai.info.announcement || '';
+  $('rpaiCodeRow').hidden = premium;
+  $('rpaiPremium').hidden = !premium;
+  $('rpaiPremText').textContent = premium ? `Code ${ai.code}${p.expiresAt ? ` · valid until ${new Date(p.expiresAt).toLocaleDateString()}` : ''}` : '';
+  const hint = [];
+  if (ai.codeError) hint.push(ai.codeError);
+  if (p) hint.push(`Rewrites reset daily at ${fmtResets()} (midnight UTC).`);
+  if (!premium && ai.info.upgradeText) hint.push(ai.info.upgradeText);
+  if (ai.key) hint.push('Your own OpenAI key below is being used instead.');
+  $('rpaiHint').textContent = hint.join(' ');
+}
+
+async function aiRefreshStatus() {
+  if (!window.RitAI?.hasServer()) return;
+  try {
+    const r = await window.RitAI.status({ installId: ai.installId, code: ai.code });
+    ai.plan = r.plan;
+    ai.info = { announcement: r.announcement, upgradeText: r.upgradeText, upgradeUrl: r.upgradeUrl };
+    ai.codeError = '';
+  } catch (e) {
+    // A stored code that stopped working: say why and fall back to the free plan.
+    ai.plan = e.plan || null;
+    ai.codeError = e.code && /code/.test(e.code) ? e.message : '';
+    if (!e.plan) ai.info = { ...ai.info, error: e.message };
+  }
+  renderRitpostAI();
+}
+
+async function aiActivateCode() {
+  const raw = $('rpaiCode').value.trim();
+  if (!raw) return toast('Paste your access code first.', true);
+  const btn = $('rpaiActivate');
+  btn.disabled = true;
+  try {
+    const r = await window.RitAI.redeem({ installId: ai.installId, code: raw });
+    ai.code = raw.toUpperCase();
+    ai.plan = r.plan;
+    ai.codeError = '';
+    await aiSave();
+    $('rpaiCode').value = '';
+    renderRitpostAI();
+    toast(`Premium activated: ${r.plan.limit} rewrites a day`);
+  } catch (e) {
+    toast(e.message, true);
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 async function aiCheckKey() {
@@ -2994,7 +3075,7 @@ function openAIDialog({ target = 'compose' } = {}) {
   const isCaption = target === 'caption';
   const here = isCaption ? soc.settings.platform : 'whatsapp';
   const source = () => (isCaption ? socCaption() : state.message);
-  if (!ai.key) {
+  if (!ai.key && !window.RitAI.hasServer()) {
     openDialog({
       title: '✨ Set up the AI assistant',
       confirmText: 'Open Settings',
@@ -3054,6 +3135,7 @@ function openAIDialog({ target = 'compose' } = {}) {
   const results = h('div', { class: 'ai-results' });
   const status = h('div', { class: 'ai-status' });
   const genBtn = h('button', { type: 'button', class: 'btn primary block ai-go' }, '✨ Generate 3 versions');
+  const planInfo = h('div', { class: 'hint ai-plan' }, ai.key ? `Using your own OpenAI key (${ai.model})` : planLine());
 
   const renderPresets = () =>
     setChildren(
@@ -3196,16 +3278,38 @@ function openAIDialog({ target = 'compose' } = {}) {
     const timer = setTimeout(() => ctrl.abort(), 90000);
     genBtn.textContent = 'Stop';
     genBtn.classList.add('busy');
+    status.parentElement?.querySelectorAll('.ai-err-acts').forEach((x) => x.remove());
     status.className = 'ai-status';
     setChildren(status, h('span', { class: 'spinner' }), h('span', {}, `Writing with ${ai.model}…`));
     try {
-      const res = await window.RitAI.rewrite({ key: ai.key, model: ai.model, text: fromText || source(), opts: aiRequestOpts(o, platform), signal: ctrl.signal });
+      const res = await window.RitAI.rewrite({ key: ai.key, model: ai.model, text: fromText || source(), opts: aiRequestOpts(o, platform), signal: ctrl.signal, installId: ai.installId, code: ai.code });
       status.replaceChildren();
+      if (res.plan) {
+        ai.plan = res.plan;
+        renderRitpostAI();
+        planInfo.textContent = planLine();
+      }
       const used = res.usage?.total_tokens ? ` · ${res.usage.total_tokens.toLocaleString()} tokens` : '';
-      renderResults(res.variations, aiRequestOpts(o, platform).platform, `Written by ${res.model}${used}. Check names, dates and links before posting.`);
+      const who = res.via === 'ritpost' ? `RitPost AI (${res.model}) · ${planLine()}` : `${res.model}${used}`;
+      renderResults(res.variations, aiRequestOpts(o, platform).platform, `Written by ${who}. Check names, dates and links before posting.`);
     } catch (e) {
       status.className = 'ai-status err';
       status.textContent = e?.message || String(e);
+      if (e?.plan) {
+        ai.plan = e.plan;
+        renderRitpostAI();
+        planInfo.textContent = planLine();
+      }
+      if (e?.code === 'limit' || /code/.test(e?.code || '')) {
+        const acts = h(
+          'div',
+          { class: 'ai-card-acts ai-err-acts' },
+          h('button', { type: 'button', class: 'btn secondary sm', onclick: () => (closeDialog(), switchTab('settings'), setTimeout(() => $('rpaiCode')?.focus(), 60)) }, 'Enter an access code'),
+          ai.info.upgradeUrl ? h('a', { class: 'btn secondary sm', href: ai.info.upgradeUrl, target: '_blank', rel: 'noopener' }, 'Get premium') : null,
+          h('button', { type: 'button', class: 'btn secondary sm', onclick: () => (closeDialog(), switchTab('settings'), setTimeout(() => $('aiKey')?.focus(), 60)) }, 'Use my own OpenAI key')
+        );
+        status.after(acts);
+      }
     } finally {
       clearTimeout(timer);
       ai.busy = null;
@@ -3258,6 +3362,7 @@ function openAIDialog({ target = 'compose' } = {}) {
         presetsRow
       ),
       genBtn,
+      planInfo,
       status,
       results
     ),
@@ -3266,6 +3371,18 @@ function openAIDialog({ target = 'compose' } = {}) {
 }
 
 function aiBind() {
+  $('rpaiActivate').addEventListener('click', aiActivateCode);
+  $('rpaiCode').addEventListener('keydown', (e) => e.key === 'Enter' && aiActivateCode());
+  $('rpaiRefresh').addEventListener('click', () => aiRefreshStatus().then(() => toast('Plan updated')));
+  $('rpaiRemove').addEventListener('click', () => {
+    const old = ai.code;
+    ai.code = '';
+    ai.codeError = '';
+    aiSave();
+    aiRefreshStatus();
+    toast('Access code removed from this browser', false, { label: 'Undo', run: () => ((ai.code = old), aiSave(), aiRefreshStatus()) });
+  });
+  document.querySelector('[data-tab=settings]').addEventListener('click', () => aiRefreshStatus());
   $('aiBtn').addEventListener('click', () => openAIDialog({ target: 'compose' }));
   $('socAiBtn').addEventListener('click', () => openAIDialog({ target: 'caption' }));
   $('aiKeySave').addEventListener('click', aiCheckKey);
@@ -4177,6 +4294,7 @@ async function refreshStatus() {
   bind();
   aiBind();
   renderAiSettings();
+  aiRefreshStatus();
   fbBind();
   socBind();
   schedBind();

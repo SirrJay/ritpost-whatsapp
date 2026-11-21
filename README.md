@@ -169,9 +169,12 @@ Videos and documents are posted as they are.
 
 ## AI writing assistant (OpenAI)
 
-RitPost can rewrite your post with your own OpenAI account.
+RitPost can rewrite your posts with AI in two ways:
 
-**Set up once:** in **Settings → AI writing assistant**, paste an API key from platform.openai.com → API keys and click **Check & save**. RitPost lists the models your account can use, picks the newest one, and lets you change it. Optionally describe **you / your brand voice** (for example "Ritworld Family Church, Accra. Warm, hopeful, faith-filled").
+- **RitPost AI (included):** works for everyone with no setup, through the publisher's RitPost AI server (see `worker/README.md`). Everyone gets free rewrites every day (30 by default); a **premium access code** gives more: **Settings → AI writing assistant → Have an access code? → Activate**. The box shows your plan and how many rewrites are left today.
+- **Your own OpenAI key:** no daily limit; OpenAI bills you. Used instead of RitPost AI when set.
+
+**Your own key (optional):** in **Settings → AI writing assistant**, paste an API key from platform.openai.com → API keys and click **Check & save**. RitPost lists the models your account can use, picks the newest one, and lets you change it. Optionally describe **you / your brand voice** (for example "Ritworld Family Church, Accra. Warm, hopeful, faith-filled").
 
 **Use it:** click **✨ AI** in the Compose toolbar (or in the Instagram/X caption box).
 
@@ -181,7 +184,7 @@ RitPost can rewrite your post with your own OpenAI account.
 - **Results:** 3 different versions, each with a note on why it works and a character count. **Use this**, **Add below**, **Copy**, or **More like this** (3 new versions based on that one). With *all 4 platforms*, **Use all four** fills Compose and the Instagram and X captions at once. **Undo** always brings your text back.
 - RitPost tells the AI never to invent facts, but always check names, dates and links before posting.
 
-Your key is stored only in this browser (never in the backup file). Your text is sent to OpenAI only when you click **Generate**, and OpenAI bills your account; a rewrite usually costs a fraction of a cent.
+Your key is stored only in this browser (never in the backup file). Your text is sent to OpenAI only when you click **Generate**, and OpenAI bills your account; a rewrite usually costs a fraction of a cent. With RitPost AI, your text goes to the RitPost AI server, which passes it to OpenAI and keeps only a usage log (no post text).
 
 ## Emoji
 
@@ -233,7 +236,7 @@ Good to know:
 Full policy: https://sirrjay.github.io/ritpost-whatsapp/store/privacy-policy.html
 
 
-Everything stays on your computer in `chrome.storage.local`. RitPost has no servers, no analytics, and doesn't talk to anything outside your browser. It only runs on `web.whatsapp.com`, `facebook.com`, `instagram.com` and `x.com`, and only acts there when you post from RitPost. RitPost Studio edits photos on your computer. The one exception is the optional **AI writing assistant**: when you click Generate, the text you asked it to rewrite (and your brand voice, if you use it) is sent to OpenAI with your own API key.
+Everything stays on your computer in `chrome.storage.local`. RitPost has no servers, no analytics, and doesn't talk to anything outside your browser. It only runs on `web.whatsapp.com`, `facebook.com`, `instagram.com` and `x.com`, and only acts there when you post from RitPost. RitPost Studio edits photos on your computer. The one exception is the **AI writing assistant**: when you click Generate, the text you asked it to rewrite (and your brand voice, if you use it) is sent to OpenAI, either directly with your own key or through the RitPost AI server, which keeps a usage log (time, a random device id, plan, token counts, a hashed network address) for 90 days but not your text.
 
 ## Troubleshooting
 

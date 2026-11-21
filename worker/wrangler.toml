@@ -1,0 +1,19 @@
+name = "ritpost-ai"
+main = "src/index.js"
+compatibility_date = "2026-11-01"
+
+# The admin page is bundled as text.
+rules = [{ type = "Text", globs = ["**/*.html"], fallthrough = true }]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "ritpost-ai"
+database_id = "PASTE-YOUR-DATABASE-ID-HERE"
+
+# Daily clean-up of old request logs (03:00 UTC).
+[triggers]
+crons = ["0 3 * * *"]
+
+# Secrets (set with `npx wrangler secret put NAME`, never written here):
+#   OPENAI_API_KEY  your OpenAI API key
+#   ADMIN_TOKEN     the password for the admin portal (/admin)

@@ -23,7 +23,9 @@
   <p class="muted">Last updated: 12 November 2026</p>
 
   <p>RitPost (“the extension”) is a Chrome extension that helps you post a message to several of your own WhatsApp groups in WhatsApp Web, to Facebook groups and Pages on facebook.com, and to your Instagram and X accounts. It also includes a photo editor that works entirely on your device, and an optional AI writing assistant that uses your own OpenAI account. This policy explains what the extension handles and what it does with it.</p>
-  <h2>AI writing assistant (optional)</h2>
+  <h2>RitPost AI (included AI rewrites)</h2>
+  <p>When you click <strong>Generate</strong> without your own OpenAI key, the text you asked it to rewrite, the options you chose and your optional brand-voice note are sent to the RitPost AI server operated by the publisher, which sends them to OpenAI to produce the rewrites and returns them to you. The server does <strong>not</strong> store your text. To enforce daily limits it keeps a usage log for 90 days: the time, a random device identifier created by RitPost, your plan and access code (if any), the number of tokens used, which platform the rewrite was for, and a one-way hash of your network address. If you enter a premium access code, the server records which devices use it. OpenAI’s terms and privacy policy apply to the request it processes.</p>
+  <h2>AI writing assistant with your own key (optional)</h2>
   <p>If you add your own OpenAI API key in Settings, RitPost stores the key only in your browser. When you click <strong>Generate</strong>, the text you asked it to rewrite, the options you chose and your optional brand-voice note are sent to OpenAI (api.openai.com) to produce the rewrites; OpenAI’s own terms and privacy policy apply to that request. Nothing is sent to OpenAI unless you click Generate (or “Check &amp; save” to verify the key), and you can remove the key at any time.</p>
 
   <h2>Summary</h2>
@@ -41,7 +43,7 @@
 
   <h2>What the extension does not do</h2>
   <ul>
-    <li>It has no servers and sends no data to the developer. The only third party it ever contacts is OpenAI, and only if you set up the optional AI assistant with your own key and click Generate.</li>
+    <li>It sends nothing to the developer except what the AI writing assistant needs when you click Generate (see “RitPost AI” below). The only third party it contacts is OpenAI, and only for those AI rewrites.</li>
     <li>It uses no analytics, tracking, advertising or cookies.</li>
     <li>It does not read your message history beyond what is needed to confirm that a message was sent in the chat that is currently open.</li>
     <li>It runs only on <code>https://web.whatsapp.com/</code>, <code>facebook.com</code>, <code>instagram.com</code> and <code>x.com</code>, and on no other website.</li>
