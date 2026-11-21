@@ -10,7 +10,7 @@ RitPost helps a user post one message to their own WhatsApp groups (WhatsApp Web
 
 **storage**
 ```
-Saves the user's group list, saved selections, message templates, draft message, attachments chosen for the next post, settings and last-session summary locally in the browser. Nothing is sent off the device.
+Saves the user's WhatsApp groups and lists, Facebook groups and Pages, message templates, draft message and captions, attachments chosen for the next post, scheduled posts, settings and the last plan seen, locally in the browser.
 ```
 
 **unlimitedStorage**
@@ -50,7 +50,7 @@ Lets the user export a backup file (JSON) of their saved groups, lists and templ
 
 **Host permission: https://web.whatsapp.com/***
 ```
-RitPost works only on WhatsApp Web. It reads the chat list to import group names, opens the chats the user selected, and fills in the user's message and any files the user attached. It runs on no other site.
+Used only when the user posts to WhatsApp groups from RitPost. On WhatsApp Web it reads the chat list to import group names (when the user clicks Import), opens the chats the user selected, and fills in the user's message and any files the user attached. It does not read message history or contacts.
 ```
 
 **Host permission: https://*.facebook.com/***
