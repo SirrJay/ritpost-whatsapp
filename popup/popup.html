@@ -53,6 +53,7 @@
             <button type="button" class="tb token" id="insertToken" title="Insert the group's name">{group}</button>
             <span class="tb-sep"></span>
             <button type="button" class="tb emoji-btn" id="emojiBtn" title="Add an emoji" aria-label="Add an emoji">😊</button>
+            <button type="button" class="tb ai-btn" id="aiBtn" title="Rewrite with AI (OpenAI)">✨ AI</button>
             <span class="spacer"></span>
             <button type="button" class="tb toggle" id="previewToggle" title="Preview how it will look">
               <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4c4.2 0 7.3 3.4 8 6-.7 2.6-3.8 6-8 6s-7.3-3.4-8-6c.7-2.6 3.8-6 8-6Zm0 1.5c-3.2 0-5.7 2.4-6.4 4.5.7 2.1 3.2 4.5 6.4 4.5s5.7-2.4 6.4-4.5c-.7-2.1-3.2-4.5-6.4-4.5Zm0 1.8a2.7 2.7 0 1 1 0 5.4 2.7 2.7 0 0 1 0-5.4Z"/></svg>
@@ -324,6 +325,7 @@
         <div class="editor">
           <div class="toolbar">
             <button type="button" class="tb emoji-btn" id="socEmojiBtn" title="Add an emoji" aria-label="Add an emoji">😊</button>
+            <button type="button" class="tb ai-btn" id="socAiBtn" title="Rewrite this caption with AI (OpenAI)">✨ AI</button>
             <span class="tb-sep"></span>
             <div class="menu-wrap">
               <button type="button" class="tb" id="socTagsBtn" title="Saved hashtag sets"># Hashtags</button>
@@ -439,6 +441,24 @@
         </select>
       </div>
 
+      <div class="ai-setting" id="aiSetting">
+        <div class="s-title">✨ AI writing assistant (OpenAI)</div>
+        <div class="muted">Rewrites your posts with your own OpenAI account. Paste an API key from <b>platform.openai.com → API keys</b>. The key stays in this browser; your text is sent to OpenAI only when you click <b>Generate</b>, and OpenAI bills your account.</div>
+        <div class="ai-key-row">
+          <input id="aiKey" type="password" placeholder="Paste your OpenAI API key (sk-…)" autocomplete="off" spellcheck="false" aria-label="OpenAI API key">
+          <button type="button" id="aiKeyShow" class="btn secondary sm" title="Show or hide the key">Show</button>
+          <button type="button" id="aiKeySave" class="btn primary sm">Check &amp; save</button>
+        </div>
+        <div class="ai-model-row" id="aiModelRow" hidden>
+          <label for="aiModel">Model</label>
+          <select id="aiModel"></select>
+        </div>
+        <p class="hint" id="aiStatus"></p>
+        <label for="aiBrand" class="ai-sub">About you / your brand voice <span class="muted">(optional, used when you tick “Use my brand voice”)</span></label>
+        <textarea id="aiBrand" rows="2" maxlength="600" placeholder="e.g. Ritworld Family Church, Accra. Warm, hopeful and faith-filled; we call members “family”."></textarea>
+        <button type="button" id="aiKeyRemove" class="link danger" hidden>Remove my key</button>
+      </div>
+
       <div class="setting">
         <div>
           <div class="s-title">Backup</div>
@@ -530,6 +550,7 @@
 
   <script src="../lib/schedule.js"></script>
   <script src="../lib/emoji.js"></script>
+  <script src="../lib/ai.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

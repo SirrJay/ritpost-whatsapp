@@ -167,6 +167,22 @@ Click **Edit** on a photo in Compose (or **Edit photos** / **Edit in Studio**). 
 
 Videos and documents are posted as they are.
 
+## AI writing assistant (OpenAI)
+
+RitPost can rewrite your post with your own OpenAI account.
+
+**Set up once:** in **Settings → AI writing assistant**, paste an API key from platform.openai.com → API keys and click **Check & save**. RitPost lists the models your account can use, picks the newest one, and lets you change it. Optionally describe **you / your brand voice** (for example "Ritworld Family Church, Accra. Warm, hopeful, faith-filled").
+
+**Use it:** click **✨ AI** in the Compose toolbar (or in the Instagram/X caption box).
+
+- **What should AI do?** Improve, Professional, Shorter, Expand, Fix grammar, Simpler, Persuasive, Headline + body, Translate.
+- **Professional options:** write for WhatsApp, Facebook, Instagram, X (280 characters) or **all 4 platforms at once**; tone (Professional, Friendly, Formal, Persuasive, Inspirational, Urgent, Celebratory, Faith-filled…); type of post (announcement, event invitation, promotion, launch, reminder, thank-you, job vacancy, fundraising, church message…); audience; length; layout (paragraphs, bullet points, one idea per line, story); emojis; language (including Twi, Ewe, Hausa, Yoruba, Igbo, Swahili, Pidgin, French…); hashtags; strong opening hook; call to action with your own text; WhatsApp *bold*; keep links, dates, prices, names and `{group}` exactly; your brand voice; extra instructions.
+- **Presets:** save the options you use often (for example "Church invite") and reuse them in one click. Your last options are remembered.
+- **Results:** 3 different versions, each with a note on why it works and a character count. **Use this**, **Add below**, **Copy**, or **More like this** (3 new versions based on that one). With *all 4 platforms*, **Use all four** fills Compose and the Instagram and X captions at once. **Undo** always brings your text back.
+- RitPost tells the AI never to invent facts, but always check names, dates and links before posting.
+
+Your key is stored only in this browser (never in the backup file). Your text is sent to OpenAI only when you click **Generate**, and OpenAI bills your account; a rewrite usually costs a fraction of a cent.
+
 ## Emoji
 
 Every place you write has an emoji button: Compose, the Instagram/X caption, the review dialog and Studio's text tool. Search by word (heart, party, pray, ghana…), browse categories, pick a skin tone, and find your recently used ones first. Shift+click adds several at once.
@@ -217,7 +233,7 @@ Good to know:
 Full policy: https://sirrjay.github.io/ritpost-whatsapp/store/privacy-policy.html
 
 
-Everything stays on your computer in `chrome.storage.local`. RitPost has no servers, no analytics, and doesn't talk to anything outside your browser. It only runs on `web.whatsapp.com`, `facebook.com`, `instagram.com` and `x.com`, and only acts there when you post from RitPost. RitPost Studio edits photos on your computer.
+Everything stays on your computer in `chrome.storage.local`. RitPost has no servers, no analytics, and doesn't talk to anything outside your browser. It only runs on `web.whatsapp.com`, `facebook.com`, `instagram.com` and `x.com`, and only acts there when you post from RitPost. RitPost Studio edits photos on your computer. The one exception is the optional **AI writing assistant**: when you click Generate, the text you asked it to rewrite (and your brand voice, if you use it) is sent to OpenAI with your own API key.
 
 ## Troubleshooting
 

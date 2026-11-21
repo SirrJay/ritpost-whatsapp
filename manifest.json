@@ -2,9 +2,9 @@
   "manifest_version": 3,
   "name": "RitPost – Post to WhatsApp, Facebook, Instagram & X",
   "short_name": "RitPost",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "minimum_chrome_version": "116",
-  "description": "Write once and post to WhatsApp groups, Facebook groups and Pages, Instagram and X. Edit photos, add emojis and schedule posts.",
+  "description": "Write once and post to WhatsApp groups, Facebook groups and Pages, Instagram and X. Rewrite with AI, edit photos, add emojis and schedule posts.",
   "icons": {
     "16": "icons/icon16.png",
     "32": "icons/icon32.png",
@@ -32,7 +32,7 @@
     "service_worker": "background.js"
   },
   "permissions": ["storage", "unlimitedStorage", "scripting", "sidePanel", "downloads", "alarms", "notifications", "declarativeNetRequestWithHostAccess"],
-  "host_permissions": ["https://web.whatsapp.com/*", "https://*.facebook.com/*", "https://www.instagram.com/*", "https://instagram.com/*", "https://*.cdninstagram.com/*", "https://x.com/*", "https://twitter.com/*"],
+  "host_permissions": ["https://web.whatsapp.com/*", "https://*.facebook.com/*", "https://www.instagram.com/*", "https://instagram.com/*", "https://*.cdninstagram.com/*", "https://x.com/*", "https://twitter.com/*", "https://api.openai.com/*"],
   "content_scripts": [
     {
       "matches": ["https://web.whatsapp.com/*"],

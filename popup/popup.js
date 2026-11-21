@@ -2885,6 +2885,430 @@ function socBind() {
   setInterval(() => !document.hidden && soc.run && renderSocRun(), 30000);
 }
 
+// ─────────────── AI writing assistant (OpenAI) ───────────────
+const AI_ACTIONS = [
+  ['improve', '✨ Improve', 'Make it clearer, more engaging and polished'],
+  ['professional', '💼 Professional', 'Rewrite it in a polished, professional, credible style'],
+  ['shorter', '✂️ Shorter', 'Make it noticeably shorter and tighter without losing the key information'],
+  ['longer', '➕ Expand', 'Expand it with more detail and warmth, without inventing facts'],
+  ['grammar', '✅ Fix grammar', 'Fix spelling, grammar and punctuation only; keep the wording and style as close to the original as possible'],
+  ['simple', '🧒 Simpler', 'Use simple, everyday words that anyone can understand'],
+  ['persuasive', '🎯 Persuasive', 'Make it more persuasive so more people respond'],
+  ['headline', '📰 Headline + body', 'Give it a short attention-grabbing headline line, then the body'],
+  ['translate', '🌍 Translate', 'Translate it faithfully, keeping the tone'],
+];
+const AI_TONES = ['Professional', 'Friendly', 'Warm', 'Formal', 'Casual', 'Persuasive', 'Inspirational', 'Exciting', 'Urgent', 'Celebratory', 'Empathetic', 'Authoritative', 'Humorous', 'Respectful', 'Faith-filled'];
+const AI_PURPOSES = ['Announcement', 'Event invitation', 'Reminder', 'Promotion or sale', 'Product or service launch', 'Thank-you message', 'Greeting or wishes', 'News update', 'Job vacancy', 'Fundraising or donation appeal', 'Church or ministry message', 'Customer service reply', 'Apology or correction', 'Educational tip'];
+const AI_AUDIENCES = ['Everyone', 'Customers', 'Church members', 'Community or group members', 'Professionals and business people', 'Young people', 'Parents and families', 'Students'];
+const AI_LANGS = ['English', 'French', 'Spanish', 'Portuguese', 'German', 'Arabic', 'Swahili', 'Hausa', 'Yoruba', 'Igbo', 'Twi', 'Ewe', 'Pidgin English', 'Chinese', 'Hindi'];
+const AI_DEFAULTS = { action: 'improve', platform: 'same', tone: '', purpose: '', audience: '', length: '', format: '', emoji: '', language: 'same', hook: false, cta: false, ctaText: '', hashtags: 0, waFormat: false, keep: true, useBrand: true, custom: '', count: 3 };
+const ai = { key: '', model: '', models: [], brand: '', last: { ...AI_DEFAULTS }, presets: [], busy: null };
+
+async function aiLoad() {
+  const { aiSettings } = await chrome.storage.local.get('aiSettings');
+  const s = aiSettings || {};
+  Object.assign(ai, {
+    key: typeof s.key === 'string' ? s.key : '',
+    model: s.model || '',
+    models: Array.isArray(s.models) ? s.models : [],
+    brand: s.brand || '',
+    last: { ...AI_DEFAULTS, ...(s.last || {}) },
+    presets: Array.isArray(s.presets) ? s.presets.filter((p) => p?.name && p?.opts) : [],
+  });
+}
+const aiSave = () => persist({ aiSettings: { key: ai.key, model: ai.model, models: ai.models, brand: ai.brand, last: ai.last, presets: ai.presets } });
+const maskKey = (k) => (k ? `${k.slice(0, 5)}…${k.slice(-4)}` : '');
+
+function renderAiSettings() {
+  $('aiKey').value = ai.key ? maskKey(ai.key) : '';
+  $('aiKey').dataset.masked = ai.key ? '1' : '';
+  $('aiKey').type = 'password';
+  $('aiKeyShow').textContent = 'Show';
+  $('aiKeyRemove').hidden = !ai.key;
+  $('aiModelRow').hidden = !ai.key || !ai.models.length;
+  $('aiModel').replaceChildren(...ai.models.map((m) => h('option', { value: m, selected: m === ai.model }, m)));
+  $('aiBrand').value = ai.brand;
+  $('aiStatus').textContent = ai.key ? `Connected · ${ai.model || 'no model chosen'}` : 'Not set up yet.';
+  $('aiStatus').classList.toggle('ok', !!ai.key);
+}
+
+async function aiCheckKey() {
+  const input = $('aiKey');
+  const typed = input.dataset.masked === '1' ? ai.key : input.value.trim();
+  if (!typed) return toast('Paste your OpenAI API key first.', true);
+  if (!/^sk-/.test(typed)) return toast('OpenAI API keys start with “sk-”. Copy it again from platform.openai.com → API keys.', true);
+  const btn = $('aiKeySave');
+  btn.disabled = true;
+  $('aiStatus').textContent = 'Checking with OpenAI…';
+  try {
+    const models = await window.RitAI.listModels(typed);
+    if (!models.length) throw new Error('This key works, but no chat models are available in your OpenAI account.');
+    ai.key = typed;
+    ai.models = models;
+    if (!models.includes(ai.model)) ai.model = models[0];
+    await aiSave();
+    renderAiSettings();
+    toast(`AI ready: ${ai.model}`);
+  } catch (e) {
+    $('aiStatus').textContent = e.message;
+    $('aiStatus').classList.remove('ok');
+    toast(e.message, true);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+/** Options → the instructions sent to OpenAI. */
+function aiRequestOpts(o, platform) {
+  const action = AI_ACTIONS.find((a) => a[0] === o.action);
+  const lengths = { short: 'short (1–3 sentences)', medium: 'medium (a short paragraph or two)', long: 'long and detailed' };
+  const formats = { paragraphs: 'readable short paragraphs', bullets: 'a short intro, then bullet points (•)', lines: 'short punchy lines, one idea per line', story: 'a short story-style post' };
+  const emojis = { none: 'no emojis at all', few: 'a few well-placed emojis', many: 'plenty of lively emojis' };
+  return {
+    action: action ? action[2] : '',
+    tone: o.tone,
+    purpose: o.purpose,
+    audience: o.audience,
+    length: lengths[o.length] || (o.action === 'shorter' || o.action === 'longer' ? '' : 'about the same length as the original'),
+    format: formats[o.format] || '',
+    emoji: emojis[o.emoji] || '',
+    language: o.action === 'translate' && o.language === 'same' ? 'English' : o.language,
+    hook: o.hook,
+    cta: o.cta,
+    ctaText: o.ctaText,
+    hashtags: o.hashtags,
+    waFormat: o.waFormat,
+    keep: o.keep,
+    brand: o.useBrand ? ai.brand : '',
+    custom: o.custom,
+    count: o.count,
+    platform: o.platform === 'same' ? platform : o.platform,
+  };
+}
+
+/**
+ * The AI window. target 'compose' rewrites the Compose message; 'caption' the Instagram/X caption.
+ */
+function openAIDialog({ target = 'compose' } = {}) {
+  if (!window.RitAI) return toast('The AI module didn’t load. Reload RitPost.', true);
+  const isCaption = target === 'caption';
+  const here = isCaption ? soc.settings.platform : 'whatsapp';
+  const source = () => (isCaption ? socCaption() : state.message);
+  if (!ai.key) {
+    openDialog({
+      title: '✨ Set up the AI assistant',
+      confirmText: 'Open Settings',
+      body: [
+        h('p', {}, 'RitPost uses your own OpenAI account to rewrite posts.'),
+        h('ol', { class: 'risk' }, h('li', {}, 'Sign in at platform.openai.com and open “API keys”.'), h('li', {}, 'Create a key and copy it.'), h('li', {}, 'Paste it in RitPost → Settings → AI writing assistant, and click “Check & save”.')),
+        h('p', { class: 'muted' }, 'The key stays in this browser. Your text goes to OpenAI only when you click Generate, and OpenAI bills your account (a rewrite usually costs a fraction of a cent).'),
+      ],
+      onConfirm: () => {
+        setTimeout(() => {
+          switchTab('settings');
+          $('aiKey').focus();
+        }, 50);
+        return true;
+      },
+    });
+    return;
+  }
+  if (!source().trim()) return toast(isCaption ? 'Write a caption first; AI improves the text you give it.' : 'Write your message first; AI improves the text you give it.', true);
+
+  const o = { ...ai.last };
+  if (isCaption && o.platform === 'whatsapp') o.platform = 'same';
+  const sel = (label, key, options, blank = 'Any') =>
+    h(
+      'label',
+      { class: 'ai-field' },
+      h('span', {}, label),
+      h(
+        'select',
+        { onchange: (e) => (o[key] = key === 'hashtags' ? Number(e.target.value) || 0 : e.target.value) },
+        blank === null ? null : h('option', { value: '' }, blank),
+        ...options.map((v) => (Array.isArray(v) ? h('option', { value: v[0], selected: o[key] === v[0] }, v[1]) : h('option', { value: v, selected: o[key] === v }, v)))
+      )
+    );
+  const chk = (key, label, extra) =>
+    h('label', { class: 'ai-check' }, h('input', { type: 'checkbox', checked: !!o[key], onchange: (e) => ((o[key] = e.target.checked), extra?.(e.target.checked)) }), h('span', {}, label));
+
+  const actions = h('div', { class: 'ai-actions' });
+  const renderActions = () =>
+    actions.replaceChildren(
+      ...AI_ACTIONS.map(([id, label]) =>
+        h('button', { type: 'button', class: o.action === id ? 'on' : '', onclick: () => ((o.action = id), renderActions(), langWrap.classList.toggle('hl', id === 'translate')) }, label)
+      )
+    );
+  const langWrap = h(
+    'label',
+    { class: 'ai-field' },
+    h('span', {}, 'Language'),
+    h('select', { onchange: (e) => (o.language = e.target.value) }, h('option', { value: 'same', selected: o.language === 'same' }, 'Same as the post'), ...AI_LANGS.map((l) => h('option', { value: l, selected: o.language === l }, l)))
+  );
+  const ctaText = h('input', { type: 'text', placeholder: 'e.g. Call 024 000 0000, Register at the link', value: o.ctaText, maxlength: 120, oninput: (e) => (o.ctaText = e.target.value) });
+  ctaText.hidden = !o.cta;
+  const custom = h('textarea', { rows: 2, maxlength: 500, placeholder: 'Anything else? e.g. mention free parking; keep the Bible verse; sound like a bank, not a teenager' });
+  custom.value = o.custom;
+  custom.addEventListener('input', () => (o.custom = custom.value));
+  const presetsRow = h('div', { class: 'ai-presets' });
+  const results = h('div', { class: 'ai-results' });
+  const status = h('div', { class: 'ai-status' });
+  const genBtn = h('button', { type: 'button', class: 'btn primary block ai-go' }, '✨ Generate 3 versions');
+
+  const renderPresets = () =>
+    setChildren(
+      presetsRow,
+      ...ai.presets.map((p) =>
+        h(
+          'span',
+          { class: 'chip-btn' },
+          h('span', { class: 'lbl', onclick: () => (Object.assign(o, { ...AI_DEFAULTS, ...p.opts }), closeDialog(), (ai.last = { ...o }), openAIDialog({ target })) }, p.name),
+          h('span', { class: 'x', title: 'Delete preset', onclick: () => ((ai.presets = ai.presets.filter((x) => x !== p)), aiSave(), renderPresets()) }, '✕')
+        )
+      ),
+      h(
+        'button',
+        {
+          type: 'button',
+          class: 'chip-btn add',
+          onclick: async () => {
+            const snapshot = { ...o };
+            const name = await askName({ title: 'Save these AI options', label: 'Preset name', placeholder: 'e.g. Church announcement', confirmText: 'Save preset' });
+            if (name) {
+              ai.presets = [...ai.presets.filter((p) => keyOf(p.name) !== keyOf(name)), { name, opts: snapshot }];
+              ai.last = snapshot;
+              await aiSave();
+              toast(`Preset “${name}” saved`);
+            }
+            openAIDialog({ target });
+          },
+        },
+        '+ Save as preset'
+      )
+    );
+
+  function applyText(text, mode) {
+    if (isCaption) {
+      socDetach();
+      const p = soc.settings.platform;
+      const before = soc.settings.captions[p] || '';
+      soc.settings.captions[p] = mode === 'insert' && before ? `${before.trimEnd()}\n\n${text}` : text;
+      socSave();
+      renderSoc();
+      closeDialog();
+      toast(`Caption updated for ${platLabel(p)}`, false, { label: 'Undo', run: () => ((soc.settings.captions[p] = before), socSave(), renderSoc()) });
+      return;
+    }
+    const before = state.message;
+    setMessage(mode === 'insert' && before.trim() ? `${before.trimEnd()}\n\n${text}` : text);
+    if (soc.settings.same) renderSoc();
+    closeDialog();
+    toast(mode === 'insert' ? 'Added below your message' : 'Message replaced', false, { label: 'Undo', run: () => (setMessage(before), renderSoc()) });
+  }
+
+  function applyAll(v) {
+    const beforeMsg = state.message;
+    const beforeSoc = JSON.stringify(soc.settings);
+    setMessage(v.whatsapp || v.facebook);
+    socDetach();
+    if (v.instagram) soc.settings.captions.instagram = v.instagram;
+    if (v.x) soc.settings.captions.x = v.x;
+    socSave();
+    renderSoc();
+    closeDialog();
+    toast('Compose, Instagram and X captions updated', false, {
+      label: 'Undo',
+      run: () => {
+        setMessage(beforeMsg);
+        soc.settings = JSON.parse(beforeSoc);
+        socSave();
+        renderSoc();
+      },
+    });
+  }
+
+  const copy = (text) => navigator.clipboard?.writeText(text).then(() => toast('Copied'), () => toast('Couldn’t copy', true));
+  const count = (p, t) => (p === 'x' ? `${xLength(t)}/280` : `${t.length.toLocaleString()} chars`);
+
+  function renderResults(list, platform, meta) {
+    const cards = list.map((v, i) => {
+      if (platform === 'all') {
+        const block = (p, label) =>
+          v[p]
+            ? h(
+                'div',
+                { class: 'ai-plat' },
+                h('div', { class: 'ai-plat-head' }, h('b', {}, label), h('span', { class: p === 'x' && xLength(v[p]) > 280 ? 'muted over' : 'muted' }, count(p, v[p])), h('button', { type: 'button', class: 'link', onclick: () => copy(v[p]) }, 'Copy')),
+                h('div', { class: 'ai-text' }, v[p])
+              )
+            : null;
+        return h(
+          'div',
+          { class: 'ai-card' },
+          h('div', { class: 'ai-card-head' }, h('b', {}, `${i + 1}. ${v.title}`)),
+          v.note ? h('div', { class: 'ai-note' }, v.note) : null,
+          block('whatsapp', 'WhatsApp'),
+          block('facebook', 'Facebook'),
+          block('instagram', 'Instagram'),
+          block('x', 'X'),
+          h('div', { class: 'ai-card-acts' }, h('button', { type: 'button', class: 'btn primary sm', onclick: () => applyAll(v) }, 'Use all four'), h('button', { type: 'button', class: 'btn secondary sm', onclick: () => applyText(v.whatsapp, 'replace') }, 'Use WhatsApp version'))
+        );
+      }
+      return h(
+        'div',
+        { class: 'ai-card' },
+        h('div', { class: 'ai-card-head' }, h('b', {}, `${i + 1}. ${v.title}`), h('span', { class: platform === 'x' && xLength(v.text) > 280 ? 'muted over' : 'muted' }, count(platform, v.text))),
+        v.note ? h('div', { class: 'ai-note' }, v.note) : null,
+        h('div', { class: 'ai-text' }, v.text),
+        h(
+          'div',
+          { class: 'ai-card-acts' },
+          h('button', { type: 'button', class: 'btn primary sm', onclick: () => applyText(v.text, 'replace') }, 'Use this'),
+          h('button', { type: 'button', class: 'btn secondary sm', onclick: () => applyText(v.text, 'insert') }, 'Add below'),
+          h('button', { type: 'button', class: 'btn secondary sm', onclick: () => copy(v.text) }, 'Copy'),
+          h(
+            'button',
+            {
+              type: 'button',
+              class: 'btn secondary sm',
+              title: 'Make 3 new versions based on this one',
+              onclick: () => generate(v.text),
+            },
+            'More like this'
+          )
+        )
+      );
+    });
+    setChildren(results, ...cards, meta ? h('p', { class: 'hint ai-meta' }, meta) : null);
+    results.scrollIntoView?.({ block: 'start', behavior: 'smooth' });
+  }
+
+  async function generate(fromText) {
+    if (ai.busy) {
+      ai.busy.abort();
+      return;
+    }
+    ai.last = { ...o };
+    aiSave();
+    const platform = o.platform === 'same' ? here : o.platform;
+    const ctrl = new AbortController();
+    ai.busy = ctrl;
+    const timer = setTimeout(() => ctrl.abort(), 90000);
+    genBtn.textContent = 'Stop';
+    genBtn.classList.add('busy');
+    status.className = 'ai-status';
+    setChildren(status, h('span', { class: 'spinner' }), h('span', {}, `Writing with ${ai.model}…`));
+    try {
+      const res = await window.RitAI.rewrite({ key: ai.key, model: ai.model, text: fromText || source(), opts: aiRequestOpts(o, platform), signal: ctrl.signal });
+      status.replaceChildren();
+      const used = res.usage?.total_tokens ? ` · ${res.usage.total_tokens.toLocaleString()} tokens` : '';
+      renderResults(res.variations, aiRequestOpts(o, platform).platform, `Written by ${res.model}${used}. Check names, dates and links before posting.`);
+    } catch (e) {
+      status.className = 'ai-status err';
+      status.textContent = e?.message || String(e);
+    } finally {
+      clearTimeout(timer);
+      ai.busy = null;
+      genBtn.textContent = '✨ Generate 3 versions';
+      genBtn.classList.remove('busy');
+    }
+  }
+  genBtn.addEventListener('click', () => generate());
+
+  renderActions();
+  renderPresets();
+  const preview = source();
+  openDialog({
+    title: isCaption ? `✨ Rewrite the ${platLabel(here)} caption` : '✨ Rewrite with AI',
+    hideConfirm: true,
+    body: h(
+      'div',
+      { class: 'ai-dialog' },
+      h('div', { class: 'ai-source', title: preview }, h('span', { class: 'muted' }, 'Your text: '), preview.length > 160 ? `${preview.slice(0, 160)}…` : preview),
+      h('div', { class: 'ai-sec' }, h('div', { class: 'ai-sec-h' }, 'What should AI do?'), actions),
+      h(
+        'details',
+        { class: 'ai-pro', open: true },
+        h('summary', {}, '💼 Professional options'),
+        h(
+          'div',
+          { class: 'ai-grid' },
+          sel('Write for', 'platform', [['same', isCaption ? `${platLabel(here)} (this caption)` : 'WhatsApp (this message)'], ['whatsapp', 'WhatsApp'], ['facebook', 'Facebook'], ['instagram', 'Instagram'], ['x', 'X (280 characters)'], ['all', 'All 4 platforms at once']], null),
+          sel('Tone', 'tone', AI_TONES),
+          sel('Type of post', 'purpose', AI_PURPOSES),
+          sel('Audience', 'audience', AI_AUDIENCES),
+          sel('Length', 'length', [['short', 'Short'], ['medium', 'Medium'], ['long', 'Long']], 'Keep about the same'),
+          sel('Layout', 'format', [['paragraphs', 'Short paragraphs'], ['bullets', 'Bullet points'], ['lines', 'One idea per line'], ['story', 'Story style']], 'Keep as it is'),
+          sel('Emojis', 'emoji', [['none', 'None'], ['few', 'A few'], ['many', 'Lots']], 'Up to AI'),
+          langWrap,
+          sel('Hashtags', 'hashtags', [[3, '3 hashtags'], [5, '5 hashtags'], [10, '10 hashtags'], [15, '15 hashtags']], 'No extra hashtags')
+        ),
+        h(
+          'div',
+          { class: 'ai-checks' },
+          chk('hook', 'Strong opening hook'),
+          chk('cta', 'Clear call to action', (on) => (ctaText.hidden = !on)),
+          ctaText,
+          chk('waFormat', 'Use WhatsApp *bold* / _italic_'),
+          chk('keep', 'Keep links, dates, prices, names and {group} exactly'),
+          ai.brand ? chk('useBrand', 'Use my brand voice (from Settings)') : h('p', { class: 'hint' }, 'Tip: add “About you / your brand voice” in Settings so every rewrite sounds like you.')
+        ),
+        h('label', { class: 'ai-field wide' }, h('span', {}, 'Extra instructions'), custom),
+        h('div', { class: 'ai-sec-h' }, 'My presets'),
+        presetsRow
+      ),
+      genBtn,
+      status,
+      results
+    ),
+    onCancel: () => ai.busy?.abort(),
+  });
+}
+
+function aiBind() {
+  $('aiBtn').addEventListener('click', () => openAIDialog({ target: 'compose' }));
+  $('socAiBtn').addEventListener('click', () => openAIDialog({ target: 'caption' }));
+  $('aiKeySave').addEventListener('click', aiCheckKey);
+  $('aiKey').addEventListener('focus', (e) => {
+    if (e.target.dataset.masked === '1') {
+      e.target.value = '';
+      e.target.dataset.masked = '';
+    }
+  });
+  $('aiKey').addEventListener('keydown', (e) => e.key === 'Enter' && aiCheckKey());
+  $('aiKey').addEventListener('blur', (e) => {
+    if (!e.target.value && ai.key) renderAiSettings();
+  });
+  $('aiKeyShow').addEventListener('click', () => {
+    const i = $('aiKey');
+    if (i.dataset.masked === '1') {
+      i.value = ai.key;
+      i.dataset.masked = '';
+    }
+    i.type = i.type === 'password' ? 'text' : 'password';
+    $('aiKeyShow').textContent = i.type === 'password' ? 'Show' : 'Hide';
+  });
+  $('aiModel').addEventListener('change', (e) => {
+    ai.model = e.target.value;
+    aiSave();
+    renderAiSettings();
+    toast(`AI model: ${ai.model}`);
+  });
+  $('aiBrand').addEventListener('change', (e) => {
+    ai.brand = e.target.value.trim();
+    aiSave();
+    toast(ai.brand ? 'Brand voice saved' : 'Brand voice cleared');
+  });
+  $('aiKeyRemove').addEventListener('click', () => {
+    ai.key = '';
+    ai.models = [];
+    ai.model = '';
+    aiSave();
+    renderAiSettings();
+    toast('Your OpenAI key was removed from RitPost');
+  });
+}
+
 // ─────────────── Scheduled posts ───────────────
 const RS = window.RitSchedule;
 /** replaceChildren, skipping empty parts (replaceChildren would print "null"). */
@@ -3749,7 +4173,10 @@ async function refreshStatus() {
   await fbLoad();
   await schedLoad();
   await socLoad();
+  await aiLoad();
   bind();
+  aiBind();
+  renderAiSettings();
   fbBind();
   socBind();
   schedBind();
