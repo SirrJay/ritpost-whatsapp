@@ -61,4 +61,6 @@ cd "C:\RitPost Whatsapp\worker"
 npx wrangler@4 deploy
 ```
 
-Change the OpenAI key or admin password any time with `npx wrangler@4 secret put OPENAI_API_KEY` or `npx wrangler@4 secret put ADMIN_TOKEN`.
+**Forgot the admin password, or always get "Wrong admin password"?** Run `.set-admin-password.ps1` in this folder: it asks for a new password twice and saves it. Setting a new password also clears any wrong-password lockout.
+
+Change the OpenAI key any time with `npx wrangler@4 secret put OPENAI_API_KEY`.

@@ -265,13 +265,23 @@ export function createApp({ adminHtml = '<!doctype html><title>RitPost AI</title
 
   // ─────────────── admin API ───────────────
   async function adminAuth(req, env) {
-    if (!env.ADMIN_TOKEN) return json({ ok: false, error: 'Set the ADMIN_TOKEN secret first (see worker/README.md).' }, 500);
+    // Stray spaces / line breaks from pasting into the secret prompt don't count.
+    const secret = String(env.ADMIN_TOKEN || '').trim();
+    if (!secret) return json({ ok: false, error: 'Set the ADMIN_TOKEN secret first (see worker/README.md).' }, 500);
     const ip = await ipHash(req, env);
     const day = today();
-    if ((await count(env, day, `adminfail:${ip}`)) >= 20) return json({ ok: false, error: 'Too many wrong passwords today. Try again tomorrow.' }, 429);
-    const token = (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
-    if (!safeEqual(token, env.ADMIN_TOKEN)) {
-      await bump(env, day, `adminfail:${ip}`).run();
+    // The lock is tied to the current password, so setting a new one unlocks you.
+    const failKey = `adminfail:${ip}:${(await sha(secret)).slice(0, 8)}`;
+    if ((await count(env, day, failKey)) >= 20) return json({ ok: false, error: 'Too many wrong passwords today. Set a new admin password (worker\\set-admin-password.ps1) or try again tomorrow.' }, 429);
+    let token = (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+    try {
+      token = decodeURIComponent(token);
+    } catch {
+      /* sent as-is */
+    }
+    token = token.trim();
+    if (!safeEqual(token, secret)) {
+      await bump(env, day, failKey).run();
       return json({ ok: false, error: 'Wrong admin password.' }, 401);
     }
     return null;

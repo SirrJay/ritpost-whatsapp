@@ -8,7 +8,7 @@ rules = [{ type = "Text", globs = ["**/*.html"], fallthrough = true }]
 [[d1_databases]]
 binding = "DB"
 database_name = "ritpost-ai"
-database_id = "PASTE-YOUR-DATABASE-ID-HERE"
+database_id = "7df8f287-6912-4549-a857-f382a5ea27df"
 
 # Daily clean-up of old request logs (03:00 UTC).
 [triggers]

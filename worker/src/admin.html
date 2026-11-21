@@ -243,7 +243,7 @@ function toast(t, err = false) { const el = $('toast'); el.textContent = t; el.c
 const copy = (t) => navigator.clipboard.writeText(t).then(() => toast('Copied'), () => toast('Couldn’t copy', true));
 
 async function api(path, { method = 'GET', body } = {}) {
-  const r = await fetch(`/admin/api/${path}`, { method, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+  const r = await fetch(`/admin/api/${path}`, { method, headers: { Authorization: `Bearer ${encodeURIComponent(token)}`, 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
   const data = await r.json().catch(() => ({ ok: false, error: `Error ${r.status}` }));
   if (r.status === 401) { signOut(); throw new Error(data.error || 'Signed out'); }
   if (!data.ok) throw new Error(data.error || `Error ${r.status}`);
