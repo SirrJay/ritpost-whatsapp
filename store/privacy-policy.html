@@ -20,16 +20,16 @@
 <body>
 <main>
   <h1>RitPost Privacy Policy</h1>
-  <p class="muted">Last updated: 12 November 2026</p>
+  <p class="muted">Last updated: 21 November 2026</p>
 
-  <p>RitPost (“the extension”) is a Chrome extension that helps you post a message to several of your own WhatsApp groups in WhatsApp Web, to Facebook groups and Pages on facebook.com, and to your Instagram and X accounts. It also includes a photo editor that works entirely on your device, and an optional AI writing assistant that uses your own OpenAI account. This policy explains what the extension handles and what it does with it.</p>
-  <h2>RitPost AI (included AI rewrites)</h2>
-  <p>When you click <strong>Generate</strong> without your own OpenAI key, the text you asked it to rewrite, the options you chose and your optional brand-voice note are sent to the RitPost AI server operated by the publisher, which sends them to OpenAI to produce the rewrites and returns them to you. The server does <strong>not</strong> store your text. To enforce daily limits it keeps a usage log for 90 days: the time, a random device identifier created by RitPost, your plan and access code (if any), the number of tokens used, which platform the rewrite was for, and a one-way hash of your network address. If you enter a premium access code, the server records which devices use it. OpenAI’s terms and privacy policy apply to the request it processes.</p>
-  <h2>AI writing assistant with your own key (optional)</h2>
-  <p>If you add your own OpenAI API key in Settings, RitPost stores the key only in your browser. When you click <strong>Generate</strong>, the text you asked it to rewrite, the options you chose and your optional brand-voice note are sent to OpenAI (api.openai.com) to produce the rewrites; OpenAI’s own terms and privacy policy apply to that request. Nothing is sent to OpenAI unless you click Generate (or “Check &amp; save” to verify the key), and you can remove the key at any time.</p>
+  <p>RitPost (“the extension”) is a Chrome extension that helps you post a message to several of your own WhatsApp groups in WhatsApp Web, to Facebook groups and Pages on facebook.com, and to your Instagram and X accounts. It also includes a photo editor that works entirely on your device, an AI writing assistant, and free and premium plans managed by the publisher. This policy explains what the extension handles and what it does with it.</p>
+  <h2>Plans and posting limits</h2>
+  <p>RitPost offers a free plan and premium plans unlocked with an access code. To apply your plan’s limits, before each posting run RitPost sends the publisher’s RitPost server: the platform (WhatsApp, Facebook, Instagram or X), how many groups, Pages or posts are in the run, whether it is scheduled or automatic, a random device identifier created by RitPost, and your access code if you entered one. It never sends your message, files, group names or anything from your accounts. The server keeps a log of these requests for 90 days (the same details plus a one-way hash of your network address) and records which devices use an access code.</p>
+  <h2>RitPost AI (AI rewrites)</h2>
+  <p>When you click <strong>Generate</strong>, the text you asked it to rewrite, the options you chose and your optional brand-voice note are sent to the RitPost AI server operated by the publisher, which sends them to OpenAI to produce the rewrites and returns them to you. The server does <strong>not</strong> store your text. To enforce daily limits it keeps a usage log for 90 days: the time, a random device identifier created by RitPost, your plan and access code (if any), the number of tokens used, which platform the rewrite was for, and a one-way hash of your network address. If you enter a premium access code, the server records which devices use it. OpenAI’s terms and privacy policy apply to the request it processes.</p>
 
   <h2>Summary</h2>
-  <p><strong>RitPost does not collect, transmit, sell or share any of your data.</strong> Everything the extension uses stays in your own browser on your own device.</p>
+  <p><strong>RitPost does not sell or share your data.</strong> Your groups, messages and files stay in your own browser on your own device. The only things sent off your device are the plan checks and AI rewrites described above, to the publisher’s RitPost server.</p>
 
   <h2>What the extension handles</h2>
   <ul>
@@ -43,7 +43,7 @@
 
   <h2>What the extension does not do</h2>
   <ul>
-    <li>It sends nothing to the developer except what the AI writing assistant needs when you click Generate (see “RitPost AI” below). The only third party it contacts is OpenAI, and only for those AI rewrites.</li>
+    <li>It sends nothing to the publisher except the plan checks and AI rewrites described above. The only third party involved is OpenAI, and only for AI rewrites you ask for.</li>
     <li>It uses no analytics, tracking, advertising or cookies.</li>
     <li>It does not read your message history beyond what is needed to confirm that a message was sent in the chat that is currently open.</li>
     <li>It runs only on <code>https://web.whatsapp.com/</code>, <code>facebook.com</code>, <code>instagram.com</code> and <code>x.com</code>, and on no other website.</li>

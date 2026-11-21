@@ -167,14 +167,22 @@ Click **Edit** on a photo in Compose (or **Edit photos** / **Edit in Studio**). 
 
 Videos and documents are posted as they are.
 
-## AI writing assistant (OpenAI)
+## Your plan (free and premium)
 
-RitPost can rewrite your posts with AI in two ways:
+RitPost is connected to the publisher's RitPost server (see `worker/README.md`). Everyone gets the **Free plan** with no setup; an **access code** unlocks a paid plan. The publisher decides in the admin portal what each plan includes:
 
-- **RitPost AI (included):** works for everyone with no setup, through the publisher's RitPost AI server (see `worker/README.md`). Everyone gets free rewrites every day (30 by default); a **premium access code** gives more: **Settings → AI writing assistant → Have an access code? → Activate**. The box shows your plan and how many rewrites are left today.
-- **Your own OpenAI key:** no daily limit; OpenAI bills you. Used instead of RitPost AI when set.
+- which platforms you can post to (WhatsApp, Facebook, Instagram, X) and **how many posts a day** on each,
+- how many groups or Pages you can pick **in one run**,
+- **AI rewrites** per day,
+- **scheduled posts**, **Automatic mode** and **RitPost Studio**.
 
-**Your own key (optional):** in **Settings → AI writing assistant**, paste an API key from platform.openai.com → API keys and click **Check & save**. RitPost lists the models your account can use, picks the newest one, and lets you change it. Optionally describe **you / your brand voice** (for example "Ritworld Family Church, Accra. Warm, hopeful, faith-filled").
+**Settings (⚙) → Your plan** shows your plan, how many posts and rewrites you have left today on each platform, and when your code expires. To activate a code: paste it under *Have an access code?* and click **Activate** (codes look like `RP-ABCD-EFGH-JKLM`). **See plans & upgrade** lists the plans on offer and the publisher's **Get premium** link.
+
+A small line under the Start button shows what's left for the platform you're posting to. If a run doesn't fit your plan (too many groups, today's posts used up, a platform or feature not included), RitPost explains why and how to upgrade before anything is opened. A "post" is one WhatsApp group, one Facebook group or Page, or one Instagram / X post; posts a stopped run didn't make are given back. Daily limits reset at midnight UTC. If the RitPost server can't be reached, RitPost uses the last plan it saw.
+
+## AI writing assistant
+
+AI rewrites are included in your plan (the Free plan has 30 a day by default); no OpenAI account or key is needed. Optionally describe **you / your brand voice** in **Settings → AI writing assistant** (for example "Ritworld Family Church, Accra. Warm, hopeful, faith-filled").
 
 **Use it:** click **✨ AI** in the Compose toolbar (or in the Instagram/X caption box).
 
@@ -184,7 +192,7 @@ RitPost can rewrite your posts with AI in two ways:
 - **Results:** 3 different versions, each with a note on why it works and a character count. **Use this**, **Add below**, **Copy**, or **More like this** (3 new versions based on that one). With *all 4 platforms*, **Use all four** fills Compose and the Instagram and X captions at once. **Undo** always brings your text back.
 - RitPost tells the AI never to invent facts, but always check names, dates and links before posting.
 
-Your key is stored only in this browser (never in the backup file). Your text is sent to OpenAI only when you click **Generate**, and OpenAI bills your account; a rewrite usually costs a fraction of a cent. With RitPost AI, your text goes to the RitPost AI server, which passes it to OpenAI and keeps only a usage log (no post text).
+Your text is sent only when you click **Generate**: it goes to the RitPost server, which passes it to OpenAI and keeps only a usage log (no post text).
 
 ## Emoji
 
@@ -236,7 +244,9 @@ Good to know:
 Full policy: https://sirrjay.github.io/ritpost-whatsapp/store/privacy-policy.html
 
 
-Everything stays on your computer in `chrome.storage.local`. RitPost has no servers, no analytics, and doesn't talk to anything outside your browser. It only runs on `web.whatsapp.com`, `facebook.com`, `instagram.com` and `x.com`, and only acts there when you post from RitPost. RitPost Studio edits photos on your computer. The one exception is the **AI writing assistant**: when you click Generate, the text you asked it to rewrite (and your brand voice, if you use it) is sent to OpenAI, either directly with your own key or through the RitPost AI server, which keeps a usage log (time, a random device id, plan, token counts, a hashed network address) for 90 days but not your text.
+Your groups, messages, files and settings stay on your computer in `chrome.storage.local`. RitPost has no analytics or tracking. It only runs on `web.whatsapp.com`, `facebook.com`, `instagram.com` and `x.com`, and only acts there when you post from RitPost. RitPost Studio edits photos on your computer.
+
+RitPost talks to one server, the publisher's RitPost server, for two things: **plan limits** (before a run it sends the platform, how many groups or posts are in it, a random device id and your access code; never the message, files or group names) and **AI rewrites** (when you click Generate, the text you asked it to rewrite and your brand voice, which the server passes to OpenAI). The server keeps a usage log (time, device id, plan, access code, counts, token counts, a hashed network address) for 90 days, but never your posts.
 
 ## Troubleshooting
 
@@ -248,12 +258,15 @@ Everything stays on your computer in `chrome.storage.local`. RitPost has no serv
 
 ```
 manifest.json            Manifest V3 config
-background.js            Side panel, finds or opens the WhatsApp/Facebook tab, relays commands, runs scheduled posts, saves backups
+background.js            Side panel, finds or opens the WhatsApp/Facebook/Instagram/X tab, relays commands, checks plan limits, runs scheduled posts, saves backups
 content/content.js       Opens chats, fills messages, notices sends, shows the progress panel
 content/page-bridge.js   Tells groups apart from contacts when importing
 content/facebook.js      Facebook: opens each group/Page, fills the post box, waits for you to click Post
 popup/                   Compose, group manager, scheduling and settings UI (shown in the side panel)
 lib/schedule.js          Repeat rules and time formatting shared by the panel and the background
+lib/config.js            The RitPost server address
+lib/ai.js, ai-prompt.js  Plan and AI client; the rewrite prompts (shared with the server)
+worker/                  The RitPost server (Cloudflare Worker): plans, access codes, posting limits, AI, admin portal with team
 icons/                   Extension icons
 store/                   Chrome Web Store listing text, privacy policy and promo images
 ```

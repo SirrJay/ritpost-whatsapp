@@ -4,15 +4,16 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<title>RitPost AI Admin</title>
+<title>RitPost Admin</title>
 <style>
-:root{--bg:#f4f6f9;--card:#fff;--ink:#0f172a;--ink2:#334155;--muted:#64748b;--line:#e2e8f0;--soft:#f1f5f9;--brand:#0e7c66;--brand2:#14b88a;--brandsoft:rgba(20,184,138,.12);--violet:#7c3aed;--danger:#dc2626;--dangersoft:#fee2e2;--warn:#b45309;--warnsoft:#fef3c7;color-scheme:light}
-@media (prefers-color-scheme:dark){:root{--bg:#0b1220;--card:#111a2c;--ink:#e6edf7;--ink2:#c3cee0;--muted:#8a9ab5;--line:#26344f;--soft:#1a2539;--brandsoft:rgba(20,184,138,.16);--dangersoft:rgba(248,113,113,.14);--danger:#f87171;--warnsoft:rgba(251,191,36,.14);--warn:#fbbf24;color-scheme:dark}}
+:root{--bg:#f4f6f9;--card:#fff;--ink:#0f172a;--ink2:#334155;--muted:#64748b;--line:#e2e8f0;--soft:#f1f5f9;--brand:#0e7c66;--brand2:#14b88a;--brandsoft:rgba(20,184,138,.12);--violet:#7c3aed;--violetsoft:rgba(124,58,237,.12);--danger:#dc2626;--dangersoft:#fee2e2;--warn:#b45309;--warnsoft:#fef3c7;--wa:#25d366;--fb:#1877f2;--ig:#e1306c;--x:#334155;color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--bg:#0b1220;--card:#111a2c;--ink:#e6edf7;--ink2:#c3cee0;--muted:#8a9ab5;--line:#26344f;--soft:#1a2539;--brandsoft:rgba(20,184,138,.16);--violetsoft:rgba(167,139,250,.16);--dangersoft:rgba(248,113,113,.14);--danger:#f87171;--warnsoft:rgba(251,191,36,.14);--warn:#fbbf24;--x:#cbd5e1;color-scheme:dark}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 "Segoe UI",-apple-system,Roboto,Helvetica,Arial,sans-serif}
 button,input,select,textarea{font:inherit;color:inherit}
 [hidden]{display:none!important}
 .muted{color:var(--muted)}
+small.muted,.small{font-size:12.5px}
 header{display:flex;align-items:center;gap:12px;padding:12px 20px;background:radial-gradient(120% 160% at 0 0,#17c896 0,var(--brand) 55%,#0a5a4b 100%);color:#fff;flex-wrap:wrap}
 header b{font-size:16px}
 header .sub{opacity:.85;font-size:12.5px}
@@ -20,29 +21,34 @@ header .sp{flex:1}
 .pill{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;background:rgba(255,255,255,.18);font-size:12px;font-weight:600}
 .pill i{width:8px;height:8px;border-radius:50%;background:#86efac}
 .pill.off i{background:#fca5a5}
+.who{display:flex;flex-direction:column;align-items:flex-end;line-height:1.2;font-size:12.5px}
+.who span{opacity:.85;font-size:11.5px}
 header button{background:rgba(255,255,255,.18);border:0;color:#fff;padding:6px 12px;border-radius:8px;cursor:pointer;font-weight:600}
 nav{display:flex;gap:4px;padding:0 20px;background:var(--card);border-bottom:1px solid var(--line);overflow-x:auto}
 nav button{border:0;background:none;padding:12px 14px;cursor:pointer;color:var(--muted);font-weight:600;border-bottom:2px solid transparent;white-space:nowrap}
 nav button.on{color:var(--brand);border-bottom-color:var(--brand2)}
-main{max-width:1180px;margin:0 auto;padding:20px}
+main{max-width:1200px;margin:0 auto;padding:20px}
 .grid{display:grid;gap:14px}
 .kpis{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
-.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;box-shadow:0 1px 2px rgba(15,23,42,.05)}
+.two{grid-template-columns:repeat(auto-fit,minmax(340px,1fr))}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;box-shadow:0 1px 2px rgba(15,23,42,.05);min-width:0}
 .kpi .v{font-size:26px;font-weight:700;margin-top:2px}
 .kpi .l{font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
 .kpi .s{font-size:12px;color:var(--muted)}
 h2{font-size:15px;margin:0 0 10px}
+h2 .muted{font-weight:500}
 .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .sp{flex:1}
-.btn{border:1px solid var(--line);background:var(--card);border-radius:9px;padding:7px 13px;cursor:pointer;font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.btn{border:1px solid var(--line);background:var(--card);border-radius:9px;padding:7px 13px;cursor:pointer;font-weight:600;display:inline-flex;align-items:center;gap:6px;text-decoration:none;color:inherit}
 .btn:hover{background:var(--soft)}
 .btn.primary{background:linear-gradient(180deg,#17a787,var(--brand));border-color:transparent;color:#fff}
 .btn.danger{color:var(--danger)}
 .btn.sm{padding:4px 9px;font-size:12.5px}
 .btn:disabled{opacity:.5;cursor:not-allowed}
-input[type=text],input[type=password],input[type=number],input[type=date],input[type=url],input[type=search],select,textarea{border:1px solid var(--line);border-radius:9px;background:var(--card);padding:7px 10px;outline:none;width:100%}
+.link{border:0;background:none;color:var(--brand);cursor:pointer;font-weight:600;padding:0}
+input[type=text],input[type=password],input[type=number],input[type=date],input[type=url],input[type=search],input[type=email],select,textarea{border:1px solid var(--line);border-radius:9px;background:var(--card);padding:7px 10px;outline:none;width:100%}
 input:focus,select:focus,textarea:focus{border-color:var(--brand2);box-shadow:0 0 0 3px var(--brandsoft)}
-label.f{display:grid;gap:4px;font-size:12.5px;font-weight:600;color:var(--ink2)}
+label.f{display:grid;gap:4px;font-size:12.5px;font-weight:600;color:var(--ink2);align-content:start}
 label.f small{font-weight:400;color:var(--muted)}
 .form{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
 table{width:100%;border-collapse:collapse;font-size:13px}
@@ -51,11 +57,15 @@ td{padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
 tr:hover td{background:var(--soft)}
 .tablewrap{overflow-x:auto}
 code,.mono{font-family:ui-monospace,Consolas,monospace;font-size:12.5px}
-.chip{display:inline-block;padding:1px 8px;border-radius:999px;font-size:11.5px;font-weight:700;background:var(--soft);color:var(--muted)}
+.chip{display:inline-block;padding:1px 8px;border-radius:999px;font-size:11.5px;font-weight:700;background:var(--soft);color:var(--muted);white-space:nowrap}
 .chip.active,.chip.ok,.chip.premium{background:var(--brandsoft);color:var(--brand)}
-.chip.disabled,.chip.error,.chip.blocked{background:var(--dangersoft);color:var(--danger)}
-.chip.expired{background:var(--warnsoft);color:var(--warn)}
-.chip.free{background:rgba(124,58,237,.12);color:var(--violet)}
+.chip.disabled,.chip.error,.chip.blocked,.chip.denied{background:var(--dangersoft);color:var(--danger)}
+.chip.expired,.chip.invited{background:var(--warnsoft);color:var(--warn)}
+.chip.free,.chip.plan{background:var(--violetsoft);color:var(--violet)}
+.chip.whatsapp{background:rgba(37,211,102,.14);color:#15803d}
+.chip.facebook{background:rgba(24,119,242,.12);color:var(--fb)}
+.chip.instagram{background:rgba(225,48,108,.12);color:var(--ig)}
+.chip.x{background:var(--soft);color:var(--x)}
 .bar{height:6px;border-radius:6px;background:var(--soft);overflow:hidden;min-width:60px}
 .bar>i{display:block;height:100%;background:var(--brand2)}
 .chart{display:flex;align-items:flex-end;gap:6px;height:180px;padding-top:10px}
@@ -64,58 +74,90 @@ code,.mono{font-family:ui-monospace,Consolas,monospace;font-size:12.5px}
 .chart .st i{display:block}
 .chart .d{font-size:10.5px;color:var(--muted);white-space:nowrap}
 .chart .n{font-size:10.5px;color:var(--ink2);font-weight:600}
-.legend{display:flex;gap:14px;font-size:12px;color:var(--muted)}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--muted);flex-wrap:wrap}
 .legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
 .note{padding:10px 12px;border-radius:10px;font-size:13px}
 .note.warn{background:var(--warnsoft);color:var(--warn)}
 .note.ok{background:var(--brandsoft);color:var(--ink2)}
 .note.err{background:var(--dangersoft);color:var(--danger)}
-.login{max-width:380px;margin:12vh auto;display:grid;gap:14px}
+.login{max-width:400px;margin:10vh auto;display:grid;gap:14px}
 .login h1{margin:0;font-size:20px}
 .switch{display:flex;align-items:center;gap:10px;font-weight:600;font-size:13px;cursor:pointer}
-.switch input{width:38px;height:22px;appearance:none;background:#cbd5e1;border-radius:999px;position:relative;cursor:pointer;transition:background .15s;flex:none}
+.switch input{width:38px;height:22px;appearance:none;background:#cbd5e1;border-radius:999px;position:relative;cursor:pointer;transition:background .15s;flex:none;margin:0}
 .switch input::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:transform .15s}
 .switch input:checked{background:var(--brand2)}
 .switch input:checked::after{transform:translateX(16px)}
 .modal{position:fixed;inset:0;background:rgba(15,23,42,.5);display:grid;place-items:center;padding:16px;z-index:20}
-.sheet{background:var(--card);border-radius:16px;max-width:560px;width:100%;max-height:90vh;overflow:auto;padding:18px;display:grid;gap:12px;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+.sheet{background:var(--card);border-radius:16px;max-width:620px;width:100%;max-height:92vh;overflow:auto;padding:18px;display:grid;gap:12px;box-shadow:0 20px 60px rgba(0,0,0,.3)}
 .sheet h3{margin:0;font-size:16px}
 .newcodes{display:grid;gap:6px}
 .newcodes .c{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border:1px dashed var(--brand2);border-radius:9px;background:var(--brandsoft)}
-.toast{position:fixed;left:50%;bottom:22px;transform:translate(-50%,10px);background:#0f172a;color:#fff;padding:10px 16px;border-radius:10px;font-weight:600;opacity:0;pointer-events:none;transition:.2s;z-index:30}
+.toast{position:fixed;left:50%;bottom:22px;transform:translate(-50%,10px);background:#0f172a;color:#fff;padding:10px 16px;border-radius:10px;font-weight:600;opacity:0;pointer-events:none;transition:.2s;z-index:30;max-width:90vw}
 .toast.show{opacity:1;transform:translate(-50%,0)}
 .toast.err{background:var(--danger)}
 .empty{text-align:center;padding:30px;color:var(--muted)}
-@media (max-width:640px){main{padding:12px}.kpi .v{font-size:22px}}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.seg button{border:0;background:var(--card);padding:6px 14px;cursor:pointer;font-weight:600;color:var(--muted)}
+.seg button.on{background:var(--brandsoft);color:var(--brand)}
+.plans{grid-template-columns:repeat(auto-fill,minmax(270px,1fr))}
+.plan{display:grid;gap:10px;align-content:start;position:relative}
+.plan.arch{opacity:.65}
+.plan .top{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.plan .top b{font-size:16px}
+.plan .price{font-size:13px;color:var(--brand);font-weight:700}
+.plan ul{margin:0;padding:0;list-style:none;display:grid;gap:5px;font-size:13px}
+.plan li{display:flex;justify-content:space-between;gap:8px;border-bottom:1px dashed var(--line);padding-bottom:4px}
+.plan li span:last-child{font-weight:600;text-align:right}
+.plan li.off span:last-child{color:var(--muted);font-weight:500}
+.platgrid{display:grid;gap:8px}
+.platrow{display:grid;grid-template-columns:150px 1fr;gap:10px;align-items:center;padding:8px 10px;border:1px solid var(--line);border-radius:10px}
+.platrow input[type=number]{max-width:160px}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px}
+.roles{display:grid;gap:8px;font-size:13px}
+.roles div{display:grid;grid-template-columns:90px 1fr;gap:8px}
+details.adv summary{cursor:pointer;font-weight:600;font-size:13px;color:var(--ink2)}
+@media (max-width:640px){main{padding:12px}.kpi .v{font-size:22px}.platrow{grid-template-columns:1fr}.who{display:none}}
 </style>
 </head>
 <body>
-<div id="toast" class="toast"></div>
+<div id="toast" class="toast" role="status"></div>
 
 <section id="loginView" class="login card" hidden>
-  <h1>RitPost AI Admin</h1>
-  <p class="muted" style="margin:0">Enter your admin password, or sign in without one: run <code>open-admin.ps1</code> in the RitPost <code>worker</code> folder on your computer.</p>
-  <label class="f">Admin password
-    <span style="display:flex;gap:6px"><input id="pw" type="password" autocomplete="off" spellcheck="false"><button type="button" class="btn" id="pwShow">Show</button></span>
-    <small>Type the password you chose in set-admin-password.ps1. If Chrome filled the box in by itself, clear it first.</small>
+  <h1>RitPost Admin</h1>
+  <p class="muted" style="margin:0">Team members: sign in with your email and password. Owner: leave the email empty and use the admin password, or run <code>open-admin.ps1</code> on your computer.</p>
+  <label class="f">Email <input id="em" type="email" autocomplete="username" spellcheck="false" placeholder="you@example.com (empty for the owner)"></label>
+  <label class="f">Password
+    <span style="display:flex;gap:6px"><input id="pw" type="password" autocomplete="current-password" spellcheck="false"><button type="button" class="btn" id="pwShow">Show</button></span>
     <small id="capsWarn" class="note warn" hidden style="padding:4px 8px">Caps Lock is on.</small>
   </label>
   <button id="loginBtn" class="btn primary">Sign in</button>
   <p id="loginErr" class="note err" hidden></p>
 </section>
 
+<section id="inviteView" class="login card" hidden>
+  <h1>Join the RitPost team</h1>
+  <p id="invWho" class="muted" style="margin:0"></p>
+  <label class="f">Choose a password <small>At least 8 characters. It’s shown so you can check it.</small><input id="inv1" type="text" autocomplete="new-password" spellcheck="false" maxlength="200"></label>
+  <label class="f">Type it again<input id="inv2" type="text" autocomplete="new-password" spellcheck="false" maxlength="200"></label>
+  <button id="invBtn" class="btn primary">Create my account</button>
+  <p id="invErr" class="note err" hidden></p>
+</section>
+
 <div id="app" hidden>
   <header>
-    <div><b>RitPost AI Admin</b><div class="sub">Free tier, premium access codes and usage</div></div>
+    <div><b>RitPost Admin</b><div class="sub">Plans, access codes, usage and team</div></div>
     <span class="sp"></span>
     <span id="svcPill" class="pill"><i></i><span>Service on</span></span>
+    <div class="who"><b id="meName"></b><span id="meRole"></span></div>
     <button id="logout">Sign out</button>
   </header>
   <nav>
     <button data-v="dash" class="on">Dashboard</button>
     <button data-v="codes">Access codes</button>
+    <button data-v="plans">Plans</button>
     <button data-v="activity">Activity</button>
     <button data-v="devices">Devices</button>
+    <button data-v="team" data-perm="team">Team</button>
     <button data-v="settings">Settings</button>
   </nav>
   <main>
@@ -123,67 +165,104 @@ code,.mono{font-family:ui-monospace,Consolas,monospace;font-size:12.5px}
     <section id="v-dash" class="grid">
       <div id="warns" class="grid"></div>
       <div class="grid kpis">
-        <div class="card kpi"><div class="l">Rewrites today</div><div class="v" id="kToday">–</div><div class="s" id="kTodaySplit"></div></div>
+        <div class="card kpi"><div class="l">Sales this month</div><div class="v" id="kSales">–</div><div class="s" id="kSalesSub"></div></div>
+        <div class="card kpi"><div class="l">Active codes</div><div class="v" id="kCodes">–</div><div class="s" id="kCodesSub"></div></div>
+        <div class="card kpi"><div class="l">Posts today</div><div class="v" id="kPosts">–</div><div class="s" id="kPostsSub"></div></div>
+        <div class="card kpi"><div class="l">AI rewrites today</div><div class="v" id="kToday">–</div><div class="s" id="kTodaySplit"></div></div>
         <div class="card kpi"><div class="l">Active devices</div><div class="v" id="kDevices">–</div><div class="s" id="kDevices7"></div></div>
-        <div class="card kpi"><div class="l">Cost today</div><div class="v" id="kCost">–</div><div class="s" id="kCost7"></div></div>
-        <div class="card kpi"><div class="l">Premium codes</div><div class="v" id="kCodes">–</div><div class="s" id="kCodesSub"></div></div>
-        <div class="card kpi"><div class="l">Errors today</div><div class="v" id="kErr">–</div><div class="s">failed AI requests</div></div>
+        <div class="card kpi"><div class="l">AI cost today</div><div class="v" id="kCost">–</div><div class="s" id="kCost7"></div></div>
       </div>
-      <div class="card">
-        <div class="row"><h2 style="margin:0">Last 14 days</h2><span class="sp"></span><div class="legend"><span><i style="background:#a78bfa"></i>Free</span><span><i style="background:var(--brand2)"></i>Premium</span></div></div>
-        <div id="chart" class="chart"></div>
+      <div class="grid two">
+        <div class="card">
+          <div class="row"><h2 style="margin:0">Posts, last 14 days</h2><span class="sp"></span><div class="legend"><span><i style="background:var(--wa)"></i>WhatsApp</span><span><i style="background:var(--fb)"></i>Facebook</span><span><i style="background:var(--ig)"></i>Instagram</span><span><i style="background:var(--x)"></i>X</span></div></div>
+          <div id="postChart" class="chart"></div>
+        </div>
+        <div class="card">
+          <div class="row"><h2 style="margin:0">AI rewrites, last 14 days</h2><span class="sp"></span><div class="legend"><span><i style="background:#a78bfa"></i>Free</span><span><i style="background:var(--brand2)"></i>Premium</span></div></div>
+          <div id="chart" class="chart"></div>
+        </div>
       </div>
-      <div class="card grid">
-        <div class="row"><h2 style="margin:0">AI model</h2><span class="muted" id="modelNow"></span><span class="sp"></span><button id="testBtn" class="btn">Run a test rewrite</button></div>
-        <div id="testOut" class="note ok" hidden></div>
+      <div class="grid two">
+        <div class="card">
+          <h2>Plans</h2>
+          <div class="tablewrap"><table><thead><tr><th>Plan</th><th>Active codes</th><th>All codes</th><th>Sales</th></tr></thead><tbody id="planRows"></tbody></table></div>
+        </div>
+        <div class="card grid" data-perm="settings.edit">
+          <div class="row"><h2 style="margin:0">AI model</h2><span class="muted" id="modelNow"></span><span class="sp"></span><button id="testBtn" class="btn">Run a test rewrite</button></div>
+          <div id="testOut" class="note ok" hidden></div>
+          <p class="muted small" style="margin:0">A test rewrite uses a tiny bit of your OpenAI credit and proves your key and billing work.</p>
+        </div>
       </div>
     </section>
 
     <!-- Codes -->
     <section id="v-codes" class="grid" hidden>
-      <div class="card grid">
-        <h2>Create premium access codes</h2>
+      <div class="card grid" data-perm="codes.create">
+        <h2>Sell an access code</h2>
         <div class="form">
-          <label class="f">Customer or label<input id="cLabel" type="text" maxlength="80" placeholder="e.g. Grace Mensah, or March promo"></label>
-          <label class="f">Rewrites per day<input id="cDaily" type="number" min="1"></label>
-          <label class="f">Devices allowed<input id="cDevices" type="number" min="1"></label>
-          <label class="f">Expires<input id="cExpires" type="date"><small>Leave empty for no expiry</small></label>
-          <label class="f">How many codes<input id="cQty" type="number" min="1" max="200" value="1"></label>
-          <label class="f">Note (only you see it)<input id="cNote" type="text" maxlength="300" placeholder="e.g. paid GHS 50, MoMo ref 1234"></label>
+          <label class="f">Plan<select id="cPlan"></select><small id="cPlanSum"></small></label>
+          <label class="f">Customer<input id="cLabel" type="text" maxlength="80" placeholder="e.g. Grace Mensah"></label>
+          <label class="f">Phone or email<input id="cContact" type="text" maxlength="120" placeholder="e.g. 024 000 0000"></label>
+          <label class="f"><span>Amount paid <span id="cCur" class="muted"></span></span><input id="cAmount" type="number" min="0" step="0.01" placeholder="0"></label>
+          <label class="f">Expires<input id="cExpires" type="date"><small>Empty = never</small></label>
+          <label class="f">How many codes<input id="cQty" type="number" min="1" max="200" value="1"><small>More than one: the amount is split between them</small></label>
+          <label class="f">Note (only the team sees it)<input id="cNote" type="text" maxlength="300" placeholder="e.g. MoMo ref 1234"></label>
         </div>
+        <details class="adv"><summary>Change this customer’s limits (optional)</summary>
+          <div class="form" style="margin-top:10px">
+            <label class="f">AI rewrites per day<input id="cDaily" type="number" min="0"><small>Empty = the plan’s</small></label>
+            <label class="f">Devices allowed<input id="cDevices" type="number" min="1"><small>Empty = the plan’s</small></label>
+          </div>
+        </details>
         <div class="row">
-          <span class="muted" style="font-size:12.5px">Quick expiry:</span>
-          <button class="btn sm" data-exp="30">30 days</button><button class="btn sm" data-exp="90">3 months</button><button class="btn sm" data-exp="365">1 year</button><button class="btn sm" data-exp="0">Never</button>
+          <span class="muted small">Quick expiry:</span>
+          <button class="btn sm" data-exp="30">30 days</button><button class="btn sm" data-exp="90">3 months</button><button class="btn sm" data-exp="180">6 months</button><button class="btn sm" data-exp="365">1 year</button><button class="btn sm" data-exp="0">Never</button>
           <span class="sp"></span><button id="createBtn" class="btn primary">Create code</button>
         </div>
       </div>
       <div class="card grid">
         <div class="row">
           <h2 style="margin:0">Codes <span class="muted" id="codeCount"></span></h2><span class="sp"></span>
-          <input id="codeSearch" type="search" placeholder="Search code, customer or note" style="max-width:260px">
-          <select id="codeFilter" style="width:auto"><option value="">All</option><option value="active">Active</option><option value="disabled">Disabled</option><option value="expired">Expired</option></select>
+          <input id="codeSearch" type="search" placeholder="Search code, customer, phone or note" style="max-width:260px">
+          <select id="codePlanFilter" style="width:auto"><option value="">All plans</option></select>
+          <select id="codeFilter" style="width:auto"><option value="">All</option><option value="active">Active</option><option value="expiring">Expiring in 7 days</option><option value="disabled">Disabled</option><option value="expired">Expired</option></select>
           <button id="csvBtn" class="btn">Export CSV</button>
         </div>
-        <div class="tablewrap"><table><thead><tr><th>Code</th><th>Customer</th><th>Status</th><th>Today</th><th>Devices</th><th>Expires</th><th>Total</th><th>Last used</th><th></th></tr></thead><tbody id="codeRows"></tbody></table></div>
+        <div class="tablewrap"><table><thead><tr><th>Code</th><th>Customer</th><th>Plan</th><th>Status</th><th>Today</th><th>Devices</th><th>Expires</th><th>Paid</th><th>Sold by</th><th>Last used</th><th></th></tr></thead><tbody id="codeRows"></tbody></table></div>
         <div id="codeEmpty" class="empty" hidden>No access codes yet. Create one above and send it to your customer.</div>
       </div>
+    </section>
+
+    <!-- Plans -->
+    <section id="v-plans" class="grid" hidden>
+      <div class="card row">
+        <div><h2 style="margin:0 0 2px">Plans</h2><div class="muted small">What each customer can do. The <b>Free</b> plan applies to everyone without a code. Changes reach RitPost within a few minutes.</div></div>
+        <span class="sp"></span><button id="newPlan" class="btn primary" data-perm="plans.edit">New plan</button>
+      </div>
+      <div id="planCards" class="grid plans"></div>
     </section>
 
     <!-- Activity -->
     <section id="v-activity" class="grid" hidden>
       <div class="card grid">
-        <div class="row"><h2 style="margin:0">Recent AI requests</h2><span class="sp"></span><label class="switch"><input id="errOnly" type="checkbox"> Errors only</label><button id="actRefresh" class="btn">Refresh</button></div>
-        <div class="tablewrap"><table><thead><tr><th>Time</th><th>Plan</th><th>Code</th><th>Device</th><th>For</th><th>Model</th><th>Tokens</th><th>Status</th></tr></thead><tbody id="actRows"></tbody></table></div>
-        <div id="actEmpty" class="empty" hidden>No requests yet.</div>
+        <div class="row">
+          <div class="seg" id="actSeg"><button data-a="posts" class="on">Posting</button><button data-a="ai">AI rewrites</button></div>
+          <span class="sp"></span>
+          <label class="switch"><input id="errOnly" type="checkbox"> <span id="errOnlyLbl">Refused only</span></label>
+          <button id="actRefresh" class="btn">Refresh</button>
+        </div>
+        <div class="tablewrap" id="postsWrap"><table><thead><tr><th>Time</th><th>Plan</th><th>Code</th><th>Device</th><th>Platform</th><th>Posts</th><th>Result</th></tr></thead><tbody id="postRows"></tbody></table></div>
+        <div class="tablewrap" id="aiWrap" hidden><table><thead><tr><th>Time</th><th>Plan</th><th>Code</th><th>Device</th><th>For</th><th>Model</th><th>Tokens</th><th>Status</th></tr></thead><tbody id="actRows"></tbody></table></div>
+        <div id="actEmpty" class="empty" hidden>Nothing yet.</div>
       </div>
     </section>
 
     <!-- Devices -->
     <section id="v-devices" class="grid" hidden>
       <div class="card grid">
-        <div class="row"><h2 style="margin:0">Most active devices (7 days)</h2><span class="sp"></span><span class="muted" style="font-size:12.5px">Block a device or network that abuses the free tier.</span></div>
-        <div class="tablewrap"><table><thead><tr><th>Device</th><th>Plan</th><th>Today</th><th>7 days</th><th>Last used</th><th>Network</th><th></th></tr></thead><tbody id="devRows"></tbody></table></div>
-        <div id="devEmpty" class="empty" hidden>No devices have used RitPost AI in the last 7 days.</div>
+        <div class="row"><h2 style="margin:0">Most active devices (7 days)</h2><span class="sp"></span><span class="muted small">Block a device or network that abuses RitPost.</span></div>
+        <div class="tablewrap"><table><thead><tr><th>Device</th><th>Plan</th><th>Posts today</th><th>Posts 7 days</th><th>AI today</th><th>AI 7 days</th><th>Last seen</th><th>Network</th><th></th></tr></thead><tbody id="devRows"></tbody></table></div>
+        <div id="devEmpty" class="empty" hidden>No devices have used RitPost in the last 7 days.</div>
       </div>
       <div class="card grid">
         <h2>Blocked</h2>
@@ -192,67 +271,127 @@ code,.mono{font-family:ui-monospace,Consolas,monospace;font-size:12.5px}
       </div>
     </section>
 
+    <!-- Team -->
+    <section id="v-team" class="grid" hidden>
+      <div class="grid two">
+        <div class="card grid">
+          <h2>Add a team member</h2>
+          <div class="form">
+            <label class="f">Name<input id="tName" type="text" maxlength="60" placeholder="e.g. Ama Owusu"></label>
+            <label class="f">Email <small>They sign in with it</small><input id="tEmail" type="email" maxlength="120" placeholder="ama@example.com"></label>
+            <label class="f">Role<select id="tRole"><option value="sales">Sales</option><option value="support">Support</option><option value="admin">Admin</option><option value="viewer">Viewer</option></select></label>
+          </div>
+          <label class="switch"><input id="tOwn" type="checkbox"> Only sees the codes they sell (for resellers and agents)</label>
+          <div class="row"><span class="muted small">You get a sign-in link to send them. It works for 7 days.</span><span class="sp"></span><button id="tAdd" class="btn primary">Add and get link</button></div>
+        </div>
+        <div class="card">
+          <h2>What each role can do</h2>
+          <div class="roles">
+            <div><b>Owner</b><span>Everything, including the team and the owner password. That’s you.</span></div>
+            <div><b>Admin</b><span>Everything except managing the team: codes, plans, settings, blocking, delete.</span></div>
+            <div><b>Sales</b><span>Sells codes: create, edit, extend, turn off, reset devices. Sees the dashboard.</span></div>
+            <div><b>Support</b><span>Helps customers: reset devices, turn codes on/off, block abusers. Can’t sell.</span></div>
+            <div><b>Viewer</b><span>Can look at everything, change nothing.</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="card grid">
+        <h2>Team <span class="muted" id="teamCount"></span></h2>
+        <div class="tablewrap"><table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Codes sold</th><th>Sales (30 days)</th><th>Last sign-in</th><th></th></tr></thead><tbody id="teamRows"></tbody></table></div>
+      </div>
+      <div class="card grid" data-perm="audit">
+        <div class="row"><h2 style="margin:0">Activity log</h2><span class="sp"></span><span class="muted small">Who did what in this portal (kept a year)</span></div>
+        <div class="tablewrap"><table><thead><tr><th>Time</th><th>Who</th><th>What</th><th>Details</th></tr></thead><tbody id="auditRows"></tbody></table></div>
+      </div>
+    </section>
+
     <!-- Settings -->
     <section id="v-settings" class="grid" hidden>
-      <div class="card grid">
-        <h2>Service</h2>
-        <label class="switch"><input id="sService" type="checkbox"> RitPost AI is on (turn off to pause all AI rewrites)</label>
-        <label class="switch"><input id="sFree" type="checkbox"> Free tier for everyone with RitPost</label>
-      </div>
-      <div class="card grid">
-        <h2>Limits</h2>
-        <div class="form">
-          <label class="f">Free rewrites per device per day<input id="sFreeDaily" type="number" min="0"></label>
-          <label class="f">Free rewrites per network per day<input id="sFreeIp" type="number" min="0"><small>Stops people reinstalling to get more</small></label>
-          <label class="f">Default premium rewrites per day<input id="sPremDaily" type="number" min="1"><small>For new codes</small></label>
-          <label class="f">Default devices per code<input id="sPremDev" type="number" min="1"></label>
-          <label class="f">All users together per day<input id="sGlobal" type="number" min="0"><small>Your spending safety net</small></label>
-          <label class="f">Longest post accepted (characters)<input id="sMaxChars" type="number" min="200"></label>
+      <div data-perm="settings.edit" class="grid">
+        <div class="card grid">
+          <h2>Service</h2>
+          <label class="switch"><input id="sService" type="checkbox"> RitPost AI is on (turn off to pause all AI rewrites)</label>
+          <label class="switch"><input id="sFree" type="checkbox"> Free AI rewrites for people without a code</label>
+          <p class="muted small" style="margin:0">Posting limits, AI rewrites per day and devices for each plan are set in <b>Plans</b>.</p>
         </div>
-      </div>
-      <div class="card grid">
-        <h2>AI model and costs</h2>
-        <div class="form">
-          <label class="f">Model<select id="sModel"><option value="">Newest in my OpenAI account (automatic)</option></select><small><button id="loadModels" class="btn sm" type="button" style="margin-top:4px">Load models from OpenAI</button></small></label>
-          <label class="f">Price per 1M input tokens (USD)<input id="sPriceIn" type="number" min="0" step="0.01"><small>From openai.com/api/pricing, for the cost estimate</small></label>
-          <label class="f">Price per 1M output tokens (USD)<input id="sPriceOut" type="number" min="0" step="0.01"></label>
+        <div class="card grid">
+          <h2>Safety limits</h2>
+          <div class="form">
+            <label class="f">Free AI rewrites per network per day<input id="sFreeIp" type="number" min="0"><small>Stops people reinstalling to get more</small></label>
+            <label class="f">AI rewrites for all users together per day<input id="sGlobal" type="number" min="0"><small>Your spending safety net</small></label>
+            <label class="f">Longest post for AI (characters)<input id="sMaxChars" type="number" min="200"></label>
+          </div>
         </div>
+        <div class="card grid">
+          <h2>AI model and costs</h2>
+          <div class="form">
+            <label class="f">Model<select id="sModel"><option value="">Newest in my OpenAI account (automatic)</option></select><small><button id="loadModels" class="btn sm" type="button" style="margin-top:4px">Load models from OpenAI</button></small></label>
+            <label class="f">Price per 1M input tokens (USD)<input id="sPriceIn" type="number" min="0" step="0.01"><small>From openai.com/api/pricing, for the cost estimate</small></label>
+            <label class="f">Price per 1M output tokens (USD)<input id="sPriceOut" type="number" min="0" step="0.01"></label>
+          </div>
+        </div>
+        <div class="card grid">
+          <h2>Your business</h2>
+          <div class="form">
+            <label class="f">Business name <small>In messages to customers</small><input id="sBiz" type="text" maxlength="60"></label>
+            <label class="f">Currency <small>For amounts paid, e.g. GHS, NGN, USD</small><input id="sCur" type="text" maxlength="8"></label>
+          </div>
+        </div>
+        <div class="card grid">
+          <h2>Messages shown in RitPost</h2>
+          <label class="f">Announcement <small>Short note in RitPost’s Settings, e.g. “New: Twi translations!” (empty = none)</small><input id="sAnn" type="text" maxlength="200"></label>
+          <label class="f">Upgrade message <small>Shown when someone reaches a limit or a locked feature</small><input id="sUpText" type="text" maxlength="200"></label>
+          <label class="f">Upgrade link <small>Where to buy a code (WhatsApp link, website…). Shows a “Get premium” button in RitPost.</small><input id="sUpUrl" type="url" maxlength="300" placeholder="https://wa.me/233…"></label>
+        </div>
+        <div class="row"><span class="sp"></span><button id="saveSettings" class="btn primary">Save settings</button></div>
       </div>
-      <div class="card grid">
-        <h2>Messages shown in RitPost</h2>
-        <label class="f">Announcement <small>Short note in RitPost’s AI settings, e.g. “New: Twi translations!” (empty = none)</small><input id="sAnn" type="text" maxlength="200"></label>
-        <label class="f">Upgrade message <small>Shown when someone runs out of free rewrites</small><input id="sUpText" type="text" maxlength="200"></label>
-        <label class="f">Upgrade link <small>Where to buy a premium code (WhatsApp link, website…), optional</small><input id="sUpUrl" type="url" maxlength="300" placeholder="https://wa.me/233…"></label>
-      </div>
-      <div class="row"><span class="sp"></span><button id="saveSettings" class="btn primary">Save settings</button></div>
-      <div class="card grid">
-        <h2>Admin password</h2>
-        <p class="muted" style="margin:0;font-size:13px">Set the password for this portal. It's shown as you type, so you can check it. You can always get in without it by running <code>open-admin.ps1</code> on your computer.</p>
+      <div class="card grid" id="ownerPwCard" hidden>
+        <h2>Owner password</h2>
+        <p class="muted small" style="margin:0">The password for the owner account (sign in with the email box empty). It's shown as you type. You can always get in without it by running <code>open-admin.ps1</code> on your computer.</p>
         <div class="form">
           <label class="f">New password<input id="np1" type="text" autocomplete="off" spellcheck="false" maxlength="200"></label>
           <label class="f">Type it again<input id="np2" type="text" autocomplete="off" spellcheck="false" maxlength="200"></label>
         </div>
         <div class="row"><span class="sp"></span><button id="savePw" class="btn primary">Save password</button></div>
       </div>
+      <div class="card grid" id="myPwCard" hidden>
+        <h2>My password</h2>
+        <div class="form">
+          <label class="f">Current password<input id="mp0" type="password" autocomplete="current-password" maxlength="200"></label>
+          <label class="f">New password<input id="mp1" type="text" autocomplete="new-password" spellcheck="false" maxlength="200"></label>
+          <label class="f">Type it again<input id="mp2" type="text" autocomplete="new-password" spellcheck="false" maxlength="200"></label>
+        </div>
+        <div class="row"><span class="muted small">Signs you out on your other devices.</span><span class="sp"></span><button id="saveMyPw" class="btn primary">Change my password</button></div>
+      </div>
     </section>
   </main>
 </div>
 
-<div id="modal" class="modal" hidden><div class="sheet" id="sheet"></div></div>
+<div id="modal" class="modal" hidden><div class="sheet" id="sheet" role="dialog" aria-modal="true"></div></div>
 
 <script>
 'use strict';
 const $ = (id) => document.getElementById(id);
 const store = { get: (k) => { try { return sessionStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { v === null ? sessionStorage.removeItem(k) : sessionStorage.setItem(k, v); } catch {} } };
+const PLATS = ['whatsapp', 'facebook', 'instagram', 'x'];
+const PNAME = { whatsapp: 'WhatsApp', facebook: 'Facebook', instagram: 'Instagram', x: 'X' };
+const PCOLOR = { whatsapp: 'var(--wa)', facebook: 'var(--fb)', instagram: 'var(--ig)', x: 'var(--x)' };
+const DAY = 86400000;
 let token = store.get('rp-admin') || '';
+let me = null;
 let codes = [];
+let plans = [];
 let settings = {};
 const fmt = (n) => Number(n || 0).toLocaleString();
 const money = (n) => (n >= 1 ? `$${n.toFixed(2)}` : n > 0 ? `$${n.toFixed(4)}` : '$0');
+const cash = (n) => `${settings.currency ? `${settings.currency} ` : ''}${Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
 const when = (t) => (t ? new Date(t).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '–');
 const dateOnly = (t) => (t ? new Date(t).toLocaleDateString([], { dateStyle: 'medium' }) : 'Never');
+const dateInput = (t) => (t ? new Date(t).toISOString().slice(0, 10) : '');
+const fromDateInput = (v) => (v ? new Date(`${v}T23:59:59`).getTime() : null);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-function toast(t, err = false) { const el = $('toast'); el.textContent = t; el.className = `toast show${err ? ' err' : ''}`; clearTimeout(toast.t); toast.t = setTimeout(() => (el.className = 'toast'), 2600); }
+const can = (perm) => !!me?.perms?.includes(perm);
+function toast(t, err = false) { const el = $('toast'); el.textContent = t; el.className = `toast show${err ? ' err' : ''}`; clearTimeout(toast.t); toast.t = setTimeout(() => (el.className = 'toast'), 3000); }
 const copy = (t) => navigator.clipboard.writeText(t).then(() => toast('Copied'), () => toast('Couldn’t copy', true));
 
 async function api(path, { method = 'GET', body } = {}) {
@@ -262,35 +401,72 @@ async function api(path, { method = 'GET', body } = {}) {
   if (!data.ok) throw new Error(data.error || `Error ${r.status}`);
   return data;
 }
+const post = (url, body) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then((x) => x.json().catch(() => ({ ok: false, error: `Error ${x.status}` })));
 
 // ── sign in ──
-function signOut() { token = ''; store.set('rp-admin', null); $('app').hidden = true; $('loginView').hidden = false; }
+function signOut() { token = ''; me = null; store.set('rp-admin', null); $('app').hidden = true; $('inviteView').hidden = true; $('loginView').hidden = false; }
 async function signIn() {
-  token = $('pw').value.trim();
   $('loginErr').hidden = true;
-  try { await api('login'); store.set('rp-admin', token); $('pw').value = ''; start(); }
-  catch (e) { $('loginErr').textContent = e.message; $('loginErr').hidden = false; $('loginView').hidden = false; }
+  $('loginBtn').disabled = true;
+  try {
+    const r = await post('/admin/login', { email: $('em').value.trim(), password: $('pw').value.trim() });
+    if (!r.ok) throw new Error(r.error || 'Couldn’t sign in.');
+    token = r.session; store.set('rp-admin', token); $('pw').value = ''; start(r.me);
+  } catch (e) { $('loginErr').textContent = e.message; $('loginErr').hidden = false; $('loginView').hidden = false; }
+  finally { $('loginBtn').disabled = false; }
 }
-$('loginBtn').onclick = signIn;
+$('loginBtn').addEventListener('click', signIn);
 $('pw').addEventListener('keyup', (e) => ($('capsWarn').hidden = !e.getModifierState?.('CapsLock')));
-$('pwShow').onclick = () => { const i = $('pw'); i.type = i.type === 'password' ? 'text' : 'password'; $('pwShow').textContent = i.type === 'password' ? 'Show' : 'Hide'; i.focus(); };
+$('pwShow').addEventListener('click', () => { const i = $('pw'); i.type = i.type === 'password' ? 'text' : 'password'; $('pwShow').textContent = i.type === 'password' ? 'Show' : 'Hide'; i.focus(); });
 $('pw').addEventListener('keydown', (e) => { if (e.key === 'Enter') signIn(); });
-$('logout').onclick = () => { api('logout', { method: 'POST' }).catch(() => {}).finally(signOut); };
+$('em').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('pw').focus(); });
+$('logout').addEventListener('click', () => { api('logout', { method: 'POST' }).catch(() => {}).finally(signOut); });
 
 // ── views ──
-const loaders = { dash: loadDash, codes: loadCodes, activity: loadActivity, devices: loadDevices, settings: loadSettings };
+const loaders = { dash: loadDash, codes: loadCodes, plans: loadPlans, activity: loadActivity, devices: loadDevices, team: loadTeam, settings: loadSettings };
 function show(v) {
   document.querySelectorAll('nav button').forEach((b) => b.classList.toggle('on', b.dataset.v === v));
   document.querySelectorAll('main > section').forEach((s) => (s.hidden = s.id !== `v-${v}`));
   loaders[v]().catch((e) => toast(e.message, true));
 }
-document.querySelectorAll('nav button').forEach((b) => (b.onclick = () => show(b.dataset.v)));
+document.querySelectorAll('nav button').forEach((b) => b.addEventListener('click', () => show(b.dataset.v)));
+function applyPerms() {
+  document.querySelectorAll('[data-perm]').forEach((el) => (el.hidden = !can(el.dataset.perm)));
+  $('meName').textContent = me.name;
+  $('meRole').textContent = me.role === 'owner' ? 'Full access' : me.roleName + (me.ownOnly ? ' · own codes' : '');
+  $('ownerPwCard').hidden = me.role !== 'owner';
+  $('myPwCard').hidden = me.role === 'owner';
+}
 
-function pill(s) { const p = $('svcPill'); p.classList.toggle('off', !s.service_on); p.lastElementChild.textContent = s.service_on ? (s.free_on ? 'Service on' : 'Premium only') : 'Paused'; }
+function pill(s) { const p = $('svcPill'); p.classList.toggle('off', !s.service_on); p.lastElementChild.textContent = s.service_on ? 'AI on' : 'AI paused'; }
+async function ensurePlans(fresh = false) { if (fresh || !plans.length) plans = (await api('plans')).plans; return plans; }
+async function ensureSettings() { if (!settings.currency && settings.currency !== '') settings = (await api('settings')).settings; pill(settings); return settings; }
+const limitTxt = (d) => (d === null || d === undefined ? 'Unlimited' : `${fmt(d)} a day`);
+function planSummary(p) {
+  const f = p.features;
+  const parts = PLATS.map((k) => `${PNAME[k]} ${f.platforms[k].on ? (f.platforms[k].daily === null ? 'unlimited' : `${f.platforms[k].daily}/day`) : 'off'}`);
+  parts.push(f.ai ? `${fmt(f.ai)} AI rewrites/day` : 'no AI');
+  if (f.perRun) parts.push(`up to ${f.perRun} per run`);
+  return parts.join(' · ');
+}
 
+// ── dashboard ──
+function stacked(el, series, parts, title) {
+  const max = Math.max(1, ...series.map((x) => parts.reduce((a, p) => a + p.get(x), 0)));
+  el.innerHTML = series.map((x) => {
+    const total = parts.reduce((a, p) => a + p.get(x), 0);
+    return `<div class="c" title="${esc(title(x))}"><span class="n">${total || ''}</span><div class="st" style="height:${Math.round((total / max) * 140)}px">${parts.map((p) => `<i style="height:${total ? (p.get(x) / total) * 100 : 0}%;background:${p.color}"></i>`).join('')}</div><span class="d">${x.day.slice(5)}</span></div>`;
+  }).join('');
+}
 async function loadDash() {
   const d = await api('overview');
   settings = d.settings; pill(settings);
+  $('kSales').textContent = cash(d.sales.month.amount);
+  $('kSalesSub').textContent = `${fmt(d.sales.month.n)} codes this month · ${cash(d.sales.today.amount)} today${me.ownOnly ? ' (yours)' : ''}`;
+  $('kCodes').textContent = fmt(d.codes.active);
+  $('kCodesSub').textContent = d.codes.expiring ? `${fmt(d.codes.expiring)} expire within 7 days` : `of ${fmt(d.codes.total)} created`;
+  $('kPosts').textContent = fmt(d.today.posts);
+  $('kPostsSub').textContent = PLATS.filter((p) => d.today.byPlatform[p]).map((p) => `${fmt(d.today.byPlatform[p])} ${PNAME[p]}`).join(' · ') || `${fmt(d.week.posts)} in 7 days`;
   $('kToday').textContent = fmt(d.today.requests);
   $('kTodaySplit').textContent = `${fmt(d.today.free)} free · ${fmt(d.today.premium)} premium`;
   $('kDevices').textContent = fmt(d.today.installs);
@@ -298,146 +474,351 @@ async function loadDash() {
   const priced = Number(settings.price_in) > 0 || Number(settings.price_out) > 0;
   $('kCost').textContent = priced ? money(d.today.cost) : '—';
   $('kCost7').textContent = priced ? `${money(d.week.cost)} in 7 days · ${money(d.month.cost)} in 14 days` : `${fmt(d.today.tokensIn + d.today.tokensOut)} tokens today`;
-  $('kCodes').textContent = fmt(d.codes.active);
-  $('kCodesSub').textContent = `active of ${fmt(d.codes.total)} created`;
-  $('kErr').textContent = fmt(d.today.errors);
   $('modelNow').textContent = d.model;
   const w = [];
-  if (!d.keySet) w.push('<div class="note err">The OPENAI_API_KEY secret isn’t set, so AI rewrites will fail. Run <code>npx wrangler secret put OPENAI_API_KEY</code>.</div>');
-  if (!settings.service_on) w.push('<div class="note warn">RitPost AI is paused. Turn it back on in Settings.</div>');
-  if (!priced) w.push('<div class="note warn">Add your model’s prices in Settings to see what RitPost AI costs you.</div>');
-  if (d.today.requests >= settings.global_daily * 0.8 && settings.global_daily) w.push(`<div class="note warn">Today’s usage is close to your daily cap of ${fmt(settings.global_daily)}.</div>`);
+  if (can('settings.edit')) {
+    if (!d.keySet) w.push('<div class="note err">The OPENAI_API_KEY secret isn’t set, so AI rewrites will fail. Run <code>npx wrangler secret put OPENAI_API_KEY</code>.</div>');
+    if (!settings.service_on) w.push('<div class="note warn">RitPost AI is paused. Turn it back on in Settings.</div>');
+    if (!priced) w.push('<div class="note warn">Add your AI model’s prices in Settings to see what RitPost AI costs you.</div>');
+    if (!settings.upgrade_url) w.push('<div class="note warn">Add an upgrade link in Settings (for example your WhatsApp link) so customers who reach a limit can buy a code in one click.</div>');
+    if (d.today.requests >= settings.global_daily * 0.8 && settings.global_daily) w.push(`<div class="note warn">Today’s AI usage is close to your daily cap of ${fmt(settings.global_daily)}.</div>`);
+  }
+  if (d.codes.expiring) w.push(`<div class="note ok">${fmt(d.codes.expiring)} access code${d.codes.expiring === 1 ? '' : 's'} expire within 7 days: a good time to offer renewals. <button class="link" id="seeExpiring">See them</button></div>`);
   $('warns').innerHTML = w.join('');
-  const max = Math.max(1, ...d.series.map((x) => x.requests));
-  $('chart').innerHTML = d.series.map((x) => `<div class="c" title="${x.day}: ${x.free} free, ${x.premium} premium, ${x.errors} errors"><span class="n">${x.requests || ''}</span><div class="st" style="height:${Math.round((x.requests / max) * 140)}px"><i style="height:${x.requests ? (x.free / x.requests) * 100 : 0}%;background:#a78bfa"></i><i style="height:${x.requests ? (x.premium / x.requests) * 100 : 0}%;background:var(--brand2)"></i></div><span class="d">${x.day.slice(5)}</span></div>`).join('');
+  $('seeExpiring')?.addEventListener('click', () => { $('codeFilter').value = 'expiring'; show('codes'); });
+  stacked($('postChart'), d.series, PLATS.map((p) => ({ color: PCOLOR[p], get: (x) => x.byPlatform[p] })), (x) => `${x.day}: ${PLATS.map((p) => `${x.byPlatform[p]} ${PNAME[p]}`).join(', ')}; ${x.denied} refused by plan limits`);
+  stacked($('chart'), d.series, [{ color: '#a78bfa', get: (x) => x.free }, { color: 'var(--brand2)', get: (x) => x.premium }], (x) => `${x.day}: ${x.free} free, ${x.premium} premium, ${x.errors} errors`);
+  $('planRows').innerHTML = d.plans.filter((p) => p.id !== 'free').map((p) => `<tr><td><span class="chip plan">${esc(p.name)}</span>${p.archived ? ' <span class="muted small">archived</span>' : ''}</td><td>${fmt(p.active)}</td><td>${fmt(p.codes)}</td><td>${cash(p.amount)}</td></tr>`).join('') || '<tr><td colspan="4" class="muted">No paid plans yet.</td></tr>';
 }
-$('testBtn').onclick = async () => {
+$('testBtn').addEventListener('click', async () => {
   const out = $('testOut'); out.hidden = false; out.className = 'note ok'; out.textContent = 'Asking OpenAI…'; $('testBtn').disabled = true;
   try { const r = await api('test', { method: 'POST', body: { text: 'join us sunday 9am for service all are welcome' } }); out.innerHTML = `<b>Works.</b> ${esc(r.model)} · ${fmt(r.tokens)} tokens<br>“${esc(r.text)}”`; }
   catch (e) { out.className = 'note err'; out.textContent = e.message; }
   finally { $('testBtn').disabled = false; }
-};
+});
 
 // ── codes ──
-const DAY = 86400000;
-document.querySelectorAll('[data-exp]').forEach((b) => (b.onclick = () => { const n = Number(b.dataset.exp); $('cExpires').value = n ? new Date(Date.now() + n * DAY).toISOString().slice(0, 10) : ''; }));
+const paidPlans = () => plans.filter((p) => p.id !== 'free' && !p.archived);
+function planDefaults() {
+  const p = plans.find((x) => x.id === $('cPlan').value);
+  if (!p) return;
+  $('cPlanSum').textContent = planSummary(p);
+  $('cDaily').placeholder = `${p.features.ai} (plan)`;
+  $('cDevices').placeholder = `${p.features.devices} (plan)`;
+  $('cExpires').value = p.features.days ? dateInput(Date.now() + p.features.days * DAY) : '';
+  if (!$('cAmount').value && /\d/.test(p.price)) $('cAmount').placeholder = p.price;
+}
+$('cPlan').addEventListener('change', planDefaults);
+document.querySelectorAll('[data-exp]').forEach((b) => b.addEventListener('click', () => { const n = Number(b.dataset.exp); $('cExpires').value = n ? dateInput(Date.now() + n * DAY) : ''; }));
 async function loadCodes() {
-  if (!settings.premium_daily) settings = (await api('settings')).settings;
-  pill(settings);
-  if (!$('cDaily').value) $('cDaily').value = settings.premium_daily;
-  if (!$('cDevices').value) $('cDevices').value = settings.premium_devices;
+  await Promise.all([ensurePlans(true), ensureSettings()]);
+  $('cCur').textContent = settings.currency ? `(${settings.currency})` : '';
+  const cur = $('cPlan').value;
+  $('cPlan').replaceChildren(...paidPlans().map((p) => new Option(`${p.name}${p.price ? ` · ${p.price}` : ''}`, p.id)));
+  if (cur && paidPlans().some((p) => p.id === cur)) $('cPlan').value = cur; else planDefaults();
+  if (!$('cPlanSum').textContent) planDefaults();
+  const pf = $('codePlanFilter').value;
+  $('codePlanFilter').replaceChildren(new Option('All plans', ''), ...plans.filter((p) => p.id !== 'free').map((p) => new Option(p.name, p.id)));
+  $('codePlanFilter').value = pf;
   codes = (await api('codes')).codes;
   renderCodes();
 }
 function renderCodes() {
   const q = $('codeSearch').value.trim().toLowerCase();
   const f = $('codeFilter').value;
-  const list = codes.filter((c) => (!f || c.status === f) && (!q || `${c.code} ${c.label} ${c.note}`.toLowerCase().includes(q)));
+  const pf = $('codePlanFilter').value;
+  const soon = Date.now() + 7 * DAY;
+  const list = codes.filter((c) => (!f || (f === 'expiring' ? c.status === 'active' && c.expiresAt && c.expiresAt < soon : c.status === f)) && (!pf || c.planId === pf) && (!q || `${c.code} ${c.label} ${c.note} ${c.contact}`.toLowerCase().includes(q)));
   $('codeCount').textContent = `(${list.length}${list.length !== codes.length ? ` of ${codes.length}` : ''})`;
   $('codeEmpty').hidden = codes.length > 0;
-  $('codeRows').innerHTML = list.map((c) => `<tr data-code="${c.raw}">
-    <td><code>${c.code}</code> <button class="btn sm" data-act="copy" title="Copy">Copy</button></td>
-    <td>${esc(c.label) || '<span class="muted">–</span>'}${c.note ? `<div class="muted" style="font-size:12px">${esc(c.note)}</div>` : ''}</td>
+  $('codeRows').innerHTML = list.map((c) => {
+    const exp = c.expiresAt && c.status === 'active' && c.expiresAt < soon;
+    return `<tr data-code="${c.raw}">
+    <td style="white-space:nowrap"><code>${c.code}</code> <button class="btn sm" data-act="copy" title="Copy the code">Copy</button></td>
+    <td>${esc(c.label) || '<span class="muted">–</span>'}${c.contact ? `<div class="muted small">${esc(c.contact)}</div>` : ''}${c.note ? `<div class="muted small">${esc(c.note)}</div>` : ''}</td>
+    <td><span class="chip plan">${esc(c.planName)}</span></td>
     <td><span class="chip ${c.status}">${c.status}</span></td>
-    <td>${fmt(c.usedToday)} / ${fmt(c.dailyLimit)}<div class="bar"><i style="width:${Math.min(100, (c.usedToday / c.dailyLimit) * 100)}%"></i></div></td>
+    <td style="white-space:nowrap">${fmt(c.postsToday)} posts<div class="muted small">${fmt(c.usedToday)} / ${fmt(c.dailyLimit)} AI</div></td>
     <td>${c.devices} / ${c.maxDevices}</td>
-    <td>${dateOnly(c.expiresAt)}</td>
-    <td>${fmt(c.totalUses)}</td>
+    <td style="white-space:nowrap${exp ? ';color:var(--warn);font-weight:600' : ''}">${dateOnly(c.expiresAt)}</td>
+    <td style="white-space:nowrap">${c.amount ? cash(c.amount) : '<span class="muted">–</span>'}</td>
+    <td>${esc(c.createdByName)}</td>
     <td>${when(c.lastUsedAt)}</td>
-    <td style="white-space:nowrap"><button class="btn sm" data-act="edit">Edit</button> <button class="btn sm" data-act="toggle">${c.status === 'disabled' ? 'Enable' : 'Disable'}</button> <button class="btn sm danger" data-act="delete">Delete</button></td>
-  </tr>`).join('');
+    <td style="white-space:nowrap">${can('codes.edit') ? '<button class="btn sm" data-act="edit">Edit</button>' : can('codes.support') ? '<button class="btn sm" data-act="reset">Reset devices</button>' : ''} ${can('codes.support') ? `<button class="btn sm" data-act="toggle">${c.status === 'disabled' ? 'Enable' : 'Disable'}</button>` : ''} ${can('codes.delete') ? '<button class="btn sm danger" data-act="delete">Delete</button>' : ''}</td>
+  </tr>`;
+  }).join('');
 }
-$('codeSearch').oninput = renderCodes;
-$('codeFilter').onchange = renderCodes;
-$('codeRows').onclick = async (e) => {
+$('codeSearch').addEventListener('input', renderCodes);
+$('codeFilter').addEventListener('change', renderCodes);
+$('codePlanFilter').addEventListener('change', renderCodes);
+$('codeRows').addEventListener('click', async (e) => {
   const b = e.target.closest('button[data-act]'); if (!b) return;
   const c = codes.find((x) => x.raw === b.closest('tr').dataset.code);
   try {
     if (b.dataset.act === 'copy') return copy(c.code);
     if (b.dataset.act === 'toggle') { await api(`codes/${c.raw}`, { method: 'PATCH', body: { status: c.status === 'disabled' ? 'active' : 'disabled' } }); toast(c.status === 'disabled' ? 'Code enabled' : 'Code disabled'); return loadCodes(); }
-    if (b.dataset.act === 'delete') return confirmBox(`Delete ${c.code}?`, 'Anyone using it loses premium straight away. This can’t be undone. To pause it instead, use Disable.', 'Delete', async () => { await api(`codes/${c.raw}`, { method: 'DELETE' }); toast('Code deleted'); loadCodes(); });
+    if (b.dataset.act === 'reset') { await api(`codes/${c.raw}/reset-devices`, { method: 'POST' }); toast('Devices reset: the customer can activate again'); return loadCodes(); }
+    if (b.dataset.act === 'delete') return confirmBox(`Delete ${c.code}?`, 'Anyone using it loses their plan straight away, and it disappears from your sales figures. This can’t be undone. To pause it instead, use Disable.', 'Delete', async () => { await api(`codes/${c.raw}`, { method: 'DELETE' }); toast('Code deleted'); loadCodes(); });
     if (b.dataset.act === 'edit') return editCode(c);
   } catch (err) { toast(err.message, true); }
-};
-$('createBtn').onclick = async () => {
-  const exp = $('cExpires').value ? new Date(`${$('cExpires').value}T23:59:59`).getTime() : null;
+});
+function customerMessage(codeList, plan, exp) {
+  const biz = settings.business_name || 'RitPost';
+  const one = codeList.length === 1;
+  return `Your ${biz} ${plan.name} access code${one ? '' : 's'}:\n${codeList.join('\n')}\n\nIncludes: ${planSummary(plan)}.${exp ? `\nValid until ${dateOnly(exp)}.` : ''}\n\nTo activate: open RitPost → Settings (⚙) → Your plan → “Have an access code?”, paste the code and click Activate.`;
+}
+$('createBtn').addEventListener('click', async () => {
+  const exp = fromDateInput($('cExpires').value);
+  const plan = plans.find((p) => p.id === $('cPlan').value);
+  if (!plan) return toast('Create a paid plan first (Plans → New plan).', true);
+  $('createBtn').disabled = true;
   try {
-    const r = await api('codes', { method: 'POST', body: { label: $('cLabel').value, note: $('cNote').value, dailyLimit: $('cDaily').value, maxDevices: $('cDevices').value, expiresAt: exp, quantity: $('cQty').value } });
-    const msg = (code) => `Your RitPost Premium access code: ${code}\n\nOpen RitPost → Settings (⚙) → AI writing assistant → “Have an access code?”, paste it and click Activate.${exp ? `\nValid until ${dateOnly(exp)}.` : ''}`;
-    openModal(`<h3>${r.codes.length === 1 ? 'Code created' : `${r.codes.length} codes created`}</h3>
+    const r = await api('codes', { method: 'POST', body: { planId: plan.id, label: $('cLabel').value, contact: $('cContact').value, amount: $('cAmount').value, note: $('cNote').value, dailyLimit: $('cDaily').value, maxDevices: $('cDevices').value, expiresAt: exp, quantity: $('cQty').value } });
+    openModal(`<h3>${r.codes.length === 1 ? 'Code created' : `${r.codes.length} codes created`} · ${esc(plan.name)}</h3>
       <div class="newcodes">${r.codes.map((c) => `<div class="c"><code style="font-size:15px">${c}</code><button class="btn sm" data-copy="${c}">Copy</button></div>`).join('')}</div>
-      <label class="f">Message to send your customer<textarea id="custMsg" rows="5">${esc(r.codes.length === 1 ? msg(r.codes[0]) : r.codes.join('\n'))}</textarea></label>
-      <div class="row"><span class="sp"></span><button class="btn" id="copyMsg">Copy message</button><button class="btn primary" data-close>Done</button></div>`);
-    $('sheet').querySelectorAll('[data-copy]').forEach((x) => (x.onclick = () => copy(x.dataset.copy)));
-    $('copyMsg').onclick = () => copy($('custMsg').value);
-    $('cLabel').value = ''; $('cNote').value = ''; $('cQty').value = 1;
+      <label class="f">Message to send your customer<textarea id="custMsg" rows="8">${esc(customerMessage(r.codes, plan, exp))}</textarea></label>
+      <div class="row"><span class="sp"></span><a class="btn" id="waSend" target="_blank" rel="noopener">Send on WhatsApp</a><button class="btn" id="copyMsg">Copy message</button><button class="btn primary" data-close>Done</button></div>`);
+    $('sheet').querySelectorAll('[data-copy]').forEach((x) => x.addEventListener('click', () => copy(x.dataset.copy)));
+    $('copyMsg').addEventListener('click', () => copy($('custMsg').value));
+    const wa = $('waSend');
+    // With a full international number (+233…) the chat opens directly; otherwise WhatsApp asks who to send it to.
+    const raw = $('cContact').value.trim();
+    const num = /^\+|^00/.test(raw) ? raw.replace(/\D/g, '').replace(/^00/, '') : '';
+    const upd = () => (wa.href = `https://wa.me/${num}?text=${encodeURIComponent($('custMsg').value)}`);
+    upd(); $('custMsg').addEventListener('input', upd);
+    ['cLabel', 'cContact', 'cAmount', 'cNote', 'cDaily', 'cDevices'].forEach((id) => ($(id).value = ''));
+    $('cQty').value = 1; planDefaults();
     loadCodes();
   } catch (e) { toast(e.message, true); }
-};
+  finally { $('createBtn').disabled = false; }
+});
 function editCode(c) {
+  const opts = plans.filter((p) => p.id !== 'free' && (!p.archived || p.id === c.planId)).map((p) => `<option value="${p.id}"${p.id === c.planId ? ' selected' : ''}>${esc(p.name)}${p.archived ? ' (archived)' : ''}</option>`).join('');
   openModal(`<h3>Edit ${c.code}</h3>
     <div class="form">
-      <label class="f">Customer or label<input id="eLabel" type="text" maxlength="80" value="${esc(c.label)}"></label>
-      <label class="f">Rewrites per day<input id="eDaily" type="number" min="1" value="${c.dailyLimit}"></label>
-      <label class="f">Devices allowed<input id="eDevices" type="number" min="1" value="${c.maxDevices}"></label>
-      <label class="f">Expires<input id="eExpires" type="date" value="${c.expiresAt ? new Date(c.expiresAt).toISOString().slice(0, 10) : ''}"><small>Empty = never</small></label>
+      <label class="f">Plan<select id="ePlan">${opts}</select></label>
+      <label class="f">Customer<input id="eLabel" type="text" maxlength="80" value="${esc(c.label)}"></label>
+      <label class="f">Phone or email<input id="eContact" type="text" maxlength="120" value="${esc(c.contact)}"></label>
+      <label class="f">Amount paid ${esc(settings.currency || '')}<input id="eAmount" type="number" min="0" step="0.01" value="${c.amount || ''}"></label>
+      <label class="f">Expires<input id="eExpires" type="date" value="${dateInput(c.expiresAt)}"><small>Empty = never</small></label>
+      <label class="f">AI rewrites per day<input id="eDaily" type="number" min="0" value="${c.aiOverride ? c.dailyLimit : ''}" placeholder="plan’s"><small>Empty = the plan’s</small></label>
+      <label class="f">Devices allowed<input id="eDevices" type="number" min="1" value="${c.devicesOverride ? c.maxDevices : ''}" placeholder="plan’s"><small>Empty = the plan’s</small></label>
     </div>
     <label class="f">Note<input id="eNote" type="text" maxlength="300" value="${esc(c.note)}"></label>
-    <div class="note ok" style="font-size:12.5px">Used on ${c.devices} of ${c.maxDevices} devices. If your customer changed computer, reset the devices so they can activate again.</div>
+    <div class="row"><span class="muted small">Renew:</span><button class="btn sm" data-ext="30">+30 days</button><button class="btn sm" data-ext="90">+3 months</button><button class="btn sm" data-ext="365">+1 year</button><span class="muted small">(from the current expiry, or today if it has passed)</span></div>
+    <div class="note ok small">Used on ${c.devices} of ${c.maxDevices} devices. If your customer changed computer, reset the devices so they can activate again.</div>
     <div class="row"><button class="btn" id="eReset">Reset devices</button><span class="sp"></span><button class="btn" data-close>Cancel</button><button class="btn primary" id="eSave">Save</button></div>`);
-  $('eReset').onclick = async () => { try { await api(`codes/${c.raw}/reset-devices`, { method: 'POST' }); toast('Devices reset'); closeModal(); loadCodes(); } catch (e) { toast(e.message, true); } };
-  $('eSave').onclick = async () => {
+  $('sheet').querySelectorAll('[data-ext]').forEach((b) => b.addEventListener('click', async () => {
+    try { const r = await api(`codes/${c.raw}`, { method: 'PATCH', body: { extendDays: Number(b.dataset.ext) } }); $('eExpires').value = dateInput(r.expiresAt); c.expiresAt = r.expiresAt; toast(`Now valid until ${dateOnly(r.expiresAt)}`); loadCodes(); } catch (e) { toast(e.message, true); }
+  }));
+  $('eReset').addEventListener('click', async () => { try { await api(`codes/${c.raw}/reset-devices`, { method: 'POST' }); toast('Devices reset'); closeModal(); loadCodes(); } catch (e) { toast(e.message, true); } });
+  $('eSave').addEventListener('click', async () => {
     try {
-      await api(`codes/${c.raw}`, { method: 'PATCH', body: { label: $('eLabel').value, note: $('eNote').value, dailyLimit: $('eDaily').value, maxDevices: $('eDevices').value, expiresAt: $('eExpires').value ? new Date(`${$('eExpires').value}T23:59:59`).getTime() : null } });
+      await api(`codes/${c.raw}`, { method: 'PATCH', body: { planId: $('ePlan').value, label: $('eLabel').value, contact: $('eContact').value, amount: $('eAmount').value, note: $('eNote').value, dailyLimit: $('eDaily').value, maxDevices: $('eDevices').value, expiresAt: fromDateInput($('eExpires').value) } });
       toast('Saved'); closeModal(); loadCodes();
     } catch (e) { toast(e.message, true); }
-  };
+  });
 }
-$('csvBtn').onclick = () => {
-  const rows = [['code', 'customer', 'note', 'status', 'daily_limit', 'used_today', 'devices', 'max_devices', 'expires', 'total_uses', 'created', 'last_used']].concat(codes.map((c) => [c.code, c.label, c.note, c.status, c.dailyLimit, c.usedToday, c.devices, c.maxDevices, c.expiresAt ? new Date(c.expiresAt).toISOString().slice(0, 10) : '', c.totalUses, new Date(c.createdAt).toISOString(), c.lastUsedAt ? new Date(c.lastUsedAt).toISOString() : '']));
+$('csvBtn').addEventListener('click', () => {
+  const rows = [['code', 'customer', 'contact', 'plan', 'note', 'status', 'amount_paid', 'currency', 'sold_by', 'ai_per_day', 'ai_today', 'posts_today', 'devices', 'max_devices', 'expires', 'total_ai_uses', 'created', 'last_used']].concat(codes.map((c) => [c.code, c.label, c.contact, c.planName, c.note, c.status, c.amount, settings.currency || '', c.createdByName, c.dailyLimit, c.usedToday, c.postsToday, c.devices, c.maxDevices, c.expiresAt ? new Date(c.expiresAt).toISOString().slice(0, 10) : '', c.totalUses, new Date(c.createdAt).toISOString(), c.lastUsedAt ? new Date(c.lastUsedAt).toISOString() : '']));
   const csv = rows.map((r) => r.map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = `ritpost-codes-${new Date().toISOString().slice(0, 10)}.csv`; a.click();
-};
+});
+
+// ── plans ──
+async function loadPlans() {
+  await Promise.all([ensurePlans(true), ensureSettings()]);
+  const li = (label, val, off = false) => `<li class="${off ? 'off' : ''}"><span>${label}</span><span>${val}</span></li>`;
+  $('planCards').innerHTML = plans.map((p) => {
+    const f = p.features;
+    return `<div class="card plan${p.archived ? ' arch' : ''}" data-id="${p.id}">
+      <div class="top"><b>${esc(p.name)}</b>${p.price ? `<span class="price">${esc(p.price)}</span>` : ''}<span class="sp"></span>${p.id === 'free' ? '<span class="chip free">Everyone without a code</span>' : p.archived ? '<span class="chip expired">Archived</span>' : p.public ? '<span class="chip ok">Offered in RitPost</span>' : '<span class="chip">Not listed</span>'}</div>
+      ${p.description ? `<div class="muted small">${esc(p.description)}</div>` : ''}
+      <ul>
+        ${PLATS.map((k) => li(`<span class="dot" style="background:${PCOLOR[k]}"></span>${PNAME[k]}`, f.platforms[k].on ? limitTxt(f.platforms[k].daily) : 'Not included', !f.platforms[k].on)).join('')}
+        ${li('Groups / Pages per run', f.perRun ? `Up to ${fmt(f.perRun)}` : 'No limit')}
+        ${li('AI rewrites', f.ai ? `${fmt(f.ai)} a day` : 'Not included', !f.ai)}
+        ${li('Scheduled posts', f.schedule ? 'Yes' : 'No', !f.schedule)}
+        ${li('Automatic mode', f.auto ? 'Yes' : 'No', !f.auto)}
+        ${li('RitPost Studio', f.studio ? 'Yes' : 'No', !f.studio)}
+        ${p.id === 'free' ? '' : li('Devices per code', fmt(f.devices))}
+        ${p.id === 'free' ? '' : li('Codes last', f.days ? `${fmt(f.days)} days` : 'Until you turn them off')}
+      </ul>
+      <div class="row"><span class="muted small">${p.id === 'free' ? '' : `${fmt(p.activeCodes)} active of ${fmt(p.codes)} codes`}</span><span class="sp"></span>${can('plans.edit') ? `<button class="btn sm" data-copyplan>Copy</button><button class="btn sm primary" data-edit>Edit</button>` : ''}</div>
+    </div>`;
+  }).join('');
+}
+$('planCards').addEventListener('click', (e) => {
+  const card = e.target.closest('.plan'); if (!card) return;
+  const p = plans.find((x) => x.id === card.dataset.id);
+  if (e.target.closest('[data-edit]')) editPlan(p);
+  if (e.target.closest('[data-copyplan]')) editPlan({ ...p, id: '', name: `${p.name} copy`, archived: false, copyFrom: p.id });
+});
+$('newPlan').addEventListener('click', () => editPlan({ id: '', name: '', price: '', description: '', public: true, archived: false, features: { ai: 300, devices: 3, days: 30, perRun: null, schedule: true, studio: true, auto: true, platforms: Object.fromEntries(PLATS.map((k) => [k, { on: true, daily: null }])) } }));
+function editPlan(p) {
+  const isNew = !p.id;
+  const f = p.features;
+  const num = (v) => (v === null || v === undefined ? '' : v);
+  openModal(`<h3>${isNew ? 'New plan' : `Edit plan: ${esc(p.name)}`}</h3>
+    ${p.id === 'free' ? '<div class="note ok small">The Free plan is for everyone using RitPost without an access code. Keep it useful but limited, so people want to upgrade.</div>' : ''}
+    <div class="form">
+      <label class="f">Name<input id="pName" type="text" maxlength="40" value="${esc(p.name)}" placeholder="e.g. Pro, Business, Church"></label>
+      <label class="f">Price <small>Shown to customers, e.g. “GHS 50 / month”</small><input id="pPrice" type="text" maxlength="40" value="${esc(p.price)}"></label>
+    </div>
+    <label class="f">Description <small>One line shown in RitPost</small><input id="pDesc" type="text" maxlength="240" value="${esc(p.description)}"></label>
+    <h3 style="font-size:14px">Posting</h3>
+    <div class="platgrid">${PLATS.map((k) => `<div class="platrow"><label class="switch"><input type="checkbox" data-pon="${k}"${f.platforms[k].on ? ' checked' : ''}> ${PNAME[k]}</label><label class="f" style="grid-template-columns:auto 1fr;align-items:center;gap:8px"><span>Posts per day</span><input type="number" min="0" data-pday="${k}" value="${num(f.platforms[k].daily)}" placeholder="Unlimited"></label></div>`).join('')}</div>
+    <p class="muted small" style="margin:0">A “post” is one WhatsApp group, one Facebook group or Page, or one Instagram / X post. Leave posts per day empty for no limit.</p>
+    <div class="form">
+      <label class="f">Groups / Pages in one run<input id="pRun" type="number" min="0" value="${num(f.perRun)}" placeholder="No limit"><small>Most groups or Pages someone can pick at once</small></label>
+      <label class="f">AI rewrites per day<input id="pAi" type="number" min="0" value="${f.ai}"><small>0 = AI not included</small></label>
+      ${p.id === 'free' ? '' : `<label class="f">Devices per code<input id="pDev" type="number" min="1" value="${f.devices}"></label>
+      <label class="f">Codes last (days)<input id="pDays" type="number" min="0" value="${f.days || 0}"><small>Default expiry for new codes; 0 = no expiry</small></label>`}
+    </div>
+    <div class="grid" style="gap:8px">
+      <label class="switch"><input id="pSched" type="checkbox"${f.schedule ? ' checked' : ''}> Scheduled posts</label>
+      <label class="switch"><input id="pAuto" type="checkbox"${f.auto ? ' checked' : ''}> Automatic mode (RitPost presses Send / Post after a countdown)</label>
+      <label class="switch"><input id="pStudio" type="checkbox"${f.studio ? ' checked' : ''}> RitPost Studio (photo editor: crop, filters, text, stickers)</label>
+      ${p.id === 'free' ? '' : `<label class="switch"><input id="pPublic" type="checkbox"${p.public ? ' checked' : ''}> Offer this plan in RitPost when people reach a limit</label>`}
+      ${p.id === 'free' || isNew ? '' : `<label class="switch"><input id="pArch" type="checkbox"${p.archived ? ' checked' : ''}> Archived (no new codes; customers on it keep it)</label>`}
+    </div>
+    <div class="row">${!isNew && p.id !== 'free' && p.id !== 'premium' ? '<button class="btn danger" id="pDel">Delete plan</button>' : ''}<span class="sp"></span><button class="btn" data-close>Cancel</button><button class="btn primary" id="pSave">${isNew ? 'Create plan' : 'Save'}</button></div>`);
+  $('pSave').addEventListener('click', async () => {
+    const val = (id) => ($(id) ? $(id).value : undefined);
+    const features = {
+      ai: val('pAi'), perRun: val('pRun') === '' ? null : val('pRun'), schedule: $('pSched').checked, auto: $('pAuto').checked, studio: $('pStudio').checked,
+      platforms: Object.fromEntries(PLATS.map((k) => [k, { on: $('sheet').querySelector(`[data-pon="${k}"]`).checked, daily: $('sheet').querySelector(`[data-pday="${k}"]`).value === '' ? null : $('sheet').querySelector(`[data-pday="${k}"]`).value }])),
+    };
+    if ($('pDev')) features.devices = val('pDev');
+    if ($('pDays')) features.days = val('pDays');
+    const body = { name: val('pName'), price: val('pPrice'), description: val('pDesc'), features };
+    if ($('pPublic')) body.public = $('pPublic').checked;
+    if ($('pArch')) body.archived = $('pArch').checked;
+    if (p.copyFrom) body.copyFrom = p.copyFrom;
+    try {
+      if (isNew) await api('plans', { method: 'POST', body }); else await api(`plans/${p.id}`, { method: 'PATCH', body });
+      toast(isNew ? 'Plan created' : 'Plan saved'); closeModal(); plans = []; loadPlans();
+    } catch (e) { toast(e.message, true); }
+  });
+  $('pDel')?.addEventListener('click', () => confirmBox(`Delete the ${p.name} plan?`, 'Only plans with no access codes can be deleted.', 'Delete', async () => { await api(`plans/${p.id}`, { method: 'DELETE' }); toast('Plan deleted'); plans = []; loadPlans(); }));
+}
 
 // ── activity ──
 let acts = [];
-async function loadActivity() { acts = (await api('requests')).requests; renderActivity(); }
-function renderActivity() {
-  const list = $('errOnly').checked ? acts.filter((a) => a.status !== 'ok') : acts;
-  $('actEmpty').hidden = list.length > 0;
-  $('actRows').innerHTML = list.map((a) => `<tr><td>${when(a.at)}</td><td><span class="chip ${a.tier}">${a.tier}</span></td><td>${a.code ? `<code>${a.code}</code>` : '–'}</td><td class="mono">${esc(a.install)}</td><td>${esc(a.platform || '')}</td><td>${esc(a.model || '')}</td><td>${fmt(a.tokens)}</td><td><span class="chip ${a.status}">${a.status}</span>${a.error ? `<div class="muted" style="font-size:12px;max-width:320px">${esc(a.error)}</div>` : ''}</td></tr>`).join('');
+let postsLog = [];
+let actMode = 'posts';
+async function loadActivity() {
+  if (actMode === 'posts') postsLog = (await api('posts')).posts; else acts = (await api('requests')).requests;
+  renderActivity();
 }
-$('errOnly').onchange = renderActivity;
-$('actRefresh').onclick = () => loadActivity().catch((e) => toast(e.message, true));
+function renderActivity() {
+  $('postsWrap').hidden = actMode !== 'posts';
+  $('aiWrap').hidden = actMode !== 'ai';
+  $('errOnlyLbl').textContent = actMode === 'posts' ? 'Refused only' : 'Errors only';
+  const only = $('errOnly').checked;
+  if (actMode === 'posts') {
+    const list = only ? postsLog.filter((a) => a.status !== 'ok') : postsLog;
+    $('actEmpty').hidden = list.length > 0;
+    $('postRows').innerHTML = list.map((a) => `<tr><td>${when(a.at)}</td><td><span class="chip ${a.tier}">${esc(a.plan || a.tier)}</span></td><td>${a.code ? `<code>${a.code}</code>` : '–'}</td><td class="mono">${esc(a.install)}</td><td><span class="chip ${a.platform}">${PNAME[a.platform] || esc(a.platform)}</span></td><td>${a.kind === 'release' ? `−${fmt(a.count)}` : fmt(a.count)}</td><td><span class="chip ${a.status}">${a.kind === 'release' ? 'given back' : a.status === 'ok' ? 'allowed' : 'refused'}</span>${a.reason ? `<div class="muted small" style="max-width:380px">${esc(a.reason)}</div>` : ''}</td></tr>`).join('');
+  } else {
+    const list = only ? acts.filter((a) => a.status !== 'ok') : acts;
+    $('actEmpty').hidden = list.length > 0;
+    $('actRows').innerHTML = list.map((a) => `<tr><td>${when(a.at)}</td><td><span class="chip ${a.tier}">${a.tier}</span></td><td>${a.code ? `<code>${a.code}</code>` : '–'}</td><td class="mono">${esc(a.install)}</td><td>${esc(a.platform || '')}</td><td>${esc(a.model || '')}</td><td>${fmt(a.tokens)}</td><td><span class="chip ${a.status}">${a.status}</span>${a.error ? `<div class="muted small" style="max-width:320px">${esc(a.error)}</div>` : ''}</td></tr>`).join('');
+  }
+}
+document.querySelectorAll('#actSeg button').forEach((b) => b.addEventListener('click', () => { actMode = b.dataset.a; document.querySelectorAll('#actSeg button').forEach((x) => x.classList.toggle('on', x === b)); loadActivity().catch((e) => toast(e.message, true)); }));
+$('errOnly').addEventListener('change', renderActivity);
+$('actRefresh').addEventListener('click', () => loadActivity().catch((e) => toast(e.message, true)));
 
 // ── devices ──
 async function loadDevices() {
   const d = await api('devices');
+  const blk = can('devices.block');
   $('devEmpty').hidden = d.devices.length > 0;
-  $('devRows').innerHTML = d.devices.map((x) => `<tr data-i="${x.installId}" data-ip="${x.ip}"><td class="mono">${esc(x.install)}${x.blocked ? ' <span class="chip blocked">blocked</span>' : ''}</td><td><span class="chip ${x.tier}">${x.tier}</span>${x.code ? ` <code>${x.code}</code>` : ''}</td><td>${fmt(x.today)}</td><td>${fmt(x.week)}</td><td>${when(x.last)}</td><td class="mono">${esc((x.ip || '').slice(0, 8))}${x.ipBlocked ? ' <span class="chip blocked">blocked</span>' : ''}</td>
-    <td style="white-space:nowrap">${x.blocked ? '' : '<button class="btn sm danger" data-b="i">Block device</button>'} ${x.ipBlocked ? '' : '<button class="btn sm danger" data-b="ip">Block network</button>'}</td></tr>`).join('');
+  $('devRows').innerHTML = d.devices.map((x) => `<tr data-i="${x.installId}" data-ip="${x.ip}"><td class="mono">${esc(x.install)}${x.blocked ? ' <span class="chip blocked">blocked</span>' : ''}</td><td><span class="chip ${x.tier}">${x.tier}</span>${x.code ? ` <code>${x.code}</code>` : ''}</td><td>${fmt(x.postsToday)}</td><td>${fmt(x.postsWeek)}</td><td>${fmt(x.aiToday)}</td><td>${fmt(x.aiWeek)}</td><td>${when(x.last)}</td><td class="mono">${esc((x.ip || '').slice(0, 8))}${x.ipBlocked ? ' <span class="chip blocked">blocked</span>' : ''}</td>
+    <td style="white-space:nowrap">${blk && !x.blocked ? '<button class="btn sm danger" data-b="i">Block device</button>' : ''} ${blk && !x.ipBlocked && x.ip ? '<button class="btn sm danger" data-b="ip">Block network</button>' : ''}</td></tr>`).join('');
   $('blockEmpty').hidden = d.blocks.length > 0;
-  $('blockRows').innerHTML = d.blocks.map((b) => `<tr data-s="${esc(b.subject)}"><td class="mono">${b.subject.startsWith('ip:') ? 'Network ' : 'Device '}${esc(b.subject.slice(b.subject.indexOf(':') + 1, b.subject.indexOf(':') + 9))}</td><td>${esc(b.reason) || '–'}</td><td>${when(b.at)}</td><td><button class="btn sm" data-u>Unblock</button></td></tr>`).join('');
+  $('blockRows').innerHTML = d.blocks.map((b) => `<tr data-s="${esc(b.subject)}"><td class="mono">${b.subject.startsWith('ip:') ? 'Network ' : 'Device '}${esc(b.subject.slice(b.subject.indexOf(':') + 1, b.subject.indexOf(':') + 9))}</td><td>${esc(b.reason) || '–'}</td><td>${when(b.at)}</td><td>${blk ? '<button class="btn sm" data-u>Unblock</button>' : ''}</td></tr>`).join('');
 }
-$('devRows').onclick = async (e) => {
+$('devRows').addEventListener('click', async (e) => {
   const b = e.target.closest('button[data-b]'); if (!b) return;
   const tr = b.closest('tr');
   const subject = b.dataset.b === 'i' ? `i:${tr.dataset.i}` : `ip:${tr.dataset.ip}`;
-  try { await api('blocks', { method: 'POST', body: { subject, reason: 'Blocked from the admin portal' } }); toast('Blocked'); loadDevices(); } catch (err) { toast(err.message, true); }
-};
-$('blockRows').onclick = async (e) => {
+  try { await api('blocks', { method: 'POST', body: { subject, reason: `Blocked by ${me.name}` } }); toast('Blocked'); loadDevices(); } catch (err) { toast(err.message, true); }
+});
+$('blockRows').addEventListener('click', async (e) => {
   if (!e.target.closest('[data-u]')) return;
   try { await api(`blocks/${encodeURIComponent(e.target.closest('tr').dataset.s)}`, { method: 'DELETE' }); toast('Unblocked'); loadDevices(); } catch (err) { toast(err.message, true); }
-};
+});
+
+// ── team ──
+let team = [];
+async function loadTeam() {
+  await ensureSettings();
+  const d = await api('team');
+  team = d.members;
+  $('teamCount').textContent = `(${team.length})`;
+  $('teamRows').innerHTML = team.map((m) => `<tr data-id="${m.id}">
+    <td><b>${esc(m.name)}</b>${m.ownOnly ? '<div class="muted small">Own codes only</div>' : ''}</td>
+    <td>${esc(m.email) || '<span class="muted">admin password</span>'}</td>
+    <td><span class="chip ${m.owner ? 'ok' : 'plan'}">${esc(m.roleName)}</span></td>
+    <td><span class="chip ${m.status}">${m.status === 'invited' ? 'invite sent' : m.status === 'expired' ? 'invite expired' : m.status}</span></td>
+    <td>${fmt(m.codes)}</td>
+    <td>${cash(m.amount30)} <span class="muted small">(${fmt(m.codes30)})</span></td>
+    <td>${m.owner ? '–' : when(m.lastLoginAt)}</td>
+    <td style="white-space:nowrap">${m.owner ? '' : `<button class="btn sm" data-t="edit">Edit</button> <button class="btn sm" data-t="link">${m.status === 'active' ? 'Reset password' : 'New invite link'}</button> <button class="btn sm" data-t="toggle">${m.status === 'disabled' ? 'Turn on' : 'Turn off'}</button> <button class="btn sm danger" data-t="del">Remove</button>`}</td>
+  </tr>`).join('');
+  if (can('audit')) {
+    const a = (await api('audit')).audit;
+    $('auditRows').innerHTML = a.map((x) => `<tr><td style="white-space:nowrap">${when(x.at)}</td><td>${esc(x.actorName || x.actor)}</td><td>${esc(x.action)}</td><td class="muted">${esc(x.detail)}</td></tr>`).join('') || '<tr><td colspan="4" class="muted">Nothing yet.</td></tr>';
+  }
+}
+function linkModal(title, m, link, exp) {
+  const msg = `Hi ${m.name.split(' ')[0]}, you’ve been added to the ${settings.business_name || 'RitPost'} admin team as ${m.roleName}.\n\nOpen this link to choose your password (it works for 7 days, once):\n${link}\n\nAfter that, sign in at ${location.origin}/admin with your email (${m.email}).`;
+  openModal(`<h3>${esc(title)}</h3>
+    <p style="margin:0">Send this to <b>${esc(m.name)}</b>. Anyone with the link can set the password, so send it only to them. It works once, until ${when(exp)}.</p>
+    <label class="f">Sign-in link<span style="display:flex;gap:6px"><input type="text" readonly value="${esc(link)}" id="lnk"><button class="btn" id="cpLnk">Copy</button></span></label>
+    <label class="f">Message<textarea id="lnkMsg" rows="7">${esc(msg)}</textarea></label>
+    <div class="row"><span class="sp"></span><button class="btn" id="cpMsg">Copy message</button><button class="btn primary" data-close>Done</button></div>`);
+  $('cpLnk').addEventListener('click', () => copy(link));
+  $('cpMsg').addEventListener('click', () => copy($('lnkMsg').value));
+}
+$('tAdd').addEventListener('click', async () => {
+  const body = { name: $('tName').value, email: $('tEmail').value, role: $('tRole').value, ownOnly: $('tOwn').checked };
+  try {
+    const r = await api('team', { method: 'POST', body });
+    linkModal('Team member added', { name: body.name.trim(), email: body.email.trim().toLowerCase(), roleName: $('tRole').selectedOptions[0].textContent }, r.link, r.expiresAt);
+    $('tName').value = ''; $('tEmail').value = ''; $('tOwn').checked = false;
+    loadTeam();
+  } catch (e) { toast(e.message, true); }
+});
+$('teamRows').addEventListener('click', async (e) => {
+  const b = e.target.closest('button[data-t]'); if (!b) return;
+  const m = team.find((x) => x.id === b.closest('tr').dataset.id);
+  try {
+    if (b.dataset.t === 'link') { const r = await api(`team/${m.id}/invite`, { method: 'POST' }); linkModal(m.status === 'active' ? 'Password reset link' : 'New invite link', m, r.link, r.expiresAt); return loadTeam(); }
+    if (b.dataset.t === 'toggle') { await api(`team/${m.id}`, { method: 'PATCH', body: { status: m.status === 'disabled' ? 'active' : 'disabled' } }); toast(m.status === 'disabled' ? `${m.name} can sign in again` : `${m.name} is signed out and can’t sign in`); return loadTeam(); }
+    if (b.dataset.t === 'del') return confirmBox(`Remove ${m.name}?`, 'They’re signed out straight away. Codes they sold keep working and stay in your sales figures.', 'Remove', async () => { await api(`team/${m.id}`, { method: 'DELETE' }); toast('Removed'); loadTeam(); });
+    if (b.dataset.t === 'edit') {
+      openModal(`<h3>Edit ${esc(m.name)}</h3>
+        <div class="form"><label class="f">Name<input id="mName" type="text" maxlength="60" value="${esc(m.name)}"></label>
+        <label class="f">Role<select id="mRole">${['admin', 'sales', 'support', 'viewer'].map((r) => `<option value="${r}"${r === m.role ? ' selected' : ''}>${r[0].toUpperCase() + r.slice(1)}</option>`).join('')}</select></label></div>
+        <label class="switch"><input id="mOwn" type="checkbox"${m.ownOnly ? ' checked' : ''}> Only sees the codes they sell</label>
+        <p class="muted small" style="margin:0">Changing the role signs them out, so the new role applies straight away.</p>
+        <div class="row"><span class="sp"></span><button class="btn" data-close>Cancel</button><button class="btn primary" id="mSave">Save</button></div>`);
+      $('mSave').addEventListener('click', async () => { try { await api(`team/${m.id}`, { method: 'PATCH', body: { name: $('mName').value, role: $('mRole').value, ownOnly: $('mOwn').checked } }); toast('Saved'); closeModal(); loadTeam(); } catch (err) { toast(err.message, true); } });
+    }
+  } catch (err) { toast(err.message, true); }
+});
 
 // ── settings ──
-const FIELDS = { sService: 'service_on', sFree: 'free_on', sFreeDaily: 'free_daily', sFreeIp: 'free_ip_daily', sPremDaily: 'premium_daily', sPremDev: 'premium_devices', sGlobal: 'global_daily', sMaxChars: 'max_chars', sModel: 'model', sPriceIn: 'price_in', sPriceOut: 'price_out', sAnn: 'announcement', sUpText: 'upgrade_text', sUpUrl: 'upgrade_url' };
+const FIELDS = { sService: 'service_on', sFree: 'free_on', sFreeIp: 'free_ip_daily', sGlobal: 'global_daily', sMaxChars: 'max_chars', sModel: 'model', sPriceIn: 'price_in', sPriceOut: 'price_out', sAnn: 'announcement', sUpText: 'upgrade_text', sUpUrl: 'upgrade_url', sBiz: 'business_name', sCur: 'currency' };
 async function loadSettings() {
   settings = (await api('settings')).settings; pill(settings);
   if (settings.model && ![...$('sModel').options].some((o) => o.value === settings.model)) $('sModel').append(new Option(settings.model, settings.model));
   for (const [id, k] of Object.entries(FIELDS)) { const el = $(id); if (el.type === 'checkbox') el.checked = !!settings[k]; else el.value = settings[k] ?? ''; }
 }
-$('loadModels').onclick = async () => {
+$('loadModels').addEventListener('click', async () => {
   try {
     const { models } = await api('models');
     const cur = $('sModel').value;
@@ -445,44 +826,75 @@ $('loadModels').onclick = async () => {
     $('sModel').value = cur;
     toast(`${models.length} models found`);
   } catch (e) { toast(e.message, true); }
-};
-$('saveSettings').onclick = async () => {
+});
+$('saveSettings').addEventListener('click', async () => {
   const body = {};
-  for (const [id, k] of Object.entries(FIELDS)) { const el = $(id); body[k] = el.type === 'checkbox' ? el.checked : el.type === 'number' ? Number(el.value) : el.value; }
+  for (const [id, k] of Object.entries(FIELDS)) { const el = $(id); body[k] = el.type === 'checkbox' ? el.checked : el.type === 'number' ? Number(el.value) : el.value.trim(); }
   try { settings = (await api('settings', { method: 'PUT', body })).settings; pill(settings); toast('Settings saved'); } catch (e) { toast(e.message, true); }
-};
+});
+$('savePw').addEventListener('click', async () => {
+  const a = $('np1').value.trim(), b = $('np2').value.trim();
+  if (a.length < 8) return toast('Use at least 8 characters.', true);
+  if (a !== b) return toast('The two passwords are different.', true);
+  try { await api('password', { method: 'PUT', body: { password: a } }); $('np1').value = ''; $('np2').value = ''; toast('Admin password saved'); } catch (e) { toast(e.message, true); }
+});
+$('saveMyPw').addEventListener('click', async () => {
+  const a = $('mp1').value.trim(), b = $('mp2').value.trim();
+  if (a.length < 8) return toast('Use at least 8 characters.', true);
+  if (a !== b) return toast('The two new passwords are different.', true);
+  try { await api('me/password', { method: 'PUT', body: { current: $('mp0').value, password: a } }); ['mp0', 'mp1', 'mp2'].forEach((id) => ($(id).value = '')); toast('Password changed'); } catch (e) { toast(e.message, true); }
+});
 
 // ── modal ──
-function openModal(html) { $('sheet').innerHTML = html; $('modal').hidden = false; $('sheet').querySelectorAll('[data-close]').forEach((b) => (b.onclick = closeModal)); }
+function openModal(html) { $('sheet').innerHTML = html; $('modal').hidden = false; $('sheet').querySelectorAll('[data-close]').forEach((b) => b.addEventListener('click', closeModal)); }
 function closeModal() { $('modal').hidden = true; }
 $('modal').addEventListener('click', (e) => { if (e.target.id === 'modal') closeModal(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
 function confirmBox(title, text, okLabel, run) {
   openModal(`<h3>${esc(title)}</h3><p style="margin:0">${esc(text)}</p><div class="row"><span class="sp"></span><button class="btn" data-close>Cancel</button><button class="btn primary" id="okBtn" style="background:var(--danger)">${esc(okLabel)}</button></div>`);
-  $('okBtn').onclick = async () => { closeModal(); try { await run(); } catch (e) { toast(e.message, true); } };
+  $('okBtn').addEventListener('click', async () => { closeModal(); try { await run(); } catch (e) { toast(e.message, true); } });
 }
 
-function start() { $('loginView').hidden = true; $('app').hidden = false; show('dash'); }
-$('savePw').onclick = async () => {
-  const a = $('np1').value.trim(), b = $('np2').value.trim();
-  if (a.length < 8) return toast('Use at least 8 characters.', true);
-  if (a !== b) return toast('The two passwords are different.', true);
-  try { await api('password', { method: 'PUT', body: { password: a } }); $('np1').value = ''; $('np2').value = ''; toast('Admin password saved'); } catch (e) { toast(e.message, true); }
-};
+function start(who) {
+  me = who; settings = {}; plans = [];
+  applyPerms();
+  $('loginView').hidden = true; $('inviteView').hidden = true; $('app').hidden = false;
+  show('dash');
+}
 
-// One-time sign-in link from open-admin.ps1: #login=<token>
-async function magic() {
-  const m = /[#&]login=([0-9a-f]{64})/.exec(location.hash);
-  if (!m) return false;
+// One-time sign-in link from open-admin.ps1 (#login=…) or a team invite (#invite=…).
+async function fromLink() {
+  const login = /[#&]login=([0-9a-f]{64})/.exec(location.hash);
+  const invite = /[#&]invite=([0-9a-f]{64})/.exec(location.hash);
+  if (!login && !invite) return false;
   history.replaceState(null, '', location.pathname);
-  try {
-    const r = await fetch('/admin/magic', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: m[1] }) }).then((x) => x.json());
-    if (!r.ok) throw new Error(r.error || 'This sign-in link did not work.');
-    token = r.session; store.set('rp-admin', token); start(); toast('Signed in');
-  } catch (e) { signOut(); $('loginErr').textContent = e.message; $('loginErr').hidden = false; }
+  if (login) {
+    const r = await post('/admin/magic', { token: login[1] });
+    if (r.ok) { token = r.session; store.set('rp-admin', token); start(r.me); toast('Signed in'); }
+    else { signOut(); $('loginErr').textContent = r.error || 'This sign-in link did not work.'; $('loginErr').hidden = false; }
+    return true;
+  }
+  const tok = invite[1];
+  const info = await post('/admin/invite', { token: tok });
+  if (!info.ok) { signOut(); $('loginErr').textContent = info.error; $('loginErr').hidden = false; return true; }
+  $('loginView').hidden = true; $('app').hidden = true; $('inviteView').hidden = false;
+  $('invWho').textContent = `Welcome, ${info.name}. You’re joining as ${info.role}. You’ll sign in with ${info.email}.`;
+  const go = async () => {
+    const a = $('inv1').value.trim(), b = $('inv2').value.trim();
+    $('invErr').hidden = true;
+    if (a.length < 8) { $('invErr').textContent = 'Use at least 8 characters.'; $('invErr').hidden = false; return; }
+    if (a !== b) { $('invErr').textContent = 'The two passwords are different.'; $('invErr').hidden = false; return; }
+    const r = await post('/admin/invite', { token: tok, password: a });
+    if (!r.ok) { $('invErr').textContent = r.error; $('invErr').hidden = false; return; }
+    token = r.session; store.set('rp-admin', token); start(r.me); toast('Welcome to the team');
+  };
+  $('invBtn').addEventListener('click', go);
+  $('inv2').addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
   return true;
 }
-magic().then((used) => { if (used) return; if (token) api('login').then(start, () => signOut()); else signOut(); });
+fromLink().then((used) => { if (used) return; if (token) api('me').then((r) => start(r.me), () => signOut()); else signOut(); });
+// A link opened in a tab where the portal is already open only changes the #part.
+window.addEventListener('hashchange', () => { fromLink(); });
 </script>
 </body>
 </html>

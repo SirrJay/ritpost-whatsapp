@@ -6,9 +6,10 @@
  * - Starts Facebook posting runs (content/facebook.js does the work in the Facebook tab).
  * - Saves backup files through the downloads API.
  * - Runs scheduled posts (chrome.alarms) and shows notifications for them.
+ * - Checks each posting run against the user's RitPost plan (posting limits set in the admin portal).
  */
 
-importScripts('lib/schedule.js');
+importScripts('lib/schedule.js', 'lib/config.js');
 
 const WA_URL = 'https://web.whatsapp.com/';
 const WA_MATCH = 'https://web.whatsapp.com/*';
@@ -104,10 +105,19 @@ async function scanChats(windowId) {
 }
 
 async function startRun(payload, windowId) {
-  let tab = await findTab(windowId);
-  if (tab) await focusTab(tab);
-  else tab = await chrome.tabs.create({ url: WA_URL, active: true, ...(windowId ? { windowId } : {}) });
-  return sendToContent(tab.id, { type: 'RITPOST_START', payload }, 30000);
+  const denied = await planGate('whatsapp', payload?.items?.length || 1, { auto: payload?.settings?.mode === 'auto', scheduled: !!payload?.scheduleId });
+  if (denied) return denied;
+  try {
+    let tab = await findTab(windowId);
+    if (tab) await focusTab(tab);
+    else tab = await chrome.tabs.create({ url: WA_URL, active: true, ...(windowId ? { windowId } : {}) });
+    const res = await sendToContent(tab.id, { type: 'RITPOST_START', payload }, 30000);
+    if (!res?.ok) settleClaim('whatsapp', 0).catch(() => {});
+    return res;
+  } catch (e) {
+    settleClaim('whatsapp', 0).catch(() => {});
+    throw e;
+  }
 }
 
 async function controlRun(action, windowId) {
@@ -172,6 +182,8 @@ async function fbScan(windowId, kind = 'groups') {
 
 async function fbStart(run, windowId) {
   if (!run?.items?.length) return { ok: false, error: 'Pick at least one Facebook group or Page.' };
+  const denied = await planGate('facebook', run.items.length, { auto: run.mode === 'auto', scheduled: !!run.scheduleId });
+  if (denied) return denied;
   const first = run.items[0].url;
   let tab = await findFbTab(windowId);
   const fbRun = {
@@ -273,12 +285,17 @@ async function socialStart(run, windowId) {
   if (run.platform === 'x' && !files.length && !(run.caption || run.thread?.some(Boolean))) return { ok: false, error: 'Write something or attach a photo first.' };
   const cur = await getSocialRun();
   if (socialActive(cur)) return { ok: false, error: `Another ${socialName(cur.platform)} post is still open. Finish or stop it first.` };
+  const denied = await planGate(run.platform, 1, { auto: run.mode === 'auto', scheduled: !!run.scheduleId });
+  if (denied) return denied;
 
   const fresh = { ...run, id: Date.now().toString(36), status: 'running', step: 'start', startedAt: Date.now(), error: '', errorShown: false };
   if (run.platform === 'instagram' && run.kind === 'story') {
     const win = await chrome.windows.create({ url: 'about:blank', type: 'popup', width: 430, height: 880, focused: true });
     const tabId = win.tabs?.[0]?.id;
-    if (tabId === undefined) return { ok: false, error: 'Couldn’t open the Story window.' };
+    if (tabId === undefined) {
+      settleClaim(run.platform, 0).catch(() => {});
+      return { ok: false, error: 'Couldn’t open the Story window.' };
+    }
     await setStoryRule(tabId).catch(() => {});
     await chrome.storage.local.set({ socialRun: { ...fresh, tabId, windowId: win.id } });
     await chrome.tabs.update(tabId, { url: `${IG_URL}#ritpost-story` });
@@ -324,6 +341,104 @@ chrome.storage.onChanged.addListener((changes, area) => {
   const r = area === 'local' && changes.socialRun?.newValue;
   // A finished Story run no longer needs the phone layout.
   if (r && r.kind === 'story' && r.status !== 'running') setStoryRule(null).catch(() => {});
+});
+
+// ─────────────── Plan limits (RitPost server) ───────────────
+// Before each run RitPost asks the server whether it fits the user's plan (platforms included,
+// posts per day, groups per run, Automatic mode, scheduling). Posts a stopped run didn't make
+// are given back. If the server can't be reached, the last known plan is used.
+const planServer = () => String(self.RITPOST_CONFIG?.aiServer || '').replace(/\/+$/, '');
+const PLAN_NAMES = { whatsapp: 'WhatsApp', facebook: 'Facebook', instagram: 'Instagram', x: 'X' };
+const utcDay = (t = Date.now()) => new Date(t).toISOString().slice(0, 10);
+
+async function planIdentity() {
+  const d = await chrome.storage.local.get(['aiInstallId', 'aiSettings']);
+  let installId = d.aiInstallId;
+  if (typeof installId !== 'string' || !/^[A-Za-z0-9_-]{16,64}$/.test(installId)) {
+    installId = (globalThis.crypto?.randomUUID?.() || `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}rp`).replace(/[^A-Za-z0-9-]/g, '');
+    await chrome.storage.local.set({ aiInstallId: installId });
+  }
+  return { installId, code: typeof d.aiSettings?.code === 'string' ? d.aiSettings.code : '' };
+}
+
+/** POST to the RitPost server; null when it can't be reached or has trouble (never blocks posting). */
+async function planFetch(path, body) {
+  const base = planServer();
+  if (!base || typeof fetch !== 'function') return null;
+  const ctrl = typeof AbortController === 'function' ? new AbortController() : null;
+  const timer = setTimeout(() => ctrl?.abort(), 12000);
+  try {
+    const res = await fetch(`${base}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: ctrl?.signal });
+    const data = await res.json().catch(() => null);
+    // 404: a server from before plans existed; 5xx: trouble. Neither may block posting.
+    return data && res.status < 500 && res.status !== 404 ? data : null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+const planRefusal = (code, error, upgradeUrl = '') => ({ ok: false, code, error, upgradeUrl });
+
+/** Without the server: the same checks against the last plan RitPost saw (up to a week old). */
+async function offlineGate(platform, count, { auto, scheduled }) {
+  const { planCache } = await chrome.storage.local.get('planCache');
+  const p = planCache?.plan;
+  if (!p || Date.now() - (planCache.at || 0) > 7 * 86400000) return null;
+  const name = PLAN_NAMES[platform];
+  const pf = p.platforms?.[platform];
+  const f = p.features || {};
+  if (pf && !pf.on) return planRefusal('plan_locked', `Posting to ${name} isn’t included in your ${p.planName} plan.`);
+  if (scheduled && f.schedule === false) return planRefusal('plan_schedule', `Scheduled posting isn’t included in your ${p.planName} plan.`);
+  if (auto && f.auto === false) return planRefusal('plan_auto', `Automatic mode isn’t included in your ${p.planName} plan. Switch to Manual, or upgrade.`);
+  if (f.perRun && count > f.perRun) return planRefusal('plan_run', `Your ${p.planName} plan posts to up to ${f.perRun} at a time, and you picked ${count}. Pick fewer, or upgrade.`);
+  if (pf && pf.remaining !== null && pf.remaining !== undefined && utcDay(planCache.at) === utcDay()) {
+    if (count > pf.remaining) return planRefusal('plan_limit', pf.remaining ? `You have ${pf.remaining} ${name} post${pf.remaining === 1 ? '' : 's'} left today (${p.planName} plan). Pick ${pf.remaining} or fewer, or upgrade.` : `You’ve used today’s ${name} posts on the ${p.planName} plan. They reset at midnight (UTC).`);
+    pf.remaining -= count;
+    pf.used = (pf.used || 0) + count;
+    await chrome.storage.local.set({ planCache: { ...planCache, plan: p } });
+  }
+  return null;
+}
+
+/** null = go ahead; otherwise a refusal to show (code plan_locked / plan_limit / plan_run / plan_auto / plan_schedule). */
+async function planGate(platform, count, { auto = false, scheduled = false } = {}) {
+  if (!planServer()) return null;
+  const who = await planIdentity();
+  const data = await planFetch('/v1/posts/claim', { ...who, platform, count, auto, scheduled });
+  if (data?.plan) await chrome.storage.local.set({ planCache: { plan: data.plan, at: Date.now() } });
+  if (data?.ok) {
+    await chrome.storage.local.set({ [`planClaim_${platform}`]: { count, at: Date.now() } });
+    return null;
+  }
+  if (data) return planRefusal(data.code || 'plan', data.error || 'Your plan doesn’t allow this post.', data.upgradeUrl || '');
+  return offlineGate(platform, count, { auto, scheduled });
+}
+
+/** A run ended: give back the posts it didn't make. */
+async function settleClaim(platform, used, startedAt = 0) {
+  const key = `planClaim_${platform}`;
+  const claim = (await chrome.storage.local.get(key))[key];
+  if (!claim) return;
+  await chrome.storage.local.remove(key);
+  if (startedAt && claim.at > startedAt + 60000) return; // belongs to a later run
+  const back = claim.count - Math.max(0, used || 0);
+  if (back <= 0) return;
+  const data = await planFetch('/v1/posts/release', { ...(await planIdentity()), platform, count: back });
+  if (data?.plan) await chrome.storage.local.set({ planCache: { plan: data.plan, at: Date.now() } });
+}
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local') return;
+  const wa = changes.lastRun?.newValue;
+  if (wa?.done && !changes.lastRun.oldValue?.done) settleClaim('whatsapp', wa.counts?.sent || 0, wa.startedAt).catch(() => {});
+  const fr = changes.fbRun?.newValue;
+  const fo = changes.fbRun?.oldValue;
+  if (fr && fo && (fo.status === 'running' || fo.status === 'waiting') && (fr.status === 'done' || fr.status === 'stopped'))
+    settleClaim('facebook', (fr.results || []).filter((r) => r.status === 'posted').length, fr.startedAt).catch(() => {});
+  const sr = changes.socialRun?.newValue;
+  if (sr && changes.socialRun.oldValue?.status === 'running' && sr.status !== 'running') settleClaim(sr.platform, sr.status === 'done' ? 1 : 0, sr.startedAt).catch(() => {});
 });
 
 // ─────────────── Scheduled posts ───────────────
@@ -594,6 +709,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
 chrome.runtime.onInstalled.addListener(async ({ reason }) => {
   configurePanel();
+  // RitPost AI is included now; older versions could store a personal OpenAI key: remove it.
+  const { aiSettings } = await chrome.storage.local.get('aiSettings');
+  if (aiSettings && ('key' in aiSettings || 'models' in aiSettings || 'model' in aiSettings)) {
+    const { key, model, models, ...rest } = aiSettings;
+    await chrome.storage.local.set({ aiSettings: rest });
+  }
   if (reason === 'install') {
     const { settings } = await chrome.storage.local.get('settings');
     if (!settings) await chrome.storage.local.set({ settings: { delayMs: 2000, mode: 'manual', intervalSec: 6, randomize: true, autoAck: false } });

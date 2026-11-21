@@ -3,7 +3,7 @@
 ## Single purpose
 
 ```
-RitPost helps a user post one message to their own WhatsApp groups (WhatsApp Web), Facebook groups and Pages, Instagram account and X account, with a built-in photo editor, an optional AI writing assistant (the user's own OpenAI account), an emoji picker and scheduling. It opens each selected group, fills in the message and attachments, and lets the user send or post it (on WhatsApp it can optionally send after a user-controlled countdown; on Facebook the user clicks Post, also in optional Automatic mode, where RitPost prepares each post after a review countdown with long pauses and a daily limit).
+RitPost helps a user post one message to their own WhatsApp groups (WhatsApp Web), Facebook groups and Pages, Instagram account and X account, with a built-in photo editor, an AI writing assistant, an emoji picker, scheduling, and free/premium plans. It opens each selected group, fills in the message and attachments, and lets the user send or post it (on WhatsApp it can optionally send after a user-controlled countdown; on Facebook the user clicks Post, also in optional Automatic mode, where RitPost prepares each post after a review countdown with long pauses and a daily limit).
 ```
 
 ## Permission justifications
@@ -68,28 +68,23 @@ Used only when the user posts to Instagram from RitPost. RitPost opens Instagram
 Used only when the user posts to X from RitPost. RitPost opens X's composer, fills in the user's text (or a thread the user approved), adds the photos/video the user chose, and the user clicks Post (in optional Automatic mode RitPost clicks Post after a review countdown). It does not read the timeline, messages or followers.
 ```
 
-**Host permission: https://api.openai.com/***
+**RitPost server (no host permission needed; the server allows RitPost's origin)**
 ```
-Used only by the optional AI writing assistant, with the user's own OpenAI API key. When the user clicks "Check & save", RitPost lists the models in their account; when the user clicks "Generate", it sends the post text they asked to rewrite (and their optional brand-voice note) to OpenAI and shows the rewrites. Nothing is sent otherwise.
-```
-
-**RitPost AI server (no host permission needed; the server allows RitPost's origin)**
-```
-When the user clicks Generate without their own OpenAI key, RitPost sends the text to rewrite and the chosen options to the publisher's RitPost AI server (a Cloudflare Worker), which calls OpenAI and returns the rewrites. The server stores no post text; it keeps a 90-day usage log (time, random device id, plan, access code, token counts, hashed network address) to enforce free and premium daily limits.
+RitPost has free and premium plans (premium is unlocked with an access code from the publisher). Before each posting run, RitPost asks the publisher's RitPost server (a Cloudflare Worker) whether the run fits the user's plan, sending only the platform, the number of groups/posts in the run, whether it is scheduled or automatic, a random device id and the access code if any (never message text, files or group names). When the user clicks Generate in the AI writing assistant, RitPost sends the text to rewrite and the chosen options to the same server, which calls OpenAI and returns the rewrites. The server stores no post text; it keeps a 90-day usage log (time, random device id, plan, access code, counts, token counts, hashed network address) to enforce plan limits.
 ```
 
 ## Remote code
 
-**No, I am not using remote code.** All JavaScript is included in the package. RitPost loads no external scripts, uses no eval of downloaded code, and has no servers.
+**No, I am not using remote code.** All JavaScript is included in the package. RitPost loads no external scripts and uses no eval of downloaded code. Its server only answers plan checks and AI rewrites with data (JSON), never code.
 
 ## Data usage
 
-RitPost reads **website content** (chat names and the message being written) on WhatsApp Web, the names and links of the user's Facebook groups (when the user imports them), and keeps any files the user attaches. Everything is processed and stored **only on the user's device**, with one user-initiated exception: when the user clicks Generate in the AI writing assistant, the text they chose to rewrite is sent to OpenAI, either directly with their own key or through the publisher's RitPost AI server, which keeps a usage log (no post text) to enforce daily limits.
+RitPost reads **website content** (chat names and the message being written) on WhatsApp Web, the names and links of the user's Facebook groups (when the user imports them), and keeps any files the user attaches. Everything is processed and stored **only on the user's device**, with two exceptions: plan checks (platform, number of posts in a run, random device id, access code) sent to the publisher's RitPost server before each run, and, when the user clicks Generate in the AI writing assistant, the text they chose to rewrite, sent through the same server to OpenAI. The server keeps a usage log (no post text) to enforce plan limits.
 
 Tick in the dashboard:
 
-- [x] **Website content**: group names, Facebook group/Page links, message and caption text, attached and edited files: handled locally; message text is sent to OpenAI only when the user uses the optional AI assistant with their own key
-- [x] **Authentication information**: the user's own OpenAI API key, stored locally and sent only to api.openai.com
+- [x] **Website content**: group names, Facebook group/Page links, message and caption text, attached and edited files: handled locally; text the user asks the AI assistant to rewrite is sent through the RitPost server to OpenAI
+- [x] **User activity**: the number of posts per run and platform, sent to the RitPost server to apply plan limits
 - [ ] Personally identifiable information
 - [ ] Health information
 - [ ] Financial and payment information
@@ -97,9 +92,8 @@ Tick in the dashboard:
 - [ ] Personal communications. *If a reviewer asks, see the note below.*
 - [ ] Location
 - [ ] Web history
-- [ ] User activity
 
-> Note: Google defines "collect" as transmitting data off the device. The only transmission is the user-initiated AI rewrite (to the RitPost AI server and OpenAI, or to OpenAI with the user's own key), which is why Website content and Authentication information are ticked above. If you'd rather be conservative, also tick **Personal communications**, since the tool composes messages. It does no harm when the privacy policy clearly says everything stays local.
+> Note: Google defines "collect" as transmitting data off the device. The only transmissions are the plan checks (post counts) and the user-initiated AI rewrite (through the RitPost server to OpenAI), which is why Website content and User activity are ticked above. If you'd rather be conservative, also tick **Personal communications**, since the tool composes messages. It does no harm when the privacy policy clearly says everything stays local.
 
 Certify all three:
 

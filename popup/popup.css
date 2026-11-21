@@ -761,3 +761,34 @@ body[data-tab="social"] #lastRun { display: none !important; }
 .rpai-premium { font-size: 12.5px; color: var(--ink-2); }
 .rpai-box .hint, .rpai-box .link-note { margin: 0; }
 .rpai-box input { background: var(--bg); }
+
+/* ── Your plan (Settings), plan line in the footer, upgrade window ── */
+.plan-box { margin-bottom: 14px; }
+.plan-title { font-size: 13px; font-weight: 600; color: var(--ink); }
+.plan-title .muted { font-weight: 400; }
+.plan-usage { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.plan-usage li { display: grid; grid-template-columns: 84px 1fr auto; gap: 8px; align-items: center; font-size: 12.5px; }
+.plan-usage li b { font-weight: 600; color: var(--ink-2); }
+.plan-usage li .val { color: var(--ink); font-weight: 600; white-space: nowrap; }
+.plan-usage li.off .val { color: var(--muted); font-weight: 500; }
+.plan-usage .run-bar { background: var(--bg); }
+.plan-usage li.low .run-bar > div { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+.plan-feats { display: flex; flex-wrap: wrap; gap: 4px; }
+.plan-feats span { font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 999px; background: var(--bg); color: var(--ink-2); border: 1px solid var(--line); }
+.plan-feats span.no { color: var(--muted); text-decoration: line-through; }
+.plan-actions { display: flex; gap: 6px; }
+.chip.premium { background: var(--brand-2); color: #fff; }
+.plan-note { margin-top: 6px; font-size: 11.5px; color: var(--muted); display: flex; gap: 6px; align-items: center; justify-content: center; text-align: center; flex-wrap: wrap; }
+.plan-note b { color: var(--ink-2); font-weight: 600; }
+.plan-note.warn { color: #b45309; }
+.plan-note.locked { color: var(--danger); }
+.plan-note .link { font-size: 11.5px; }
+.up-reason { margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--danger-soft); color: var(--ink); font-size: 13px; }
+.up-offers { display: grid; gap: 8px; }
+.up-offer { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: grid; gap: 4px; background: var(--surface); }
+.up-offer.cur { border-color: var(--brand-2); background: var(--brand-soft); }
+.up-offer .t { display: flex; align-items: baseline; gap: 8px; }
+.up-offer .t b { font-size: 14px; }
+.up-offer .t .price { color: var(--brand-ink); font-weight: 700; font-size: 12.5px; }
+.up-offer ul { margin: 2px 0 0; padding-left: 18px; font-size: 12px; color: var(--ink-2); }
+.up-acts { display: flex; gap: 8px; flex-wrap: wrap; }

@@ -56,14 +56,15 @@ FEATURES
 • Post the same message to Facebook groups and the Pages you manage, manually or automatically with safe pacing
 • Post to Instagram (photos, carousels, Reels and Stories) and X (posts with photos or video, and threads), with a preview and a final edit before publishing
 • RitPost Studio photo editor: crop for posts and Stories, fit with a blurred background, 15 filters, adjustments, text, emoji stickers, labels and drawing
-• AI writing assistant, free daily rewrites included (premium codes for more) or with your own OpenAI account: improve, make professional, shorten, translate or write versions for WhatsApp, Facebook, Instagram and X at once, with tone, audience, call to action, hashtags, brand voice and presets
+• Free plan for everyone, premium plans with an access code: more posts a day, more groups per run, more AI rewrites
+• AI writing assistant included, no OpenAI account needed: improve, make professional, shorten, translate or write versions for WhatsApp, Facebook, Instagram and X at once, with tone, audience, call to action, hashtags, brand voice and presets
 • Emoji picker everywhere you write, saved hashtag sets and live character counters
 • Schedule posts for later or on repeat (daily, weekdays or chosen days) for WhatsApp, Facebook, Instagram and X, with reminders, Post now, Pause and Edit
 • Backup and restore of groups, lists, templates and Facebook groups
 • Light and dark mode
 
 PRIVACY
-Everything stays in your browser. RitPost has no servers, no accounts, no analytics and no tracking. Your messages and group names are never sent anywhere.
+Your groups, messages and files stay in your browser. RitPost has no analytics and no tracking. It only contacts the RitPost server to check your plan's limits (post counts, never content) and for AI rewrites you ask for.
 
 PLEASE NOTE
 • Manual mode, where you press Enter for each message, is the default.

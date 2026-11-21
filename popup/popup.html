@@ -411,6 +411,21 @@
     </section>
 
     <section id="tab-settings" class="panel" hidden>
+      <div id="rpaiBox" class="rpai-box plan-box" hidden>
+        <div class="rpai-head"><b>Your plan</b> <span id="rpaiTier" class="chip"></span><span class="spacer"></span><button type="button" class="link" id="rpaiRefresh">Refresh</button></div>
+        <div id="planTitle" class="plan-title"></div>
+        <ul id="planUsage" class="plan-usage"></ul>
+        <div id="planFeats" class="plan-feats"></div>
+        <p id="rpaiAnn" class="link-note" hidden></p>
+        <div id="rpaiCodeRow" class="ai-key-row">
+          <input id="rpaiCode" type="text" placeholder="Have an access code? RP-XXXX-XXXX-XXXX" autocomplete="off" spellcheck="false" aria-label="Access code">
+          <button type="button" id="rpaiActivate" class="btn primary sm">Activate</button>
+        </div>
+        <div id="rpaiPremium" class="rpai-premium" hidden><span id="rpaiPremText"></span> <button type="button" class="link danger" id="rpaiRemove">Remove code</button></div>
+        <div class="plan-actions"><button type="button" id="planUpgrade" class="btn secondary sm">See plans &amp; upgrade</button></div>
+        <p class="hint" id="rpaiHint"></p>
+      </div>
+
       <div class="setting">
         <div>
           <div class="s-title">Automatic sending interval</div>
@@ -443,32 +458,9 @@
 
       <div class="ai-setting" id="aiSetting">
         <div class="s-title">✨ AI writing assistant</div>
-        <div id="rpaiBox" class="rpai-box" hidden>
-          <div class="rpai-head"><b>RitPost AI</b> <span id="rpaiTier" class="chip"></span><span class="spacer"></span><button type="button" class="link" id="rpaiRefresh">Refresh</button></div>
-          <div id="rpaiUsage" class="rpai-usage"></div>
-          <div class="run-bar"><div id="rpaiFill"></div></div>
-          <p id="rpaiAnn" class="link-note" hidden></p>
-          <div id="rpaiCodeRow" class="ai-key-row">
-            <input id="rpaiCode" type="text" placeholder="Have an access code? RP-XXXX-XXXX-XXXX" autocomplete="off" spellcheck="false" aria-label="Premium access code">
-            <button type="button" id="rpaiActivate" class="btn primary sm">Activate</button>
-          </div>
-          <div id="rpaiPremium" class="rpai-premium" hidden><span id="rpaiPremText"></span> <button type="button" class="link danger" id="rpaiRemove">Remove code</button></div>
-          <p class="hint" id="rpaiHint"></p>
-        </div>
-        <div class="muted" id="ownKeyIntro">Use your own OpenAI account. Paste an API key from <b>platform.openai.com → API keys</b>. The key stays in this browser; your text is sent to OpenAI only when you click <b>Generate</b>, and OpenAI bills your account.</div>
-        <div class="ai-key-row">
-          <input id="aiKey" type="password" placeholder="Paste your OpenAI API key (sk-…)" autocomplete="off" spellcheck="false" aria-label="OpenAI API key">
-          <button type="button" id="aiKeyShow" class="btn secondary sm" title="Show or hide the key">Show</button>
-          <button type="button" id="aiKeySave" class="btn primary sm">Check &amp; save</button>
-        </div>
-        <div class="ai-model-row" id="aiModelRow" hidden>
-          <label for="aiModel">Model</label>
-          <select id="aiModel"></select>
-        </div>
         <p class="hint" id="aiStatus"></p>
         <label for="aiBrand" class="ai-sub">About you / your brand voice <span class="muted">(optional, used when you tick “Use my brand voice”)</span></label>
         <textarea id="aiBrand" rows="2" maxlength="600" placeholder="e.g. Ritworld Family Church, Accra. Warm, hopeful and faith-filled; we call members “family”."></textarea>
-        <button type="button" id="aiKeyRemove" class="link danger" hidden>Remove my key</button>
       </div>
 
       <div class="setting">
@@ -541,6 +533,7 @@
     </button>
     <button id="schedBtn" class="btn secondary lg sched-btn" type="button" title="Schedule this post for later" aria-label="Schedule this post for later"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2a8 8 0 1 1 0 16 8 8 0 0 1 0-16Zm0 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13Zm.75 2.75v3.44l2.28 2.28-1.06 1.06-2.72-2.72V6.25h1.5Z"/></svg></button>
     </div>
+    <div id="planNote" class="plan-note" hidden></div>
   </footer>
 
   <!-- Generic dialog -->

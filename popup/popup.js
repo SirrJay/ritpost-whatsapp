@@ -219,6 +219,7 @@ function checkRow(name, checked, onChange, extra) {
 
 function switchTab(name) {
   document.body.dataset.tab = name;
+  setTimeout(() => typeof renderPlanNote === 'function' && renderPlanNote(), 0);
   $('fbStartBtn').hidden = name !== 'facebook';
   $('socStartBtn').hidden = name !== 'social';
   document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.tab === name));
@@ -1713,7 +1714,7 @@ async function start() {
     renderStatus();
     toast(`Sending started: ${plural(items.length, 'group')}. Press Enter in WhatsApp for each one.`);
   } else {
-    toast(res?.error || 'Couldn’t start. Make sure WhatsApp Web is open and signed in.', true);
+    if (!planBlocked(res)) toast(res?.error || 'Couldn’t start. Make sure WhatsApp Web is open and signed in.', true);
     renderCounts();
   }
 }
@@ -2157,7 +2158,7 @@ function fbConfirmStart() {
         const res = await bg('BG_FB_START', { run });
         if (res?.ok) toast(auto ? `Automatic Facebook posting started: ${fbWhat(g, p)}.` : `Facebook posting started: ${fbWhat(g, p)}. Click Post on Facebook for each one.`);
         else {
-          toast(res?.error || 'Couldn’t open Facebook.', true);
+          if (!planBlocked(res)) toast(res?.error || 'Couldn’t open Facebook.', true);
           renderFbCounts();
         }
       })();
@@ -2379,6 +2380,7 @@ function socPlan(platform = soc.settings.platform, kind = soc.settings.kind) {
 }
 
 function openStudio(id) {
+  if (!planHas('studio')) return showUpgrade({ reason: `RitPost Studio isn’t included in your ${planName()} plan.` });
   const url = chrome.runtime.getURL(`editor/editor.html${id ? `?id=${encodeURIComponent(id)}` : ''}`);
   chrome.tabs.create({ url, active: true, ...(WINDOW_ID ? { windowId: WINDOW_ID } : {}) }).catch(() => window.open(url, '_blank'));
 }
@@ -2597,6 +2599,7 @@ function renderSocRun() {
 }
 
 function renderSocStart() {
+  renderPlanNote();
   const plan = socPlan();
   const btn = $('socStartBtn');
   btn.disabled = !!plan.error || socActive();
@@ -2776,7 +2779,7 @@ async function socStart(plan) {
   const res = await bg('BG_SOCIAL_START', { run });
   if (res?.ok) toast(s.mode === 'auto' ? `Opening ${platLabel(plan.platform)}: RitPost posts after the review countdown.` : `Opening ${platLabel(plan.platform)}: check the post there and click ${plan.platform === 'x' ? 'Post' : 'Share'}.`);
   else {
-    toast(res?.error || `Couldn’t open ${platLabel(plan.platform)}.`, true);
+    if (!planBlocked(res)) toast(res?.error || `Couldn’t open ${platLabel(plan.platform)}.`, true);
     renderSocStart();
   }
 }
@@ -2885,7 +2888,7 @@ function socBind() {
   setInterval(() => !document.hidden && soc.run && renderSocRun(), 30000);
 }
 
-// ─────────────── AI writing assistant (OpenAI) ───────────────
+// ─────────────── Your plan and the AI writing assistant (RitPost server) ───────────────
 const AI_ACTIONS = [
   ['improve', '✨ Improve', 'Make it clearer, more engaging and polished'],
   ['professional', '💼 Professional', 'Rewrite it in a polished, professional, credible style'],
@@ -2902,41 +2905,26 @@ const AI_PURPOSES = ['Announcement', 'Event invitation', 'Reminder', 'Promotion 
 const AI_AUDIENCES = ['Everyone', 'Customers', 'Church members', 'Community or group members', 'Professionals and business people', 'Young people', 'Parents and families', 'Students'];
 const AI_LANGS = ['English', 'French', 'Spanish', 'Portuguese', 'German', 'Arabic', 'Swahili', 'Hausa', 'Yoruba', 'Igbo', 'Twi', 'Ewe', 'Pidgin English', 'Chinese', 'Hindi'];
 const AI_DEFAULTS = { action: 'improve', platform: 'same', tone: '', purpose: '', audience: '', length: '', format: '', emoji: '', language: 'same', hook: false, cta: false, ctaText: '', hashtags: 0, waFormat: false, keep: true, useBrand: true, custom: '', count: 3 };
-const ai = { key: '', model: '', models: [], brand: '', last: { ...AI_DEFAULTS }, presets: [], busy: null, installId: '', code: '', plan: null, info: {}, codeError: '' };
+const ai = { brand: '', last: { ...AI_DEFAULTS }, presets: [], busy: null, installId: '', code: '', plan: null, info: {}, codeError: '' };
 
 async function aiLoad() {
-  const { aiSettings, aiInstallId } = await chrome.storage.local.get(['aiSettings', 'aiInstallId']);
+  const { aiSettings, aiInstallId, planCache } = await chrome.storage.local.get(['aiSettings', 'aiInstallId', 'planCache']);
   ai.installId = typeof aiInstallId === 'string' && /^[A-Za-z0-9_-]{16,64}$/.test(aiInstallId) ? aiInstallId : (crypto.randomUUID?.() || `${uid()}${uid()}`).replace(/[^A-Za-z0-9-]/g, '');
   if (ai.installId !== aiInstallId) chrome.storage.local.set({ aiInstallId: ai.installId });
   const s = aiSettings || {};
   Object.assign(ai, {
-    key: typeof s.key === 'string' ? s.key : '',
-    model: s.model || '',
-    models: Array.isArray(s.models) ? s.models : [],
     brand: s.brand || '',
     last: { ...AI_DEFAULTS, ...(s.last || {}) },
     presets: Array.isArray(s.presets) ? s.presets.filter((p) => p?.name && p?.opts) : [],
     code: typeof s.code === 'string' ? s.code : '',
   });
+  // The last plan RitPost saw, until the server answers.
+  if (planCache?.plan) ai.plan = planCache.plan;
 }
-const aiSave = () => persist({ aiSettings: { key: ai.key, model: ai.model, models: ai.models, brand: ai.brand, last: ai.last, presets: ai.presets, code: ai.code } });
-const maskKey = (k) => (k ? `${k.slice(0, 5)}…${k.slice(-4)}` : '');
+const aiSave = () => persist({ aiSettings: { brand: ai.brand, last: ai.last, presets: ai.presets, code: ai.code } });
 
 function renderAiSettings() {
-  $('aiKey').value = ai.key ? maskKey(ai.key) : '';
-  $('aiKey').dataset.masked = ai.key ? '1' : '';
-  $('aiKey').type = 'password';
-  $('aiKeyShow').textContent = 'Show';
-  $('aiKeyRemove').hidden = !ai.key;
-  $('aiModelRow').hidden = !ai.key || !ai.models.length;
-  $('aiModel').replaceChildren(...ai.models.map((m) => h('option', { value: m, selected: m === ai.model }, m)));
   $('aiBrand').value = ai.brand;
-  const hasServer = !!window.RitAI?.hasServer();
-  $('aiStatus').textContent = ai.key ? `Connected · ${ai.model || 'no model chosen'}${hasServer ? ' · used instead of RitPost AI' : ''}` : hasServer ? 'Optional: only if you want to use your own OpenAI account.' : 'Not set up yet.';
-  $('aiStatus').classList.toggle('ok', !!ai.key);
-  $('ownKeyIntro').innerHTML = hasServer
-    ? '<b>Or use your own OpenAI key</b> (no daily limit; OpenAI bills you). Paste a key from platform.openai.com → API keys. It stays in this browser.'
-    : 'Use your own OpenAI account. Paste an API key from <b>platform.openai.com → API keys</b>. The key stays in this browser; your text is sent to OpenAI only when you click <b>Generate</b>, and OpenAI bills your account.';
   renderRitpostAI();
 }
 
@@ -2945,50 +2933,124 @@ const fmtResets = () => {
   const next = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1);
   return new Date(next).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 };
-/** One line about the RitPost AI plan, e.g. "Free plan: 28 of 30 rewrites left today". */
+const PLAN_PLATS = ['whatsapp', 'facebook', 'instagram', 'x'];
+const planName = (p = ai.plan) => p?.planName || (p?.tier === 'premium' ? 'Premium' : 'Free');
+/** One line about AI rewrites, e.g. "Free plan: 28 of 30 rewrites left today". */
 function planLine(p = ai.plan) {
   if (!p) return '';
-  return p.tier === 'premium'
-    ? `Premium${p.label ? ` (${p.label})` : ''}: ${p.remaining} of ${p.limit} rewrites left today`
-    : `Free plan: ${p.remaining} of ${p.limit} rewrites left today`;
+  if (p.limit <= 0) return `${planName(p)} plan: AI rewrites aren’t included`;
+  return `${planName(p)}${p.label ? ` (${p.label})` : ''} plan: ${p.remaining} of ${p.limit} rewrites left today`;
+}
+/** What the plan allows on a platform: { on, daily, used, remaining } (remaining null = unlimited). */
+const planPlat = (platform, p = ai.plan) => p?.platforms?.[platform] || null;
+/** false only when the known plan leaves out a feature (schedule, auto, studio). */
+const planHas = (feature, p = ai.plan) => p?.features?.[feature] !== false;
+
+function usageRow(label, used, limit, on = true) {
+  const unlimited = limit === null || limit === undefined;
+  const left = unlimited ? null : Math.max(0, limit - used);
+  const val = !on ? 'Not included' : unlimited ? (used ? `${used} today · no limit` : 'No limit') : `${left} of ${limit} left`;
+  const pct = !on ? 0 : unlimited ? 100 : limit ? Math.min(100, Math.round((used / limit) * 100)) : 100;
+  const low = on && !unlimited && left <= Math.max(1, Math.floor(limit * 0.2));
+  return h('li', { class: `${on ? '' : 'off'}${low ? ' low' : ''}` }, h('b', {}, label), h('div', { class: 'run-bar' }, h('div', { style: `width:${pct}%${unlimited && on ? ';opacity:.4' : ''}` })), h('span', { class: 'val' }, val));
 }
 
 function renderRitpostAI() {
   const box = $('rpaiBox');
-  box.hidden = !window.RitAI?.hasServer();
-  if (box.hidden) return;
+  const hasServer = !!window.RitAI?.hasServer();
+  box.hidden = !hasServer;
   const p = ai.plan;
+  $('aiStatus').textContent = !hasServer
+    ? 'Not available in this copy of RitPost.'
+    : !p
+      ? 'Included with RitPost. Click ✨ AI in Compose or on an Instagram / X caption.'
+      : p.limit > 0
+        ? `Included in your ${planName(p)} plan: ${p.remaining} of ${p.limit} rewrites left today. Click ✨ AI in Compose or on a caption.`
+        : `AI rewrites aren’t included in your ${planName(p)} plan.`;
+  renderPlanNote();
+  if (!hasServer) return;
   const premium = p?.tier === 'premium';
-  $('rpaiTier').textContent = premium ? 'Premium' : p ? 'Free' : '';
-  $('rpaiTier').className = `chip ${premium ? 'active' : ''}`;
-  $('rpaiUsage').textContent = p ? planLine(p) : ai.info.error || 'Checking your plan…';
-  $('rpaiFill').style.width = p ? `${Math.min(100, Math.round((p.used / Math.max(1, p.limit)) * 100))}%` : '0%';
+  $('rpaiTier').textContent = p ? planName(p) : '';
+  $('rpaiTier').className = `chip ${premium ? 'premium' : ''}`;
+  $('planTitle').replaceChildren(
+    p
+      ? h('span', {}, premium ? `${planName(p)} plan${p.label ? ` · ${p.label}` : ''}` : 'Free plan', h('span', { class: 'muted' }, p.expiresAt ? ` · until ${new Date(p.expiresAt).toLocaleDateString()}` : premium ? ' · no expiry' : ' · no code needed'))
+      : h('span', { class: 'muted' }, ai.info.error || 'Checking your plan…')
+  );
+  setChildren(
+    $('planUsage'),
+    ...(p?.platforms ? PLAN_PLATS.map((k) => usageRow(platLabel(k), p.platforms[k].used || 0, p.platforms[k].daily, p.platforms[k].on)) : []),
+    p ? usageRow('AI rewrites', p.used || 0, p.limit, p.limit > 0) : null
+  );
+  const f = p?.features;
+  setChildren(
+    $('planFeats'),
+    ...(f
+      ? [
+          h('span', {}, f.perRun ? `Up to ${f.perRun} groups / Pages per run` : 'Any number of groups per run'),
+          h('span', { class: f.schedule ? '' : 'no' }, 'Scheduled posts'),
+          h('span', { class: f.auto ? '' : 'no' }, 'Automatic mode'),
+          h('span', { class: f.studio ? '' : 'no' }, 'RitPost Studio'),
+        ]
+      : [])
+  );
   $('rpaiAnn').hidden = !ai.info.announcement;
   $('rpaiAnn').textContent = ai.info.announcement || '';
   $('rpaiCodeRow').hidden = premium;
   $('rpaiPremium').hidden = !premium;
-  $('rpaiPremText').textContent = premium ? `Code ${ai.code}${p.expiresAt ? ` · valid until ${new Date(p.expiresAt).toLocaleDateString()}` : ''}` : '';
+  $('rpaiPremText').textContent = premium ? `Code ${ai.code}` : '';
+  $('planUpgrade').hidden = !(ai.info.offers?.length || ai.info.upgradeUrl);
+  $('planUpgrade').textContent = premium ? 'See other plans' : 'See plans & upgrade';
   const hint = [];
   if (ai.codeError) hint.push(ai.codeError);
-  if (p) hint.push(`Rewrites reset daily at ${fmtResets()} (midnight UTC).`);
+  if (p) hint.push(`Daily limits reset at ${fmtResets()} (midnight UTC).`);
   if (!premium && ai.info.upgradeText) hint.push(ai.info.upgradeText);
-  if (ai.key) hint.push('Your own OpenAI key below is being used instead.');
   $('rpaiHint').textContent = hint.join(' ');
 }
+
+/** The small line under the Start button: posts left today on the platform you're posting to. */
+function renderPlanNote() {
+  const el = $('planNote');
+  if (!el) return;
+  const tab = document.body.dataset.tab || 'compose';
+  const platform = tab === 'facebook' ? 'facebook' : tab === 'social' ? soc.settings.platform : tab === 'compose' || tab === 'groups' ? 'whatsapp' : null;
+  const p = ai.plan;
+  const pf = platform && planPlat(platform, p);
+  el.hidden = !pf;
+  if (!pf) return;
+  const up = h('button', { type: 'button', class: 'link', onclick: () => showUpgrade() }, p.tier === 'premium' ? 'Plans' : 'Upgrade');
+  el.className = 'plan-note';
+  if (!pf.on) {
+    el.classList.add('locked');
+    setChildren(el, h('span', {}, `🔒 ${platLabel(platform)} isn’t in your ${planName(p)} plan.`), up);
+    return;
+  }
+  if (pf.remaining === null) {
+    setChildren(el, h('span', {}, h('b', {}, `${planName(p)} plan`), ` · ${platLabel(platform)}: no daily limit${p.features?.perRun ? ` · up to ${p.features.perRun} per run` : ''}`));
+    return;
+  }
+  if (pf.remaining <= Math.max(1, Math.floor(pf.daily * 0.2))) el.classList.add('warn');
+  setChildren(el, h('span', {}, h('b', {}, `${planName(p)} plan`), ` · ${pf.remaining} of ${pf.daily} ${platLabel(platform)} posts left today${p.features?.perRun ? ` · up to ${p.features.perRun} per run` : ''}`), p.tier === 'premium' ? null : up);
+}
+
+/** Remember the plan for the background worker (used when the server can't be reached). */
+const planRemember = () => ai.plan && chrome.storage.local.set({ planCache: { plan: ai.plan, at: Date.now() } });
 
 async function aiRefreshStatus() {
   if (!window.RitAI?.hasServer()) return;
   try {
     const r = await window.RitAI.status({ installId: ai.installId, code: ai.code });
     ai.plan = r.plan;
-    ai.info = { announcement: r.announcement, upgradeText: r.upgradeText, upgradeUrl: r.upgradeUrl };
+    ai.info = { announcement: r.announcement, upgradeText: r.upgradeText, upgradeUrl: r.upgradeUrl, offers: r.offers || [] };
     ai.codeError = '';
   } catch (e) {
     // A stored code that stopped working: say why and fall back to the free plan.
-    ai.plan = e.plan || null;
+    if (e.plan) ai.plan = e.plan;
     ai.codeError = e.code && /code/.test(e.code) ? e.message : '';
-    if (!e.plan) ai.info = { ...ai.info, error: e.message };
+    if (e.info) ai.info = { announcement: e.info.announcement, upgradeText: e.info.upgradeText, upgradeUrl: e.info.upgradeUrl, offers: e.info.offers || [] };
+    else if (!ai.plan) ai.info = { ...ai.info, error: e.message };
   }
+  planRemember();
   renderRitpostAI();
 }
 
@@ -3003,9 +3065,10 @@ async function aiActivateCode() {
     ai.plan = r.plan;
     ai.codeError = '';
     await aiSave();
+    planRemember();
     $('rpaiCode').value = '';
     renderRitpostAI();
-    toast(`Premium activated: ${r.plan.limit} rewrites a day`);
+    toast(`${planName(r.plan)} plan activated${r.plan.expiresAt ? ` until ${new Date(r.plan.expiresAt).toLocaleDateString()}` : ''}`);
   } catch (e) {
     toast(e.message, true);
   } finally {
@@ -3013,30 +3076,55 @@ async function aiActivateCode() {
   }
 }
 
-async function aiCheckKey() {
-  const input = $('aiKey');
-  const typed = input.dataset.masked === '1' ? ai.key : input.value.trim();
-  if (!typed) return toast('Paste your OpenAI API key first.', true);
-  if (!/^sk-/.test(typed)) return toast('OpenAI API keys start with “sk-”. Copy it again from platform.openai.com → API keys.', true);
-  const btn = $('aiKeySave');
-  btn.disabled = true;
-  $('aiStatus').textContent = 'Checking with OpenAI…';
-  try {
-    const models = await window.RitAI.listModels(typed);
-    if (!models.length) throw new Error('This key works, but no chat models are available in your OpenAI account.');
-    ai.key = typed;
-    ai.models = models;
-    if (!models.includes(ai.model)) ai.model = models[0];
-    await aiSave();
-    renderAiSettings();
-    toast(`AI ready: ${ai.model}`);
-  } catch (e) {
-    $('aiStatus').textContent = e.message;
-    $('aiStatus').classList.remove('ok');
-    toast(e.message, true);
-  } finally {
-    btn.disabled = false;
-  }
+/** Upgrade window: why (if a limit was hit), the plans on offer, and how to get one. */
+function showUpgrade({ reason = '' } = {}) {
+  const p = ai.plan;
+  const offers = ai.info.offers || [];
+  const lim = (pf) => (!pf?.on ? null : pf.daily === null ? 'no daily limit' : `${pf.daily} a day`);
+  const offerCard = (o) => {
+    const plats = PLAN_PLATS.filter((k) => o.platforms?.[k]?.on).map((k) => `${platLabel(k)} (${lim(o.platforms[k])})`);
+    return h(
+      'div',
+      { class: `up-offer${p?.planId === o.id ? ' cur' : ''}` },
+      h('div', { class: 't' }, h('b', {}, o.name), o.price ? h('span', { class: 'price' }, o.price) : null, p?.planId === o.id ? h('span', { class: 'chip' }, 'Your plan') : null),
+      o.description ? h('div', { class: 'muted' }, o.description) : null,
+      h(
+        'ul',
+        {},
+        plats.length ? h('li', {}, `Post to ${plats.join(', ')}`) : null,
+        h('li', {}, o.perRun ? `Up to ${o.perRun} groups or Pages per run` : 'Any number of groups or Pages per run'),
+        o.ai ? h('li', {}, `${o.ai} AI rewrites a day`) : null,
+        [o.schedule && 'scheduled posts', o.auto && 'Automatic mode', o.studio && 'RitPost Studio'].filter(Boolean).length ? h('li', {}, `Includes ${[o.schedule && 'scheduled posts', o.auto && 'Automatic mode', o.studio && 'RitPost Studio'].filter(Boolean).join(', ')}`) : null,
+        o.days ? h('li', {}, `Valid ${o.days} days`) : null
+      )
+    );
+  };
+  openDialog({
+    title: p?.tier === 'premium' ? '⭐ RitPost plans' : '⭐ Upgrade RitPost',
+    hideConfirm: true,
+    body: h(
+      'div',
+      { class: 'ai-dialog' },
+      reason ? h('p', { class: 'up-reason' }, reason) : null,
+      p ? h('p', { class: 'hint' }, `You’re on the ${planName(p)} plan${p.expiresAt ? `, valid until ${new Date(p.expiresAt).toLocaleDateString()}` : ''}.`) : null,
+      offers.length ? h('div', { class: 'up-offers' }, ...offers.map(offerCard)) : h('p', {}, ai.info.upgradeText || 'Get an access code from RitPost to unlock more.'),
+      h(
+        'div',
+        { class: 'up-acts' },
+        ai.info.upgradeUrl ? h('a', { class: 'btn primary', href: ai.info.upgradeUrl, target: '_blank', rel: 'noopener' }, 'Get premium') : null,
+        p?.tier === 'premium' ? null : h('button', { type: 'button', class: 'btn secondary', onclick: () => (closeDialog(), switchTab('settings'), setTimeout(() => $('rpaiCode')?.focus(), 60)) }, 'I have an access code')
+      ),
+      h('p', { class: 'hint' }, 'After you pay, you get an access code. Paste it in Settings → Your plan and click Activate.')
+    ),
+  });
+}
+
+/** A run the plan refused: explain it in the upgrade window. Returns true when handled. */
+function planBlocked(res) {
+  if (!res || res.ok || !/^plan_/.test(res.code || '')) return false;
+  aiRefreshStatus();
+  showUpgrade({ reason: res.error });
+  return true;
 }
 
 /** Options → the instructions sent to OpenAI. */
@@ -3075,25 +3163,8 @@ function openAIDialog({ target = 'compose' } = {}) {
   const isCaption = target === 'caption';
   const here = isCaption ? soc.settings.platform : 'whatsapp';
   const source = () => (isCaption ? socCaption() : state.message);
-  if (!ai.key && !window.RitAI.hasServer()) {
-    openDialog({
-      title: '✨ Set up the AI assistant',
-      confirmText: 'Open Settings',
-      body: [
-        h('p', {}, 'RitPost uses your own OpenAI account to rewrite posts.'),
-        h('ol', { class: 'risk' }, h('li', {}, 'Sign in at platform.openai.com and open “API keys”.'), h('li', {}, 'Create a key and copy it.'), h('li', {}, 'Paste it in RitPost → Settings → AI writing assistant, and click “Check & save”.')),
-        h('p', { class: 'muted' }, 'The key stays in this browser. Your text goes to OpenAI only when you click Generate, and OpenAI bills your account (a rewrite usually costs a fraction of a cent).'),
-      ],
-      onConfirm: () => {
-        setTimeout(() => {
-          switchTab('settings');
-          $('aiKey').focus();
-        }, 50);
-        return true;
-      },
-    });
-    return;
-  }
+  if (!window.RitAI.hasServer()) return toast('RitPost AI isn’t available in this copy of RitPost.', true);
+  if (ai.plan && ai.plan.limit <= 0) return showUpgrade({ reason: `AI rewrites aren’t included in your ${planName()} plan.` });
   if (!source().trim()) return toast(isCaption ? 'Write a caption first; AI improves the text you give it.' : 'Write your message first; AI improves the text you give it.', true);
 
   const o = { ...ai.last };
@@ -3135,7 +3206,7 @@ function openAIDialog({ target = 'compose' } = {}) {
   const results = h('div', { class: 'ai-results' });
   const status = h('div', { class: 'ai-status' });
   const genBtn = h('button', { type: 'button', class: 'btn primary block ai-go' }, '✨ Generate 3 versions');
-  const planInfo = h('div', { class: 'hint ai-plan' }, ai.key ? `Using your own OpenAI key (${ai.model})` : planLine());
+  const planInfo = h('div', { class: 'hint ai-plan' }, planLine());
 
   const renderPresets = () =>
     setChildren(
@@ -3280,17 +3351,17 @@ function openAIDialog({ target = 'compose' } = {}) {
     genBtn.classList.add('busy');
     status.parentElement?.querySelectorAll('.ai-err-acts').forEach((x) => x.remove());
     status.className = 'ai-status';
-    setChildren(status, h('span', { class: 'spinner' }), h('span', {}, `Writing with ${ai.model}…`));
+    setChildren(status, h('span', { class: 'spinner' }), h('span', {}, 'Writing…'));
     try {
-      const res = await window.RitAI.rewrite({ key: ai.key, model: ai.model, text: fromText || source(), opts: aiRequestOpts(o, platform), signal: ctrl.signal, installId: ai.installId, code: ai.code });
+      const res = await window.RitAI.rewrite({ text: fromText || source(), opts: aiRequestOpts(o, platform), signal: ctrl.signal, installId: ai.installId, code: ai.code });
       status.replaceChildren();
       if (res.plan) {
         ai.plan = res.plan;
+        planRemember();
         renderRitpostAI();
         planInfo.textContent = planLine();
       }
-      const used = res.usage?.total_tokens ? ` · ${res.usage.total_tokens.toLocaleString()} tokens` : '';
-      const who = res.via === 'ritpost' ? `RitPost AI (${res.model}) · ${planLine()}` : `${res.model}${used}`;
+      const who = `RitPost AI (${res.model}) · ${planLine()}`;
       renderResults(res.variations, aiRequestOpts(o, platform).platform, `Written by ${who}. Check names, dates and links before posting.`);
     } catch (e) {
       status.className = 'ai-status err';
@@ -3300,13 +3371,14 @@ function openAIDialog({ target = 'compose' } = {}) {
         renderRitpostAI();
         planInfo.textContent = planLine();
       }
-      if (e?.code === 'limit' || /code/.test(e?.code || '')) {
+      if (e?.code === 'limit' || e?.code === 'free_off' || /code/.test(e?.code || '')) {
+        const reason = e.message;
         const acts = h(
           'div',
           { class: 'ai-card-acts ai-err-acts' },
-          h('button', { type: 'button', class: 'btn secondary sm', onclick: () => (closeDialog(), switchTab('settings'), setTimeout(() => $('rpaiCode')?.focus(), 60)) }, 'Enter an access code'),
+          h('button', { type: 'button', class: 'btn primary sm', onclick: () => showUpgrade({ reason }) }, 'See plans'),
           ai.info.upgradeUrl ? h('a', { class: 'btn secondary sm', href: ai.info.upgradeUrl, target: '_blank', rel: 'noopener' }, 'Get premium') : null,
-          h('button', { type: 'button', class: 'btn secondary sm', onclick: () => (closeDialog(), switchTab('settings'), setTimeout(() => $('aiKey')?.focus(), 60)) }, 'Use my own OpenAI key')
+          ai.plan?.tier === 'premium' ? null : h('button', { type: 'button', class: 'btn secondary sm', onclick: () => (closeDialog(), switchTab('settings'), setTimeout(() => $('rpaiCode')?.focus(), 60)) }, 'Enter an access code')
         );
         status.after(acts);
       }
@@ -3374,6 +3446,7 @@ function aiBind() {
   $('rpaiActivate').addEventListener('click', aiActivateCode);
   $('rpaiCode').addEventListener('keydown', (e) => e.key === 'Enter' && aiActivateCode());
   $('rpaiRefresh').addEventListener('click', () => aiRefreshStatus().then(() => toast('Plan updated')));
+  $('planUpgrade').addEventListener('click', () => showUpgrade());
   $('rpaiRemove').addEventListener('click', () => {
     const old = ai.code;
     ai.code = '';
@@ -3383,47 +3456,37 @@ function aiBind() {
     toast('Access code removed from this browser', false, { label: 'Undo', run: () => ((ai.code = old), aiSave(), aiRefreshStatus()) });
   });
   document.querySelector('[data-tab=settings]').addEventListener('click', () => aiRefreshStatus());
+  document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () => setTimeout(renderPlanNote, 0)));
   $('aiBtn').addEventListener('click', () => openAIDialog({ target: 'compose' }));
   $('socAiBtn').addEventListener('click', () => openAIDialog({ target: 'caption' }));
-  $('aiKeySave').addEventListener('click', aiCheckKey);
-  $('aiKey').addEventListener('focus', (e) => {
-    if (e.target.dataset.masked === '1') {
-      e.target.value = '';
-      e.target.dataset.masked = '';
-    }
-  });
-  $('aiKey').addEventListener('keydown', (e) => e.key === 'Enter' && aiCheckKey());
-  $('aiKey').addEventListener('blur', (e) => {
-    if (!e.target.value && ai.key) renderAiSettings();
-  });
-  $('aiKeyShow').addEventListener('click', () => {
-    const i = $('aiKey');
-    if (i.dataset.masked === '1') {
-      i.value = ai.key;
-      i.dataset.masked = '';
-    }
-    i.type = i.type === 'password' ? 'text' : 'password';
-    $('aiKeyShow').textContent = i.type === 'password' ? 'Show' : 'Hide';
-  });
-  $('aiModel').addEventListener('change', (e) => {
-    ai.model = e.target.value;
-    aiSave();
-    renderAiSettings();
-    toast(`AI model: ${ai.model}`);
-  });
   $('aiBrand').addEventListener('change', (e) => {
     ai.brand = e.target.value.trim();
     aiSave();
     toast(ai.brand ? 'Brand voice saved' : 'Brand voice cleared');
   });
-  $('aiKeyRemove').addEventListener('click', () => {
-    ai.key = '';
-    ai.models = [];
-    ai.model = '';
-    aiSave();
-    renderAiSettings();
-    toast('Your OpenAI key was removed from RitPost');
+  // Automatic mode is a plan feature: explain instead of switching when it isn't included.
+  for (const id of ['modeSeg', 'fbModeSeg', 'socModeSeg']) {
+    $(id)?.addEventListener(
+      'click',
+      (e) => {
+        if (e.target.closest('button[data-mode="auto"]') && !planHas('auto')) {
+          e.stopImmediatePropagation();
+          e.preventDefault();
+          showUpgrade({ reason: `Automatic mode isn’t included in your ${planName()} plan. Manual mode still works: you press Send / Post yourself.` });
+        }
+      },
+      true
+    );
+  }
+  // The background worker updates the plan after each run.
+  chrome.storage.onChanged.addListener((changes, area) => {
+    const next = area === 'local' && changes.planCache?.newValue?.plan;
+    if (next && JSON.stringify(next) !== JSON.stringify(ai.plan)) {
+      ai.plan = next;
+      renderRitpostAI();
+    }
   });
+  setInterval(() => !document.hidden && aiRefreshStatus(), 15 * 60 * 1000);
 }
 
 // ─────────────── Scheduled posts ───────────────
@@ -3540,6 +3603,7 @@ function schedModeHint(platform, mode) {
 }
 
 function openScheduleDialog({ platform = 'whatsapp', job = null } = {}) {
+  if (!job && !planHas('schedule')) return showUpgrade({ reason: `Scheduled posting isn’t included in your ${planName()} plan.` });
   const editing = !!job;
   const quarter = 15 * 60 * 1000;
   const start = job?.next ? new Date(job.next) : new Date(Math.ceil((Date.now() + 10 * 60 * 1000) / quarter) * quarter);
@@ -3896,7 +3960,7 @@ function schedRunNow(id) {
     confirmText: 'Post now',
     body: h('p', {}, `RitPost starts “${schedTitle(j)}” on ${platLabel(j.platform)} now (${j.targetsLabel}). ${j.repeat?.type === 'once' ? 'This uses up the schedule.' : 'The repeat schedule stays as it is.'}`),
     onConfirm: () => {
-      bg('BG_SCHED_RUN', { id }).then((res) => (res?.ok ? toast('Started.') : toast(res?.error || 'Couldn’t start it.', true)));
+      bg('BG_SCHED_RUN', { id }).then((res) => (res?.ok ? toast('Started.') : planBlocked(res) || toast(res?.error || 'Couldn’t start it.', true)));
       return true;
     },
   });
