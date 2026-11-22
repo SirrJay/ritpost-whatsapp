@@ -803,5 +803,8 @@ body[data-tab="social"] #lastRun { display: none !important; }
 .up-offer .t { display: flex; align-items: baseline; gap: 8px; }
 .up-offer .t b { font-size: 14px; }
 .up-offer .t .price { color: var(--brand-ink); font-weight: 700; font-size: 12.5px; }
+.up-offer .t .price small { font-weight: 500; }
+.up-cur { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--ink-2); }
+.up-cur select { width: auto; min-width: 90px; }
 .up-offer ul { margin: 2px 0 0; padding-left: 18px; font-size: 12px; color: var(--ink-2); }
 .up-acts { display: flex; gap: 8px; flex-wrap: wrap; }

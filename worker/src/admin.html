@@ -117,6 +117,15 @@ code,.mono{font-family:ui-monospace,Consolas,monospace;font-size:12.5px}
 .roles div{display:grid;grid-template-columns:90px 1fr;gap:8px}
 details.adv summary{cursor:pointer;font-weight:600;font-size:13px;color:var(--ink2)}
 .chip.unused{background:rgba(14,165,233,.12);color:#0284c7}
+.fxconv{display:grid;grid-template-columns:minmax(110px,180px) minmax(150px,260px) auto minmax(150px,260px) 1fr;gap:8px;align-items:center}
+.fxres{grid-column:1/-1;font-size:22px;font-weight:700;padding:4px 2px}
+.fxres small{display:block;font-size:12px;font-weight:500;color:var(--muted)}
+.curgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px}
+.curgrid label{display:flex;gap:6px;align-items:center;font-size:13px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;cursor:pointer}
+.curgrid label.on{border-color:var(--brand2);background:var(--brandsoft)}
+.curgrid label.base{opacity:.6;cursor:default}
+.amtcur{display:grid;grid-template-columns:1fr 92px;gap:6px}
+@media (max-width:640px){.fxconv{grid-template-columns:1fr 1fr}.fxconv #fxSwap{grid-column:1/-1}}
 .chip.lapsed{background:var(--warnsoft);color:var(--warn)}
 .chip.stock{background:var(--soft);color:var(--muted)}
 .seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden}
@@ -208,6 +217,20 @@ details.adv summary{cursor:pointer;font-weight:600;font-size:13px;color:var(--in
           <p class="muted small" style="margin:0">A test rewrite uses a tiny bit of your OpenAI credit and proves your key and billing work.</p>
         </div>
       </div>
+      <div class="card grid" id="fxCard">
+        <div class="row"><h2 style="margin:0">Currency exchange</h2><span class="sp"></span><button id="fxRefresh" class="btn sm" data-perm="settings.edit">Refresh rates</button></div>
+        <div class="fxconv">
+          <input id="fxAmt" type="number" min="0" step="any" value="100" aria-label="Amount">
+          <select id="fxFrom" aria-label="From currency"></select>
+          <button id="fxSwap" class="btn" type="button" title="Swap currencies">⇄</button>
+          <select id="fxTo" aria-label="To currency"></select>
+          <div class="fxres" id="fxRes">–</div>
+        </div>
+        <div class="muted small" id="fxInfo"></div>
+        <div id="fxErr" class="note warn" hidden></div>
+        <div class="tablewrap" id="fxPlansWrap"><table><thead id="fxPlanHead"></thead><tbody id="fxPlanRows"></tbody></table></div>
+        <p class="muted small" style="margin:0" id="fxNote"></p>
+      </div>
     </section>
 
     <!-- Codes -->
@@ -218,7 +241,7 @@ details.adv summary{cursor:pointer;font-weight:600;font-size:13px;color:var(--in
           <label class="f">Plan<select id="cPlan"></select><small id="cPlanSum"></small></label>
           <label class="f">Customer<input id="cLabel" type="text" maxlength="80" placeholder="e.g. Grace Mensah"></label>
           <label class="f">Phone or email<input id="cContact" type="text" maxlength="120" placeholder="e.g. 024 000 0000"></label>
-          <label class="f"><span>Amount paid <span id="cCur" class="muted"></span></span><input id="cAmount" type="number" min="0" step="0.01" placeholder="0"></label>
+          <label class="f"><span>Amount paid <span id="cCur" class="muted"></span></span><span class="amtcur"><input id="cAmount" type="number" min="0" step="0.01" placeholder="0"><select id="cPayCur" aria-label="Paid in"></select></span><small id="cAmtHint"></small></label>
           <label class="f">Time starts<select id="cStart"><option value="now">Now: expires on a date</option><option value="activation">When the customer activates it</option></select></label>
           <label class="f" id="cExpWrap">Expires<input id="cExpires" type="date"><small>Empty = never</small></label>
           <label class="f" id="cDurWrap" hidden>Valid for (days after activation)<input id="cDuration" type="number" min="0" max="3650"><small>0 = never expires</small></label>
@@ -362,8 +385,18 @@ details.adv summary{cursor:pointer;font-weight:600;font-size:13px;color:var(--in
           <h2>Your business</h2>
           <div class="form">
             <label class="f">Business name <small>In messages to customers</small><input id="sBiz" type="text" maxlength="60"></label>
-            <label class="f">Currency <small>For amounts paid, e.g. GHS, NGN, USD</small><input id="sCur" type="text" maxlength="8"></label>
           </div>
+        </div>
+        <div class="card grid">
+          <h2>Currencies &amp; exchange</h2>
+          <div class="form">
+            <label class="f">Your currency <small>Plan prices, amounts and sales are in it</small><select id="sCur"></select></label>
+            <label class="f">Exchange margin (%) <small>Added for customers paying in another currency, to cover conversion fees. 0 = market rate.</small><input id="sFxMarkup" type="number" min="0" max="50" step="0.5"></label>
+          </div>
+          <div><div class="f" style="font-weight:600;font-size:13px;margin-bottom:6px">Currencies customers can pay in</div><div class="curgrid" id="sPayCur"></div></div>
+          <label class="f">Your own rates (optional) <small>Fix a rate instead of the live one, e.g. <code>USD=0.065, NGN=105</code> (how much of that currency equals 1 of yours). Empty = live rates.</small><input id="sFxManual" type="text" maxlength="400" placeholder="USD=0.065, NGN=105"></label>
+          <label class="switch"><input id="sFxShow" type="checkbox"> Show plan prices in the customer’s chosen currency in RitPost</label>
+          <p class="muted small" style="margin:0">Live rates come from ExchangeRate-API (open.er-api.com) and refresh every 6 hours. The dashboard has a converter.</p>
         </div>
         <div class="card grid">
           <h2>Messages shown in RitPost</h2>
@@ -516,8 +549,48 @@ async function loadDash() {
   $('seeExpiring')?.addEventListener('click', () => { $('codeFilter').value = 'expiring'; show('codes'); });
   stacked($('postChart'), d.series, PLATS.map((p) => ({ color: PCOLOR[p], get: (x) => x.byPlatform[p] })), (x) => `${x.day}: ${PLATS.map((p) => `${x.byPlatform[p]} ${PNAME[p]}`).join(', ')}; ${x.denied} refused by plan limits`);
   stacked($('chart'), d.series, [{ color: '#a78bfa', get: (x) => x.free }, { color: 'var(--brand2)', get: (x) => x.premium }], (x) => `${x.day}: ${x.free} free, ${x.premium} premium, ${x.errors} errors`);
+  ensurePlans().then(() => ensureFx(true)).then(renderFx).catch(() => {});
   $('planRows').innerHTML = d.plans.filter((p) => p.id !== 'free').map((p) => `<tr><td><span class="chip plan">${esc(p.name)}</span>${p.archived ? ' <span class="muted small">archived</span>' : ''}</td><td>${fmt(p.active)}</td><td>${fmt(p.codes)}</td><td>${cash(p.amount)}</td></tr>`).join('') || '<tr><td colspan="4" class="muted">No paid plans yet.</td></tr>';
 }
+function renderFx() {
+  const card = $('fxCard');
+  if (!fx) { card.hidden = true; return; }
+  card.hidden = false;
+  const base = baseCur();
+  const all = [...new Set([base, ...(fx.payCurrencies || []), 'USD', 'EUR', 'GBP', ...Object.keys(fx.currencies || {})])].filter((c) => c === base || fx.rates[c]);
+  const keep = (sel, v) => curOptions(sel, all, sel.value || v);
+  keep($('fxFrom'), all.includes('USD') && base !== 'USD' ? 'USD' : all[1] || base);
+  keep($('fxTo'), base);
+  $('fxErr').hidden = !fx.error && !fx.stale;
+  $('fxErr').textContent = fx.error || (fx.stale ? 'Couldn’t refresh the rates just now; showing the last ones we had.' : '');
+  const ago = (t) => { const m = Math.round((Date.now() - t) / 60000); return m < 60 ? `${Math.max(1, m)} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} days ago`; };
+  $('fxInfo').textContent = fx.live ? `Market rates from ${fx.source}, updated ${ago(fx.updated || fx.fetchedAt)}.` : '';
+  convertNow();
+  // Plan prices in each currency customers can pay in (with your margin and fixed rates).
+  const cols = payCurs().filter((c) => c === base || fx.customer[c]);
+  const paid = plans.filter((p) => p.id !== 'free' && !p.archived && priceNum(p.price));
+  $('fxPlansWrap').hidden = !paid.length || cols.length < 2;
+  $('fxPlanHead').innerHTML = `<tr><th>Plan</th>${cols.map((c) => `<th>${c}</th>`).join('')}</tr>`;
+  $('fxPlanRows').innerHTML = paid.map((p) => `<tr><td><span class="chip plan">${esc(p.name)}</span></td>${cols.map((c) => `<td style="white-space:nowrap">${money2(priceNum(p.price) * (c === base ? 1 : fx.customer[c]), c)}</td>`).join('')}</tr>`).join('');
+  const notes = [];
+  if (cols.length >= 2) notes.push(`What customers pay for each plan${fx.markup ? `, including your ${fx.markup}% exchange margin` : ''}${Object.keys(fx.manual || {}).length ? `; fixed rates for ${Object.keys(fx.manual).join(', ')}` : ''}.`);
+  $('fxNote').textContent = notes.join(' ');
+}
+function convertNow() {
+  const n = Number($('fxAmt').value) || 0;
+  const from = $('fxFrom').value, to = $('fxTo').value;
+  const v = convert(n, from, to);
+  const one = convert(1, from, to);
+  $('fxRes').innerHTML = v === null ? '<span class="muted">No rate</span>' : `${esc(money2(v, to))}<small>${esc(money2(n, from))} · 1 ${from} = ${one.toPrecision(5)} ${to} · 1 ${to} = ${(1 / one).toPrecision(5)} ${from}</small>`;
+}
+['fxAmt', 'fxFrom', 'fxTo'].forEach((id) => $(id).addEventListener(id === 'fxAmt' ? 'input' : 'change', convertNow));
+$('fxSwap').addEventListener('click', () => { const a = $('fxFrom').value; $('fxFrom').value = $('fxTo').value; $('fxTo').value = a; convertNow(); });
+$('fxRefresh').addEventListener('click', async () => {
+  $('fxRefresh').disabled = true;
+  try { fx = await api('fx', { method: 'POST' }); fxAt = Date.now(); renderFx(); toast(fx.live && !fx.stale ? 'Exchange rates updated' : 'Couldn’t reach the exchange-rate service', !fx.live || fx.stale); }
+  catch (e) { toast(e.message, true); }
+  finally { $('fxRefresh').disabled = false; }
+});
 $('testBtn').addEventListener('click', async () => {
   const out = $('testOut'); out.hidden = false; out.className = 'note ok'; out.textContent = 'Asking OpenAI…'; $('testBtn').disabled = true;
   try { const r = await api('test', { method: 'POST', body: { text: 'join us sunday 9am for service all are welcome' } }); out.innerHTML = `<b>Works.</b> ${esc(r.model)} · ${fmt(r.tokens)} tokens<br>“${esc(r.text)}”`; }
@@ -528,6 +601,44 @@ $('testBtn').addEventListener('click', async () => {
 // ── codes ──
 const paidPlans = () => plans.filter((p) => p.id !== 'free' && !p.archived);
 let batches = [];
+// ── currencies ──
+let fx = null;
+let fxAt = 0;
+let currencyNames = {};
+async function ensureFx(fresh = false) {
+  if (!fresh && fx && Date.now() - fxAt < 10 * 60000) return fx;
+  try { fx = await api('fx'); fxAt = Date.now(); currencyNames = fx.currencies || currencyNames; } catch { fx = fx || null; }
+  return fx;
+}
+const baseCur = () => (fx?.base || settings.currency || '');
+const payCurs = () => [baseCur(), ...(fx?.payCurrencies || []).filter((c) => c !== baseCur())].filter(Boolean);
+/** Market conversion between any two currencies, via your currency. */
+function convert(amount, from, to) {
+  const r = fx?.rates || {};
+  if (from === to) return amount;
+  const a = from === baseCur() ? 1 : r[from];
+  const b = to === baseCur() ? 1 : r[to];
+  return a && b ? (amount / a) * b : null;
+}
+const money2 = (n, cur) => `${cur} ${Number(n).toLocaleString(undefined, { minimumFractionDigits: n >= 100 ? 0 : 2, maximumFractionDigits: 2 })}`;
+const priceNum = (price) => { const m = String(price || '').replace(/,/g, '').match(/\d+(\.\d+)?/); return m ? Number(m[0]) : 0; };
+function curOptions(sel, list, value) {
+  sel.replaceChildren(...list.map((c) => new Option(`${c}${currencyNames[c] ? ` · ${currencyNames[c]}` : ''}`, c)));
+  sel.value = list.includes(value) ? value : list[0] || '';
+}
+/** "≈ GHS 154.20" under an amount typed in another currency. */
+function paidHint(amountEl, curEl, hintEl) {
+  const upd = () => {
+    const n = Number(amountEl.value) || 0;
+    const cur = curEl.value;
+    if (!cur || cur === baseCur() || !n) { hintEl.textContent = ''; return; }
+    const manual = fx?.manual?.[cur];
+    const rate = manual || fx?.rates?.[cur];
+    hintEl.textContent = rate ? `≈ ${money2(n / rate, baseCur())} at ${manual ? 'your rate' : 'today’s rate'} (1 ${baseCur()} = ${rate.toPrecision(4)} ${cur})` : `No rate for ${cur} yet`;
+  };
+  amountEl.addEventListener('input', upd); curEl.addEventListener('change', upd); upd();
+  return upd;
+}
 const STATUS_TXT = { active: 'active', unused: 'not activated', lapsed: 'not activated in time', expired: 'expired', disabled: 'disabled', stock: 'in stock' };
 const daysTxt = (d) => (!d ? 'No expiry' : d % 365 === 0 ? `${d / 365} year${d === 365 ? '' : 's'}` : d % 30 === 0 && d >= 60 ? `${d / 30} months` : `${d} day${d === 1 ? '' : 's'}`);
 const isStock = (c) => c.batchId && !c.issuedAt && !c.activatedAt;
@@ -557,8 +668,10 @@ $('cPlan').addEventListener('change', planDefaults);
 document.querySelectorAll('[data-exp]').forEach((b) => b.addEventListener('click', () => { const n = Number(b.dataset.exp); $('cExpires').value = n ? dateInput(Date.now() + n * DAY) : ''; $('cDuration').value = n; }));
 $('cStart').addEventListener('change', () => { const act = $('cStart').value === 'activation'; $('cExpWrap').hidden = act; $('cDurWrap').hidden = !act; });
 async function loadCodes() {
-  await Promise.all([ensurePlans(true), ensureSettings()]);
-  $('cCur').textContent = settings.currency ? `(${settings.currency})` : '';
+  await Promise.all([ensurePlans(true), ensureSettings(), ensureFx()]);
+  $('cCur').textContent = '';
+  curOptions($('cPayCur'), payCurs(), $('cPayCur').value || baseCur());
+  if (!paidHint.sell) paidHint.sell = paidHint($('cAmount'), $('cPayCur'), $('cAmtHint')); else paidHint.sell();
   const cur = $('cPlan').value;
   $('cPlan').replaceChildren(...paidPlans().map((p) => new Option(`${p.name}${p.price ? ` · ${p.price}` : ''}`, p.id)));
   if (cur && paidPlans().some((p) => p.id === cur)) $('cPlan').value = cur; else planDefaults();
@@ -602,7 +715,7 @@ function renderCodes() {
     <td style="white-space:nowrap">${fmt(c.postsToday)} posts<div class="muted small">${fmt(c.usedToday)} / ${fmt(c.dailyLimit)} AI</div></td>
     <td>${c.devices} / ${c.maxDevices}</td>
     <td style="white-space:nowrap${exp ? ';color:var(--warn);font-weight:600' : ''}">${!c.activatedAt && c.durationDays && !c.expiresAt ? `<span class="muted">${daysTxt(c.durationDays)} after activation</span>` : dateOnly(c.expiresAt)}${!c.activatedAt && c.redeemBy ? `<div class="muted small">activate by ${dateOnly(c.redeemBy)}</div>` : ''}</td>
-    <td style="white-space:nowrap">${c.amount ? cash(c.amount) : '<span class="muted">–</span>'}</td>
+    <td style="white-space:nowrap">${c.amount ? cash(c.amount) : '<span class="muted">–</span>'}${c.payCurrency ? `<div class="muted small">paid ${money2(c.payAmount, c.payCurrency)}</div>` : ''}</td>
     <td>${esc(c.createdByName)}</td>
     <td>${when(c.lastUsedAt)}</td>
     <td style="white-space:nowrap">${can('codes.edit') ? '<button class="btn sm" data-act="edit">Edit</button>' : can('codes.support') ? '<button class="btn sm" data-act="reset">Reset devices</button>' : ''} ${can('codes.support') ? `<button class="btn sm" data-act="toggle">${c.status === 'disabled' ? 'Enable' : 'Disable'}</button>` : ''} ${can('codes.delete') ? '<button class="btn sm danger" data-act="delete">Delete</button>' : ''}</td>
@@ -651,12 +764,13 @@ $('createBtn').addEventListener('click', async () => {
   const onAct = $('cStart').value === 'activation';
   $('createBtn').disabled = true;
   try {
-    const body = { planId: plan.id, label: $('cLabel').value, contact: $('cContact').value, amount: $('cAmount').value, note: $('cNote').value, dailyLimit: $('cDaily').value, maxDevices: $('cDevices').value, quantity: $('cQty').value };
+    const body = { planId: plan.id, label: $('cLabel').value, contact: $('cContact').value, amount: $('cAmount').value, payCurrency: $('cPayCur').value, note: $('cNote').value, dailyLimit: $('cDaily').value, maxDevices: $('cDevices').value, quantity: $('cQty').value };
     if (onAct) Object.assign(body, { startOn: 'activation', durationDays: $('cDuration').value });
     else body.expiresAt = exp;
     const r = await api('codes', { method: 'POST', body });
     codesReady(`${r.codes.length === 1 ? 'Code created' : `${r.codes.length} codes created`} · ${plan.name}`, r.codes, plan, { exp: r.expiresAt, durationDays: r.durationDays, contact: $('cContact').value });
     ['cLabel', 'cContact', 'cAmount', 'cNote', 'cDaily', 'cDevices'].forEach((id) => ($(id).value = ''));
+    paidHint.sell?.();
     $('cQty').value = 1; planDefaults();
     loadCodes();
   } catch (e) { toast(e.message, true); }
@@ -669,7 +783,7 @@ function editCode(c) {
       <label class="f">Plan<select id="ePlan">${opts}</select></label>
       <label class="f">Customer<input id="eLabel" type="text" maxlength="80" value="${esc(c.label)}"></label>
       <label class="f">Phone or email<input id="eContact" type="text" maxlength="120" value="${esc(c.contact)}"></label>
-      <label class="f">Amount paid ${esc(settings.currency || '')}<input id="eAmount" type="number" min="0" step="0.01" value="${c.amount || ''}"></label>
+      <label class="f">Amount paid<span class="amtcur"><input id="eAmount" type="number" min="0" step="0.01" value="${c.payCurrency ? c.payAmount : c.amount || ''}"><select id="ePayCur"></select></span><small id="eAmtHint"></small></label>
       ${!c.activatedAt && c.durationDays ? `<label class="f">Valid for (days after activation)<input id="eDuration" type="number" min="0" max="3650" value="${c.durationDays}"><small>Not activated yet${c.redeemBy ? ` · activate by ${dateOnly(c.redeemBy)}` : ''}</small></label>` : `<label class="f">Expires<input id="eExpires" type="date" value="${dateInput(c.expiresAt)}"><small>${c.activatedAt ? `Activated ${dateOnly(c.activatedAt)} · ` : ''}Empty = never</small></label>`}
       <label class="f">AI rewrites per day<input id="eDaily" type="number" min="0" value="${c.aiOverride ? c.dailyLimit : ''}" placeholder="plan’s"><small>Empty = the plan’s</small></label>
       <label class="f">Devices allowed<input id="eDevices" type="number" min="1" value="${c.devicesOverride ? c.maxDevices : ''}" placeholder="plan’s"><small>Empty = the plan’s</small></label>
@@ -686,10 +800,12 @@ function editCode(c) {
       loadCodes();
     } catch (e) { toast(e.message, true); }
   }));
+  curOptions($('ePayCur'), [...new Set([...payCurs(), c.payCurrency].filter(Boolean))], c.payCurrency || baseCur());
+  paidHint($('eAmount'), $('ePayCur'), $('eAmtHint'));
   $('eReset').addEventListener('click', async () => { try { await api(`codes/${c.raw}/reset-devices`, { method: 'POST' }); toast('Devices reset'); closeModal(); loadCodes(); } catch (e) { toast(e.message, true); } });
   $('eSave').addEventListener('click', async () => {
     try {
-      const body = { planId: $('ePlan').value, label: $('eLabel').value, contact: $('eContact').value, amount: $('eAmount').value, note: $('eNote').value, dailyLimit: $('eDaily').value, maxDevices: $('eDevices').value };
+      const body = { planId: $('ePlan').value, label: $('eLabel').value, contact: $('eContact').value, amount: $('eAmount').value, payCurrency: $('ePayCur').value, note: $('eNote').value, dailyLimit: $('eDaily').value, maxDevices: $('eDevices').value };
       if ($('eDuration')) body.durationDays = $('eDuration').value; else body.expiresAt = fromDateInput($('eExpires').value);
       await api(`codes/${c.raw}`, { method: 'PATCH', body });
       toast('Saved'); closeModal(); loadCodes();
@@ -697,8 +813,9 @@ function editCode(c) {
   });
 }
 const isoDay = (t) => (t ? new Date(t).toISOString().slice(0, 10) : '');
+const paidIn = (c) => (c.payCurrency ? `${c.payCurrency} ${c.payAmount}` : '');
 $('csvBtn').addEventListener('click', () => {
-  const rows = [['code', 'customer', 'contact', 'plan', 'note', 'status', 'batch', 'amount_paid', 'currency', 'sold_by', 'ai_per_day', 'ai_today', 'posts_today', 'devices', 'max_devices', 'valid_days_after_activation', 'activate_by', 'activated', 'expires', 'total_ai_uses', 'created', 'last_used']].concat(codes.map((c) => [c.code, c.label, c.contact, c.planName, c.note, STATUS_TXT[c.status] || c.status, c.batchName, c.amount, settings.currency || '', c.createdByName, c.dailyLimit, c.usedToday, c.postsToday, c.devices, c.maxDevices, c.durationDays || '', isoDay(c.redeemBy), isoDay(c.activatedAt), isoDay(c.expiresAt), c.totalUses, new Date(c.createdAt).toISOString(), c.lastUsedAt ? new Date(c.lastUsedAt).toISOString() : '']));
+  const rows = [['code', 'customer', 'contact', 'plan', 'note', 'status', 'batch', 'amount_paid', 'currency', 'paid_in', 'sold_by', 'ai_per_day', 'ai_today', 'posts_today', 'devices', 'max_devices', 'valid_days_after_activation', 'activate_by', 'activated', 'expires', 'total_ai_uses', 'created', 'last_used']].concat(codes.map((c) => [c.code, c.label, c.contact, c.planName, c.note, STATUS_TXT[c.status] || c.status, c.batchName, c.amount, settings.currency || '', paidIn(c), c.createdByName, c.dailyLimit, c.usedToday, c.postsToday, c.devices, c.maxDevices, c.durationDays || '', isoDay(c.redeemBy), isoDay(c.activatedAt), isoDay(c.expiresAt), c.totalUses, new Date(c.createdAt).toISOString(), c.lastUsedAt ? new Date(c.lastUsedAt).toISOString() : '']));
   download(`ritpost-codes-${new Date().toISOString().slice(0, 10)}.csv`, rows.map((r) => r.map(csvCell).join(',')).join('\n'));
 });
 
@@ -833,15 +950,20 @@ function giveOut(b) {
       <label class="f">How many<input id="iQty" type="number" min="1" max="${b.available}" value="1"><small>${fmt(b.available)} unused</small></label>
       <label class="f">Customer<input id="iLabel" type="text" maxlength="80" placeholder="e.g. Grace Mensah"></label>
       <label class="f">Phone or email<input id="iContact" type="text" maxlength="120" placeholder="+233 24 000 0000"></label>
-      <label class="f"><span>Amount paid <span class="muted">${esc(settings.currency || '')}</span></span><input id="iAmount" type="number" min="0" step="0.01" value="${b.price || ''}"></label>
+      <label class="f">Amount paid<span class="amtcur"><input id="iAmount" type="number" min="0" step="0.01" value="${b.price || ''}"><select id="iPayCur"></select></span><small id="iAmtHint"></small></label>
     </div>
     <div class="row"><span class="sp"></span><button class="btn" data-close>Cancel</button><button class="btn primary" id="iGo">Give out</button></div>`);
-  $('iQty').addEventListener('input', () => { const n = Math.max(1, Number($('iQty').value) || 1); if (b.price) $('iAmount').value = +(b.price * n).toFixed(2); });
+  curOptions($('iPayCur'), payCurs(), baseCur());
+  const iHint = paidHint($('iAmount'), $('iPayCur'), $('iAmtHint'));
+  // The price follows the count, in the currency the customer pays in.
+  const iPrice = () => { const n = Math.max(1, Number($('iQty').value) || 1); if (!b.price) return; const cur = $('iPayCur').value; const r = cur === baseCur() ? 1 : fx?.customer?.[cur]; if (r) $('iAmount').value = +(b.price * n * r).toFixed(2); iHint(); };
+  $('iQty').addEventListener('input', iPrice);
+  $('iPayCur').addEventListener('change', iPrice);
   $('iGo').addEventListener('click', async () => {
     $('iGo').disabled = true;
     try {
       const contact = $('iContact').value;
-      const r = await api(`batches/${b.id}/issue`, { method: 'POST', body: { count: $('iQty').value, label: $('iLabel').value, contact, amount: $('iAmount').value } });
+      const r = await api(`batches/${b.id}/issue`, { method: 'POST', body: { count: $('iQty').value, label: $('iLabel').value, contact, amount: $('iAmount').value, payCurrency: $('iPayCur').value } });
       loadCodes();
       codesReady(`${r.codes.length === 1 ? 'Code' : `${r.codes.length} codes`} for ${$('iLabel').value || 'your customer'}${r.short ? ' (all that were left)' : ''}`, r.codes, plan, { durationDays: r.durationDays, redeemBy: r.redeemBy, contact });
     } catch (e) { toast(e.message, true); $('iGo').disabled = false; }
@@ -1097,11 +1219,28 @@ $('teamRows').addEventListener('click', async (e) => {
 });
 
 // ── settings ──
-const FIELDS = { sService: 'service_on', sFree: 'free_on', sFreeIp: 'free_ip_daily', sGlobal: 'global_daily', sMaxChars: 'max_chars', sModel: 'model', sPriceIn: 'price_in', sPriceOut: 'price_out', sAnn: 'announcement', sUpText: 'upgrade_text', sUpUrl: 'upgrade_url', sBiz: 'business_name', sCur: 'currency' };
+const FIELDS = { sService: 'service_on', sFree: 'free_on', sFreeIp: 'free_ip_daily', sGlobal: 'global_daily', sMaxChars: 'max_chars', sModel: 'model', sPriceIn: 'price_in', sPriceOut: 'price_out', sAnn: 'announcement', sUpText: 'upgrade_text', sUpUrl: 'upgrade_url', sBiz: 'business_name', sCur: 'currency', sFxMarkup: 'fx_markup', sFxManual: 'fx_manual', sFxShow: 'fx_show' };
+function renderPayCur() {
+  const base = $('sCur').value;
+  const chosen = new Set(String(settings.pay_currencies || '').split(',').filter(Boolean));
+  $('sPayCur').querySelectorAll('input:checked').forEach((i) => chosen.add(i.value));
+  $('sPayCur').querySelectorAll('input:not(:checked)').forEach((i) => chosen.delete(i.value));
+  $('sPayCur').innerHTML = Object.entries(currencyNames).map(([c, n]) => `<label class="${c === base ? 'base on' : chosen.has(c) ? 'on' : ''}" title="${esc(n)}"><input type="checkbox" value="${c}"${c === base || chosen.has(c) ? ' checked' : ''}${c === base ? ' disabled' : ''}> <b>${c}</b> <span class="muted small">${esc(n)}</span></label>`).join('');
+  $('sPayCur').querySelectorAll('input').forEach((i) => i.addEventListener('change', () => i.parentElement.classList.toggle('on', i.checked)));
+}
 async function loadSettings() {
-  settings = (await api('settings')).settings; pill(settings);
+  const sr = await api('settings');
+  settings = sr.settings; pill(settings);
+  currencyNames = sr.currencies || currencyNames;
+  const cur = String(settings.currency || '').toUpperCase();
+  const names = { ...currencyNames };
+  if (cur && !names[cur]) names[cur] = cur;
+  $('sCur').replaceChildren(...Object.entries(names).map(([c, n]) => new Option(`${c} · ${n}`, c)));
+  $('sCur').onchange = renderPayCur;
+  $('sPayCur').innerHTML = '';
   if (settings.model && ![...$('sModel').options].some((o) => o.value === settings.model)) $('sModel').append(new Option(settings.model, settings.model));
   for (const [id, k] of Object.entries(FIELDS)) { const el = $(id); if (el.type === 'checkbox') el.checked = !!settings[k]; else el.value = settings[k] ?? ''; }
+  renderPayCur();
 }
 $('loadModels').addEventListener('click', async () => {
   try {
@@ -1115,7 +1254,8 @@ $('loadModels').addEventListener('click', async () => {
 $('saveSettings').addEventListener('click', async () => {
   const body = {};
   for (const [id, k] of Object.entries(FIELDS)) { const el = $(id); body[k] = el.type === 'checkbox' ? el.checked : el.type === 'number' ? Number(el.value) : el.value.trim(); }
-  try { settings = (await api('settings', { method: 'PUT', body })).settings; pill(settings); toast('Settings saved'); } catch (e) { toast(e.message, true); }
+  body.pay_currencies = [...$('sPayCur').querySelectorAll('input:checked:not(:disabled)')].map((i) => i.value).join(',');
+  try { settings = (await api('settings', { method: 'PUT', body })).settings; pill(settings); fx = null; for (const [id, k] of Object.entries(FIELDS)) { const el = $(id); if (el.type !== 'checkbox') el.value = settings[k] ?? ''; } renderPayCur(); toast('Settings saved'); } catch (e) { toast(e.message, true); }
 });
 $('savePw').addEventListener('click', async () => {
   const a = $('np1').value.trim(), b = $('np2').value.trim();

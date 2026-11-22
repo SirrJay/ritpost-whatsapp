@@ -39,7 +39,9 @@ CREATE TABLE IF NOT EXISTS codes (
   batch_id TEXT,                             -- made in a bulk batch
   redeem_by INTEGER,                         -- must be activated before this (ms), NULL = any time
   issued_at INTEGER,                         -- batch code handed out / exported
-  sold_at INTEGER                            -- counts as a sale from this time (NULL = unsold stock)
+  sold_at INTEGER,                           -- counts as a sale from this time (NULL = unsold stock)
+  pay_currency TEXT NOT NULL DEFAULT '',     -- currency the customer paid in ('' = your currency)
+  pay_amount REAL NOT NULL DEFAULT 0         -- amount in that currency (amount = converted to yours)
 );
 CREATE INDEX IF NOT EXISTS codes_batch ON codes (batch_id);
 

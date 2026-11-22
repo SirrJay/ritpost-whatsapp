@@ -34,11 +34,36 @@ export const DEFAULT_SETTINGS = {
   announcement: '', // short message shown in RitPost
   upgrade_text: 'Want more? Get a premium access code from RitPost.',
   upgrade_url: '',
-  currency: 'GHS', // for amounts paid
+  currency: 'GHS', // your currency: prices, amounts paid and sales are in it
   business_name: 'RitPost', // used in customer messages
+  pay_currencies: 'USD,EUR,GBP,NGN,KES,ZAR', // other currencies customers can pay in (ISO codes)
+  fx_markup: 0, // % added to the exchange rate for customers paying in another currency (covers conversion fees)
+  fx_manual: '', // your own fixed rates, e.g. "USD=0.065, NGN=105" (units per 1 of your currency); empty = live rates
+  fx_show: true, // show plan prices in the customer's chosen currency in RitPost
 };
-const NUM_KEYS = ['free_daily', 'free_ip_daily', 'premium_daily', 'premium_devices', 'global_daily', 'max_chars', 'price_in', 'price_out'];
-const BOOL_KEYS = ['service_on', 'free_on'];
+const NUM_KEYS = ['free_daily', 'free_ip_daily', 'premium_daily', 'premium_devices', 'global_daily', 'max_chars', 'price_in', 'price_out', 'fx_markup'];
+const BOOL_KEYS = ['service_on', 'free_on', 'fx_show'];
+
+// ─────────────── currencies ───────────────
+/** Widely used currencies offered in the portal (ISO 4217). */
+export const CURRENCIES = {
+  USD: 'US dollar', EUR: 'Euro', GBP: 'British pound', JPY: 'Japanese yen', CNY: 'Chinese yuan', CHF: 'Swiss franc', CAD: 'Canadian dollar', AUD: 'Australian dollar',
+  INR: 'Indian rupee', AED: 'UAE dirham', SAR: 'Saudi riyal', BRL: 'Brazilian real', ZAR: 'South African rand', NGN: 'Nigerian naira', GHS: 'Ghanaian cedi',
+  KES: 'Kenyan shilling', UGX: 'Ugandan shilling', TZS: 'Tanzanian shilling', RWF: 'Rwandan franc', XOF: 'West African CFA franc', XAF: 'Central African CFA franc',
+  EGP: 'Egyptian pound', MAD: 'Moroccan dirham', ETB: 'Ethiopian birr', ZMW: 'Zambian kwacha', SLL: 'Sierra Leonean leone', LRD: 'Liberian dollar', GMD: 'Gambian dalasi',
+};
+const FX_TTL = 6 * 60 * 60 * 1000; // refresh live rates every 6 hours
+const iso = (c) => (/^[A-Z]{3}$/.test(String(c || '').trim().toUpperCase()) ? String(c).trim().toUpperCase() : '');
+const isoList = (v) => [...new Set(String(v || '').split(/[\s,;]+/).map(iso).filter(Boolean))].slice(0, 30);
+/** "USD=0.065, NGN=105" → { USD: 0.065, NGN: 105 } */
+function parseManual(v) {
+  const out = {};
+  for (const part of String(v || '').split(/[,;\n]+/)) {
+    const m = /^\s*([A-Za-z]{3})\s*[=:]\s*([0-9]*\.?[0-9]+)\s*$/.exec(part);
+    if (m && Number(m[2]) > 0) out[m[1].toUpperCase()] = Number(m[2]);
+  }
+  return out;
+}
 
 const allOn = (daily) => Object.fromEntries(PLATFORMS.map((p) => [p, { on: true, daily }]));
 export const DEFAULT_PLANS = {
@@ -118,6 +143,7 @@ export function normFeatures(f = {}, base = DEFAULT_PLANS.premium.features) {
 export function createApp({ adminHtml = '<!doctype html><title>RitPost Admin</title>', fetchImpl } = {}) {
   const doFetch = (...a) => (fetchImpl || fetch)(...a);
   let settingsCache = null;
+  let fxMem = null;
   let settingsAt = 0;
   let plansCache = null;
   let plansAt = 0;
@@ -207,6 +233,8 @@ export function createApp({ adminHtml = '<!doctype html><title>RitPost Admin</ti
     await add('codes', c, 'batch_id', 'TEXT');
     await add('codes', c, 'redeem_by', 'INTEGER');
     await add('codes', c, 'issued_at', 'INTEGER');
+    await add('codes', c, 'pay_currency', "TEXT NOT NULL DEFAULT ''");
+    await add('codes', c, 'pay_amount', 'REAL NOT NULL DEFAULT 0');
     // Codes made before 2.4 were sold when created, and are active once a device uses them.
     if (await add('codes', c, 'sold_at', 'INTEGER')) await db.prepare('UPDATE codes SET sold_at = created_at WHERE sold_at IS NULL AND batch_id IS NULL').run();
     if (await add('codes', c, 'activated_at', 'INTEGER')) await db.prepare('UPDATE codes SET activated_at = COALESCE(last_used_at, created_at) WHERE activated_at IS NULL AND code IN (SELECT code FROM code_devices)').run();
@@ -244,6 +272,83 @@ export function createApp({ adminHtml = '<!doctype html><title>RitPost Admin</ti
     settingsCache = s;
     settingsAt = Date.now();
     return s;
+  }
+
+  /** Live exchange rates for your currency (units of each currency per 1 of yours), cached for 6 hours. */
+  async function getRates(env, s, force = false) {
+    const base = iso(s.currency);
+    if (!base) return null;
+    if (!force && fxMem && fxMem.base === base && Date.now() - fxMem.at < FX_TTL) return fxMem;
+    let cached = null;
+    try {
+      cached = JSON.parse((await env.DB.prepare("SELECT value FROM settings WHERE key = 'fx_cache'").first())?.value || 'null');
+    } catch {
+      cached = null;
+    }
+    if (cached && cached.base !== base) cached = null;
+    if (!force && cached && Date.now() - cached.at < FX_TTL) return (fxMem = cached);
+    const get = async (url) => {
+      const ctrl = typeof AbortController === 'function' ? new AbortController() : null;
+      const timer = ctrl ? setTimeout(() => ctrl.abort(), 8000) : null;
+      try {
+        const r = await doFetch(url, { headers: { Accept: 'application/json' }, signal: ctrl?.signal });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return await r.json();
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
+    };
+    const sources = [
+      async () => {
+        const d = await get(`https://open.er-api.com/v6/latest/${base}`);
+        if (d?.result !== 'success' || !d.rates) throw new Error(d?.['error-type'] || 'no rates');
+        return { rates: d.rates, source: 'ExchangeRate-API', updated: (d.time_last_update_unix || 0) * 1000 || Date.now() };
+      },
+      async () => {
+        const b = base.toLowerCase();
+        const d = await get(`https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/${b}.json`);
+        if (!d?.[b]) throw new Error('no rates');
+        return { rates: Object.fromEntries(Object.entries(d[b]).filter(([k, v]) => /^[a-z]{3}$/.test(k) && v > 0).map(([k, v]) => [k.toUpperCase(), v])), source: 'Currency API (fawazahmed0)', updated: Date.parse(d.date) || Date.now() };
+      },
+    ];
+    for (const src of sources) {
+      try {
+        const r = await src();
+        const rates = {};
+        for (const [k, v] of Object.entries(r.rates)) if (/^[A-Z]{3}$/.test(k) && Number(v) > 0) rates[k] = Number(v);
+        rates[base] = 1;
+        const fresh = { base, at: Date.now(), updated: r.updated, source: r.source, rates };
+        await env.DB.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('fx_cache', ?)").bind(JSON.stringify(fresh)).run();
+        return (fxMem = fresh);
+      } catch {
+        /* try the next source */
+      }
+    }
+    return cached ? { ...cached, stale: true } : null; // keep using the last rates we had
+  }
+  /** Rates customers see: your fixed rates first, then live ones, plus your margin. */
+  async function customerRates(env, s) {
+    const base = iso(s.currency);
+    if (!base) return null;
+    const fx = await getRates(env, s);
+    const manual = parseManual(s.fx_manual);
+    const markup = 1 + Math.min(50, Math.max(0, Number(s.fx_markup) || 0)) / 100;
+    const out = { [base]: 1 };
+    for (const c of isoList(s.pay_currencies)) {
+      if (c === base) continue;
+      const r = manual[c] || fx?.rates?.[c];
+      if (r) out[c] = +(r * markup).toPrecision(6);
+    }
+    return { base, rates: out, at: fx?.updated || null, source: fx?.source || (Object.keys(manual).length ? 'Your rates' : ''), stale: !!fx?.stale };
+  }
+  /** An amount paid in another currency → your currency (live/fixed rate, no margin). */
+  async function toBase(env, s, amount, cur) {
+    const base = iso(s.currency);
+    cur = iso(cur);
+    if (!cur || !base || cur === base || !(amount > 0)) return { amount, cur: '' };
+    const r = parseManual(s.fx_manual)[cur] || (await getRates(env, s))?.rates?.[cur];
+    if (!r) throw new Error(`No exchange rate for ${cur} yet. Try again in a moment, or add your own rate in Settings → Currencies.`);
+    return { amount: Math.round((amount / r) * 100) / 100, cur, paid: amount };
   }
 
   const planFromRow = (r) => {
@@ -440,7 +545,7 @@ export function createApp({ adminHtml = '<!doctype html><title>RitPost Admin</ti
     const b = await readBody(req);
     if (!b || !validInstall(b.installId)) return json({ ok: false, error: 'Bad request.', code: 'bad_request' }, 400);
     const s = await getSettings(env);
-    const base = { announcement: s.announcement || '', upgradeText: s.upgrade_text || '', upgradeUrl: s.upgrade_url || '', serviceOn: !!s.service_on, freeOn: !!s.free_on, offers: await offers(env), currency: s.currency || '' };
+    const base = { announcement: s.announcement || '', upgradeText: s.upgrade_text || '', upgradeUrl: s.upgrade_url || '', serviceOn: !!s.service_on, freeOn: !!s.free_on, offers: await offers(env), currency: s.currency || '', fx: s.fx_show ? await customerRates(env, s).catch(() => null) : null };
     if (register && !b.code) return json({ ok: false, error: 'Enter an access code.', code: 'invalid_code', ...base }, 400);
     const p = await resolve(env, s, b.installId, b.code, { register });
     if (p.error) {
@@ -923,6 +1028,8 @@ export function createApp({ adminHtml = '<!doctype html><title>RitPost Admin</ti
         createdBy: c.created_by || 'owner',
         createdByName: c.created_by === 'owner' || !c.created_by ? ownerName : ctx.members[c.created_by]?.name || 'Removed member',
         amount: c.amount || 0,
+        payCurrency: c.pay_currency || '',
+        payAmount: c.pay_amount || 0,
         lastUsedAt: c.last_used_at,
         totalUses: c.total_uses,
         usedToday: ctx.used,
@@ -963,12 +1070,19 @@ export function createApp({ adminHtml = '<!doctype html><title>RitPost Admin</ti
       const label = String(b.label || '').trim().slice(0, 80);
       const contact = String(b.contact || '').trim().slice(0, 120);
       const note = String(b.note || '').trim().slice(0, 300);
-      const amount = Math.max(0, Math.min(1e9, Number(b.amount) || 0));
+      let amount = Math.max(0, Math.min(1e9, Number(b.amount) || 0));
+      let paid = { cur: '', paid: 0 };
+      try {
+        paid = await toBase(env, s, amount, b.payCurrency);
+      } catch (e) {
+        return json({ ok: false, error: e.message }, 400);
+      }
+      amount = paid.amount;
       const made = [];
       for (let i = 0; i < qty; i++) made.push(newCode());
       await env.DB.batch(
         made.map((c, i) =>
-          env.DB.prepare('INSERT INTO codes (code, label, note, daily_limit, max_devices, expires_at, status, created_at, plan_id, created_by, contact, amount, duration_days, sold_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(
+          env.DB.prepare('INSERT INTO codes (code, label, note, daily_limit, max_devices, expires_at, status, created_at, plan_id, created_by, contact, amount, duration_days, sold_at, pay_currency, pay_amount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(
             c,
             qty > 1 ? `${label}${label ? ' ' : ''}#${i + 1}` : label,
             note,
@@ -982,11 +1096,13 @@ export function createApp({ adminHtml = '<!doctype html><title>RitPost Admin</ti
             contact,
             qty > 1 ? amount / qty : amount,
             durationDays,
-            Date.now()
+            Date.now(),
+            paid.cur,
+            paid.cur ? (qty > 1 ? paid.paid / qty : paid.paid) : 0
           )
         )
       );
-      await audit(env, me, qty > 1 ? `Created ${qty} access codes` : 'Created an access code', `${plan.name}${label ? ` · ${label}` : ''}${amount ? ` · ${s.currency} ${amount}` : ''}`);
+      await audit(env, me, qty > 1 ? `Created ${qty} access codes` : 'Created an access code', `${plan.name}${label ? ` · ${label}` : ''}${amount ? ` · ${s.currency} ${amount}` : ''}${paid.cur ? ` (paid ${paid.cur} ${paid.paid})` : ''}`);
       return json({ ok: true, codes: made.map(fmtCode), plan: { id: plan.id, name: plan.name }, expiresAt: expires, durationDays });
     }
 
@@ -1031,9 +1147,19 @@ export function createApp({ adminHtml = '<!doctype html><title>RitPost Admin</ti
           plan_id: plan ? plan.id : row.plan_id,
           amount: b.amount !== undefined ? Math.max(0, Math.min(1e9, Number(b.amount) || 0)) : row.amount,
           duration_days: duration,
+          pay_currency: row.pay_currency || '',
+          pay_amount: row.pay_amount || 0,
         };
-        await env.DB.prepare('UPDATE codes SET label = ?, contact = ?, note = ?, daily_limit = ?, max_devices = ?, expires_at = ?, status = ?, plan_id = ?, amount = ?, duration_days = ? WHERE code = ?')
-          .bind(next.label, next.contact, next.note, next.daily_limit, next.max_devices, next.expires_at, next.status, next.plan_id, next.amount, next.duration_days, c)
+        if (b.amount !== undefined) {
+          try {
+            const p = await toBase(env, s, next.amount, b.payCurrency);
+            Object.assign(next, { amount: p.amount, pay_currency: p.cur, pay_amount: p.cur ? p.paid : 0 });
+          } catch (e) {
+            return json({ ok: false, error: e.message }, 400);
+          }
+        }
+        await env.DB.prepare('UPDATE codes SET label = ?, contact = ?, note = ?, daily_limit = ?, max_devices = ?, expires_at = ?, status = ?, plan_id = ?, amount = ?, duration_days = ?, pay_currency = ?, pay_amount = ? WHERE code = ?')
+          .bind(next.label, next.contact, next.note, next.daily_limit, next.max_devices, next.expires_at, next.status, next.plan_id, next.amount, next.duration_days, next.pay_currency, next.pay_amount, c)
           .run();
         const what = onlyStatus ? (next.status === 'disabled' ? 'Disabled an access code' : 'Enabled an access code') : b.extendDays ? `Extended an access code by ${int(b.extendDays, 1, 3650, 30)} days` : 'Edited an access code';
         await audit(env, me, what, `${fmtCode(c)}${next.label ? ` · ${next.label}` : ''}`);
@@ -1147,14 +1273,24 @@ export function createApp({ adminHtml = '<!doctype html><title>RitPost Admin</ti
         const label = String(b.label || '').trim().slice(0, 80);
         const contact = String(b.contact || '').trim().slice(0, 120);
         const sale = b.sale !== false; // exported for a shop: counts as a sale when activated instead
-        const total = b.amount === undefined || b.amount === '' || b.amount === null ? bt.price * picked.length : Math.max(0, Math.min(1e9, Number(b.amount) || 0));
+        let paid = { cur: '', paid: 0 };
+        let total = bt.price * picked.length;
+        if (!(b.amount === undefined || b.amount === '' || b.amount === null)) {
+          try {
+            paid = await toBase(env, s, Math.max(0, Math.min(1e9, Number(b.amount) || 0)), b.payCurrency);
+          } catch (e) {
+            return json({ ok: false, error: e.message }, 400);
+          }
+          total = paid.amount;
+        }
         const each = picked.length ? total / picked.length : 0;
+        const eachPaid = paid.cur && picked.length ? paid.paid / picked.length : 0;
         const now = Date.now();
         for (let i = 0; i < picked.length; i += 100) {
           await env.DB.batch(
             picked.slice(i, i + 100).map((c) =>
               sale
-                ? env.DB.prepare('UPDATE codes SET issued_at = ?, label = ?, contact = ?, amount = ?, sold_at = ? WHERE code = ?').bind(now, label, contact, each, now, c)
+                ? env.DB.prepare('UPDATE codes SET issued_at = ?, label = ?, contact = ?, amount = ?, sold_at = ?, pay_currency = ?, pay_amount = ? WHERE code = ?').bind(now, label, contact, each, now, paid.cur, eachPaid, c)
                 : env.DB.prepare('UPDATE codes SET issued_at = ? WHERE code = ?').bind(now, c)
             )
           );
@@ -1276,7 +1412,32 @@ export function createApp({ adminHtml = '<!doctype html><title>RitPost Admin</ti
     }
 
     // ── settings ──
-    if (path === 'settings' && method === 'GET') return json({ ok: true, settings: s, defaults: DEFAULT_SETTINGS });
+    // ── currency exchange ──
+    if (path === 'fx' && (method === 'GET' || method === 'POST')) {
+      const force = method === 'POST';
+      if (force && !can('settings.edit')) return forbid();
+      const fx = await getRates(env, s, force);
+      if (force && fx && !fx.stale) await audit(env, me, 'Refreshed exchange rates', `${fx.base} · ${fx.source}`);
+      const cust = await customerRates(env, s);
+      return json({
+        ok: true,
+        base: iso(s.currency) || s.currency,
+        live: !!fx,
+        stale: !!fx?.stale,
+        source: fx?.source || '',
+        updated: fx?.updated || null,
+        fetchedAt: fx?.at || null,
+        rates: fx?.rates || {},
+        customer: cust?.rates || {},
+        manual: parseManual(s.fx_manual),
+        markup: Number(s.fx_markup) || 0,
+        payCurrencies: isoList(s.pay_currencies),
+        currencies: CURRENCIES,
+        error: fx ? '' : iso(s.currency) ? 'Couldn’t reach the exchange-rate service. Try again later, or add your own rates in Settings → Currencies.' : 'Set your currency to a 3-letter code (e.g. GHS) in Settings → Currencies.',
+      });
+    }
+
+    if (path === 'settings' && method === 'GET') return json({ ok: true, settings: s, defaults: DEFAULT_SETTINGS, currencies: CURRENCIES });
     if (path === 'settings' && method === 'PUT') {
       if (!can('settings.edit')) return forbid();
       const b = (await readBody(req)) || {};
@@ -1288,11 +1449,19 @@ export function createApp({ adminHtml = '<!doctype html><title>RitPost Admin</ti
         if (NUM_KEYS.includes(k)) v = Math.max(0, Number(v) || 0);
         else if (BOOL_KEYS.includes(k)) v = !!v;
         else v = String(v ?? def).slice(0, 400);
+        if (k === 'fx_markup') v = Math.min(50, v);
+        if (k === 'currency') {
+          v = String(v).trim().toUpperCase().slice(0, 8);
+          if (!v) return json({ ok: false, error: 'Choose your currency.' }, 400);
+        }
+        if (k === 'pay_currencies') v = isoList(v).join(',');
+        if (k === 'fx_manual') v = Object.entries(parseManual(v)).map(([c, r]) => `${c}=${r}`).join(', ');
         if (JSON.stringify(v) !== JSON.stringify(s[k])) changed.push(k);
         writes.push(env.DB.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').bind(k, JSON.stringify(v)));
       }
       if (writes.length) await env.DB.batch(writes);
       modelCache = null;
+      if (changed.includes('currency')) fxMem = null;
       if (changed.length) await audit(env, me, 'Changed settings', changed.join(', '));
       return json({ ok: true, settings: await getSettings(env, true) });
     }

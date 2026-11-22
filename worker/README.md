@@ -96,6 +96,13 @@ Each batch shows how many codes are **activated**, **given out** and **unused**,
 
 Unsold bulk codes stay out of the main code list; pick **Bulk stock** or a batch in the filters to see them. A code that isn't activated yet shows *not activated* and *30 days after activation*; renewing it adds days.
 
+### Currency exchange
+
+- **Dashboard → Currency exchange:** convert any amount between your currency and widely used currencies (US dollar, euro, pound, naira, cedi, shilling, rand, CFA franc and more), both ways, with the rate shown. Below it, **what customers pay for each plan** in every currency you accept.
+- **Settings → Currencies & exchange:** your currency (plan prices, amounts and sales are in it), the **currencies customers can pay in**, an optional **exchange margin** (%) added for customers paying in another currency, and **your own fixed rates** (e.g. `USD=0.065` for 1 of your currency) instead of live ones. Live rates come from ExchangeRate-API (open.er-api.com, with a backup source) and refresh every 6 hours; **Refresh rates** updates them now. If the service can't be reached, the last rates are kept.
+- **Selling:** pick the currency the customer **paid in** next to the amount (also when giving out bulk codes or editing a code). The portal shows what it's worth in your currency, stores both, and adds sales up in your currency.
+- **In RitPost:** the upgrade window has **Show prices in**, so customers see your plan prices in their own currency (with your margin), next to your price. Turn it off in Settings.
+
 ### Activity and devices
 
 - **Activity → Posting:** every posting request from RitPost: allowed, refused (with the reason the customer saw) and posts given back by stopped runs. **AI rewrites:** the last 300 AI requests.

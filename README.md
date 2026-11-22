@@ -178,7 +178,7 @@ RitPost is connected to the publisher's RitPost server (see `worker/README.md`).
 - **AI rewrites** per day,
 - **scheduled posts**, **Automatic mode** and **RitPost Studio**.
 
-**Settings (⚙) → Your plan** shows your plan, how many posts and rewrites you have left today on each platform, and when your code expires. To activate a code: paste it under *Have an access code?* and click **Activate** (codes look like `RP-ABCD-EFGH-JKLM`). Most codes start counting down when you activate them, so a code bought today and activated next month still gives you its full time. **See plans & upgrade** lists the plans on offer and the publisher's **Get premium** link.
+**Settings (⚙) → Your plan** shows your plan, how many posts and rewrites you have left today on each platform, and when your code expires. To activate a code: paste it under *Have an access code?* and click **Activate** (codes look like `RP-ABCD-EFGH-JKLM`). Most codes start counting down when you activate them, so a code bought today and activated next month still gives you its full time. **See plans & upgrade** lists the plans on offer and the publisher's **Get premium** link; **Show prices in** converts the prices to your currency at today's exchange rate.
 
 A small line under the Start button shows what's left for the platform you're posting to. If a run doesn't fit your plan (too many groups, today's posts used up, a platform or feature not included), RitPost explains why and how to upgrade before anything is opened. A "post" is one WhatsApp group, one Facebook group or Page, or one Instagram / X post; posts a stopped run didn't make are given back. Daily limits reset at midnight UTC. If the RitPost server can't be reached, RitPost uses the last plan it saw.
 

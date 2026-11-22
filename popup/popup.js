@@ -3004,11 +3004,12 @@ async function aiLoad() {
     last: { ...AI_DEFAULTS, ...(s.last || {}) },
     presets: Array.isArray(s.presets) ? s.presets.filter((p) => p?.name && p?.opts) : [],
     code: typeof s.code === 'string' ? s.code : '',
+    payCur: typeof s.payCur === 'string' ? s.payCur : '',
   });
   // The last plan RitPost saw, until the server answers.
   if (planCache?.plan) ai.plan = planCache.plan;
 }
-const aiSave = () => persist({ aiSettings: { brand: ai.brand, last: ai.last, presets: ai.presets, code: ai.code } });
+const aiSave = () => persist({ aiSettings: { brand: ai.brand, last: ai.last, presets: ai.presets, code: ai.code, payCur: ai.payCur } });
 
 function renderAiSettings() {
   $('aiBrand').value = ai.brand;
@@ -3128,13 +3129,13 @@ async function aiRefreshStatus() {
   try {
     const r = await window.RitAI.status({ installId: ai.installId, code: ai.code });
     ai.plan = r.plan;
-    ai.info = { announcement: r.announcement, upgradeText: r.upgradeText, upgradeUrl: r.upgradeUrl, offers: r.offers || [] };
+    ai.info = { announcement: r.announcement, upgradeText: r.upgradeText, upgradeUrl: r.upgradeUrl, offers: r.offers || [], fx: r.fx || null };
     ai.codeError = '';
   } catch (e) {
     // A stored code that stopped working: say why and fall back to the free plan.
     if (e.plan) ai.plan = e.plan;
     ai.codeError = e.code && /code/.test(e.code) ? e.message : '';
-    if (e.info) ai.info = { announcement: e.info.announcement, upgradeText: e.info.upgradeText, upgradeUrl: e.info.upgradeUrl, offers: e.info.offers || [] };
+    if (e.info) ai.info = { announcement: e.info.announcement, upgradeText: e.info.upgradeText, upgradeUrl: e.info.upgradeUrl, offers: e.info.offers || [], fx: e.info.fx || null };
     else if (!ai.plan) ai.info = { ...ai.info, error: e.message };
   }
   planRemember();
@@ -3164,16 +3165,40 @@ async function aiActivateCode() {
 }
 
 /** Upgrade window: why (if a limit was hit), the plans on offer, and how to get one. */
+/** The number in a plan price such as "GHS 50 / month". */
+const priceNumber = (price) => {
+  const m = String(price || '').replace(/,/g, '').match(/\d+(\.\d+)?/);
+  return m ? Number(m[0]) : 0;
+};
+/** A plan price shown in the currency the customer picked (from the publisher's exchange rates). */
+function priceIn(price, cur) {
+  const fx = ai.info.fx;
+  const n = priceNumber(price);
+  if (!fx || !n || !cur || cur === fx.base || !fx.rates?.[cur]) return null;
+  const v = n * fx.rates[cur];
+  return `≈ ${cur} ${v.toLocaleString(undefined, { maximumFractionDigits: v >= 100 ? 0 : 2 })}`;
+}
+
 function showUpgrade({ reason = '' } = {}) {
   const p = ai.plan;
   const offers = ai.info.offers || [];
+  const fx = ai.info.fx;
+  const curs = fx?.rates ? Object.keys(fx.rates) : [];
+  const canConvert = curs.length > 1 && offers.some((o) => priceNumber(o.price));
+  let cur = canConvert && curs.includes(ai.payCur) ? ai.payCur : fx?.base || '';
+  let list = null;
+  let curNote = null;
+  const priceEl = (o) => {
+    const conv = priceIn(o.price, cur);
+    return o.price ? h('span', { class: 'price' }, conv ? h('span', { title: `${o.price} at today’s rate` }, conv, ' ', h('small', { class: 'muted' }, `(${o.price})`)) : o.price) : null;
+  };
   const lim = (pf) => (!pf?.on ? null : pf.daily === null ? 'no daily limit' : `${pf.daily} a day`);
   const offerCard = (o) => {
     const plats = PLAN_PLATS.filter((k) => o.platforms?.[k]?.on).map((k) => `${platLabel(k)} (${lim(o.platforms[k])})`);
     return h(
       'div',
       { class: `up-offer${p?.planId === o.id ? ' cur' : ''}` },
-      h('div', { class: 't' }, h('b', {}, o.name), o.price ? h('span', { class: 'price' }, o.price) : null, p?.planId === o.id ? h('span', { class: 'chip' }, 'Your plan') : null),
+      h('div', { class: 't' }, h('b', {}, o.name), priceEl(o), p?.planId === o.id ? h('span', { class: 'chip' }, 'Your plan') : null),
       o.description ? h('div', { class: 'muted' }, o.description) : null,
       h(
         'ul',
@@ -3194,7 +3219,28 @@ function showUpgrade({ reason = '' } = {}) {
       { class: 'ai-dialog' },
       reason ? h('p', { class: 'up-reason' }, reason) : null,
       p ? h('p', { class: 'hint' }, `You’re on the ${planName(p)} plan${p.expiresAt ? `, valid until ${new Date(p.expiresAt).toLocaleDateString()}` : ''}.`) : null,
-      offers.length ? h('div', { class: 'up-offers' }, ...offers.map(offerCard)) : h('p', {}, ai.info.upgradeText || 'Get an access code from RitPost to unlock more.'),
+      canConvert
+        ? h(
+            'label',
+            { class: 'up-cur' },
+            h('span', {}, 'Show prices in'),
+            h(
+              'select',
+              {
+                onchange: (e) => {
+                  cur = e.target.value;
+                  ai.payCur = cur;
+                  aiSave();
+                  list.replaceChildren(...offers.map(offerCard));
+                  curNote.hidden = cur === fx.base;
+                },
+              },
+              ...curs.map((c) => h('option', { value: c, selected: c === cur }, c))
+            )
+          )
+        : null,
+      offers.length ? (list = h('div', { class: 'up-offers' }, ...offers.map(offerCard))) : h('p', {}, ai.info.upgradeText || 'Get an access code from RitPost to unlock more.'),
+      canConvert ? (curNote = h('p', { class: 'hint', hidden: cur === fx.base }, `Converted at today’s exchange rate; the price in ${fx.base} applies. Ask the seller how to pay in your currency.`)) : null,
       h(
         'div',
         { class: 'up-acts' },
