@@ -21,10 +21,10 @@
 
   <nav class="tabs" role="tablist">
     <button class="tab active" data-tab="compose" role="tab">Compose</button>
-    <button class="tab" data-tab="groups" role="tab">Groups <span id="groupCount" class="badge">0</span></button>
-    <button class="tab" data-tab="facebook" role="tab">Facebook <span id="fbCount" class="badge">0</span></button>
-    <button class="tab" data-tab="social" role="tab" title="Instagram and X">IG &amp; X</button>
-    <button class="tab" data-tab="schedule" role="tab">Scheduled <span id="schedCount" class="badge">0</span></button>
+    <button class="tab" data-tab="groups" role="tab" title="WhatsApp groups"><span class="t-ic wa"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2a8 8 0 0 0-6.9 12.04L2 18l4.08-1.07A8 8 0 1 0 10 2Zm0 1.5a6.5 6.5 0 1 1-3.3 12.1l-.26-.15-2.28.6.61-2.21-.17-.27A6.5 6.5 0 0 1 10 3.5Zm-2.6 3.1c-.17 0-.45.06-.68.32-.23.25-.9.88-.9 2.14s.92 2.48 1.05 2.65c.13.17 1.8 2.86 4.45 3.9 2.2.86 2.65.69 3.13.65.48-.05 1.55-.64 1.77-1.25.22-.62.22-1.14.15-1.25-.06-.11-.23-.17-.49-.3-.25-.13-1.54-.76-1.78-.85-.24-.08-.41-.13-.58.13-.17.25-.67.84-.82 1.01-.15.17-.3.2-.56.06-.26-.13-1.09-.4-2.07-1.27-.77-.68-1.28-1.53-1.43-1.79-.15-.25-.02-.39.11-.52.12-.11.26-.3.39-.45.13-.15.17-.25.26-.42.08-.17.04-.32-.02-.45-.07-.13-.57-1.4-.8-1.9-.2-.48-.4-.42-.56-.43h-.47Z"/></svg></span><span class="tl">WhatsApp</span> <span id="groupCount" class="badge">0</span></button>
+    <button class="tab" data-tab="facebook" role="tab" title="Facebook groups and Pages"><span class="t-ic fb">f</span><span class="tl">Facebook</span> <span id="fbCount" class="badge">0</span></button>
+    <button class="tab" data-tab="social" role="tab" title="Instagram and X"><span class="t-ic ig">◎</span><span class="t-ic x">𝕏</span><span class="tl">IG &amp; X</span></button>
+    <button class="tab" data-tab="schedule" role="tab" title="Scheduled posts and history">Scheduled <span id="schedCount" class="badge">0</span></button>
     <button class="tab icon-tab" data-tab="settings" role="tab" title="Settings" aria-label="Settings"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M8.6 1.5h2.8l.4 2.3c.5.2 1 .5 1.4.8l2.2-.8 1.4 2.4-1.8 1.5a6 6 0 0 1 0 1.6l1.8 1.5-1.4 2.4-2.2-.8c-.4.3-.9.6-1.4.8l-.4 2.3H8.6l-.4-2.3c-.5-.2-1-.5-1.4-.8l-2.2.8-1.4-2.4L5 10.3a6 6 0 0 1 0-1.6L3.2 7.2l1.4-2.4 2.2.8c.4-.3.9-.6 1.4-.8l.4-2.3ZM10 7a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5Z"/></svg></button>
   </nav>
 
@@ -93,7 +93,7 @@
 
       <div class="field">
         <div class="field-head">
-          <label>Send to <span id="selCount" class="muted"></span></label>
+          <label><span class="t-ic wa sm"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2a8 8 0 0 0-6.9 12.04L2 18l4.08-1.07A8 8 0 1 0 10 2Zm0 1.5a6.5 6.5 0 1 1-3.3 12.1l-.26-.15-2.28.6.61-2.21-.17-.27A6.5 6.5 0 0 1 10 3.5Zm-2.6 3.1c-.17 0-.45.06-.68.32-.23.25-.9.88-.9 2.14s.92 2.48 1.05 2.65c.13.17 1.8 2.86 4.45 3.9 2.2.86 2.65.69 3.13.65.48-.05 1.55-.64 1.77-1.25.22-.62.22-1.14.15-1.25-.06-.11-.23-.17-.49-.3-.25-.13-1.54-.76-1.78-.85-.24-.08-.41-.13-.58.13-.17.25-.67.84-.82 1.01-.15.17-.3.2-.56.06-.26-.13-1.09-.4-2.07-1.27-.77-.68-1.28-1.53-1.43-1.79-.15-.25-.02-.39.11-.52.12-.11.26-.3.39-.45.13-.15.17-.25.26-.42.08-.17.04-.32-.02-.45-.07-.13-.57-1.4-.8-1.9-.2-.48-.4-.42-.56-.43h-.47Z"/></svg></span> Send to WhatsApp groups <span id="selCount" class="muted"></span></label>
           <div class="links">
             <button type="button" class="link" id="selAll">All</button>
             <span class="sep">·</span>
@@ -114,7 +114,7 @@
         <div id="pickEmpty" class="empty" hidden>
           <p><strong>No saved groups yet</strong></p>
           <p class="muted">Import them from WhatsApp Web in one click.</p>
-          <button type="button" class="btn secondary sm" data-goto="groups">Manage groups</button>
+          <button type="button" class="btn secondary sm" data-goto="groups">Add WhatsApp groups</button>
         </div>
       </div>
     </section>
@@ -426,6 +426,24 @@
         <p><strong>Nothing scheduled yet</strong></p>
         <p class="muted">Write your message in Compose, pick where it goes (groups, Pages, Instagram or X), then click the clock button next to Start (or “Schedule current message” above).</p>
       </div>
+      <div class="hist" id="histWrap">
+        <div class="field-head">
+          <label>History <span id="histCount" class="muted"></span></label>
+          <div class="links" id="histLinks">
+            <button type="button" class="link" id="histExport">Export</button>
+            <span class="sep">·</span>
+            <button type="button" class="link" id="histClear">Clear</button>
+          </div>
+        </div>
+        <div id="histStats" class="hist-stats"></div>
+        <div id="histFilter" class="hist-filter" role="tablist" aria-label="Filter history by platform"></div>
+        <ul id="histList" class="hist-list"></ul>
+        <button type="button" class="link" id="histMore" hidden>Show more</button>
+        <div id="histEmpty" class="sched-empty" hidden>
+          <p><strong>No posts yet</strong></p>
+          <p class="muted">Every post you send to WhatsApp, Facebook, Instagram or X appears here, with how it went. Use any of them again in one click.</p>
+        </div>
+      </div>
       <div id="schedHistWrap" hidden>
         <div class="field-head"><label>Recent activity</label><button type="button" class="link" id="schedHistClear">Clear</button></div>
         <ul id="schedHist" class="sched-hist"></ul>
@@ -533,7 +551,7 @@
         <details>
           <summary><span class="g-ic wa">●</span> WhatsApp groups</summary>
           <ul>
-            <li><b>Groups → Import groups from WhatsApp Web</b> adds all your groups in one click (names must match WhatsApp exactly).</li>
+            <li><b>WhatsApp → Import groups from WhatsApp Web</b> adds all your groups in one click (names must match WhatsApp exactly).</li>
             <li>Save groups you post to together as <b>lists</b>, then pick a whole list in Compose.</li>
             <li>RitPost opens each group and fills in your message and files. <b>Manual:</b> you press <kbd>Enter</kbd> and the next group opens. <b>Automatic:</b> RitPost presses Send after the countdown you choose.</li>
             <li>Pause, resume or stop at any time from the bar at the bottom. <kbd>Ctrl</kbd>+<kbd>Enter</kbd> starts sending.</li>
@@ -577,11 +595,12 @@
         </details>
 
         <details>
-          <summary>🕒 Scheduled posts</summary>
+          <summary>🕒 Scheduled posts &amp; history</summary>
           <ul>
             <li>Post once at a set time, or repeat every day, on weekdays or on the days you choose, and stop after a number of times.</li>
             <li>Each schedule keeps its own copy of the message and files. Pause, edit or post one now from the <b>Scheduled</b> tab.</li>
             <li>Keep Chrome open (minimised is fine) and your computer awake. If Chrome was closed, you choose whether a post runs when Chrome opens (up to 6 hours late) or is skipped.</li>
+            <li><b>History</b> (in the same tab) lists every post on WhatsApp, Facebook, Instagram and X with how it went, plus this week’s totals. <b>Use again</b> reloads a message, <b>Retry failed</b> selects only the groups that didn’t get it, and <b>Export</b> saves a spreadsheet.</li>
           </ul>
         </details>
 
@@ -642,8 +661,8 @@
     </div>
     <div class="start-row">
     <button id="startBtn" class="btn primary block lg" type="button" disabled>
-      <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2.9 2.7a.75.75 0 0 1 .82-.1l13.5 6.75a.75.75 0 0 1 0 1.34L3.72 17.44a.75.75 0 0 1-1.05-.87L4.38 10 2.67 3.43a.75.75 0 0 1 .23-.73ZM5.6 10.75l-1.07 4.13L14.57 10 4.53 5.12l1.07 4.13H10v1.5H5.6Z"/></svg>
-      <span id="startLabel">Start sending</span>
+      <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2a8 8 0 0 0-6.9 12.04L2 18l4.08-1.07A8 8 0 1 0 10 2Zm0 1.5a6.5 6.5 0 1 1-3.3 12.1l-.26-.15-2.28.6.61-2.21-.17-.27A6.5 6.5 0 0 1 10 3.5Zm-2.6 3.1c-.17 0-.45.06-.68.32-.23.25-.9.88-.9 2.14s.92 2.48 1.05 2.65c.13.17 1.8 2.86 4.45 3.9 2.2.86 2.65.69 3.13.65.48-.05 1.55-.64 1.77-1.25.22-.62.22-1.14.15-1.25-.06-.11-.23-.17-.49-.3-.25-.13-1.54-.76-1.78-.85-.24-.08-.41-.13-.58.13-.17.25-.67.84-.82 1.01-.15.17-.3.2-.56.06-.26-.13-1.09-.4-2.07-1.27-.77-.68-1.28-1.53-1.43-1.79-.15-.25-.02-.39.11-.52.12-.11.26-.3.39-.45.13-.15.17-.25.26-.42.08-.17.04-.32-.02-.45-.07-.13-.57-1.4-.8-1.9-.2-.48-.4-.42-.56-.43h-.47Z"/></svg>
+      <span id="startLabel">Send to WhatsApp</span>
     </button>
     <button id="fbStartBtn" class="btn fb block lg" type="button" hidden disabled>
       <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 1.5a8.5 8.5 0 0 0-1.33 16.9v-5.94H6.51V10h2.16V8.13c0-2.13 1.27-3.31 3.21-3.31.93 0 1.9.17 1.9.17v2.09h-1.07c-1.05 0-1.38.65-1.38 1.33V10h2.35l-.38 2.46h-1.97v5.94A8.5 8.5 0 0 0 10 1.5Z"/></svg>

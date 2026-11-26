@@ -121,7 +121,7 @@ If switching fails twice, RitPost asks you to switch yourself and click **Try ag
 
 ## Instagram and X
 
-Open the **IG & X** tab and pick **Instagram** or **X**.
+Open the **IG & X** tab and pick **Instagram** or **X**. (The tabs show each platform's badge: WhatsApp, Facebook, Instagram and X; in a narrow panel the badges stand in for the names.)
 
 **Instagram**
 
@@ -199,6 +199,10 @@ Your text is sent only when you click **Generate**: it goes to the RitPost serve
 ## Emoji
 
 Every place you write has an emoji button: Compose, the Instagram/X caption, the review dialog and Studio's text tool. Search by word (heart, party, pray, ghana…), browse categories, pick a skin tone, and find your recently used ones first. Shift+click adds several at once.
+
+## History
+
+The **Scheduled** tab also keeps a **History** of every post you make, by hand or scheduled, on WhatsApp, Facebook, Instagram and X: the result (for example "Sent to 11 of 12 groups"), what went wrong, the mode, the files and the text. At the top: posts this week, the share delivered and the platforms used. Filter by platform; **Details** lists who it went to; **Use again** loads the message back into Compose (or the Facebook post / Instagram or X caption); **Retry failed** loads it and selects only the WhatsApp groups or Facebook groups/Pages that failed; **Copy**, **Remove**, **Export** (CSV for Excel) and **Clear**. The last 300 runs are kept, on this computer only.
 
 ## Scheduled posts
 

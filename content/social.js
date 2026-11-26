@@ -88,6 +88,19 @@
 
   /** Paste text into a rich text box (Lexical on Instagram, Draft.js on X); falls back to typing. */
   async function fillBox(box, text) {
+    if (box.tagName === 'TEXTAREA' || box.tagName === 'INPUT') {
+      // React-controlled field: set the value through the native setter, then tell React.
+      box.focus();
+      const proto = box.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+      Object.getOwnPropertyDescriptor(proto, 'value').set.call(box, text);
+      box.dispatchEvent(new Event('input', { bubbles: true }));
+      await sleep(300);
+      if (box.value === text) return true;
+      box.select();
+      document.execCommand('insertText', false, text);
+      await sleep(300);
+      return box.value === text;
+    }
     box.focus();
     await sleep(150);
     const dt = new DataTransfer();
@@ -223,6 +236,8 @@
       if (!e.isTrusted) return;
       const b = e.target.closest?.('button, [role="button"]');
       if (!b) return;
+      // X's side menu also has a "Post" button: it only opens a new composer.
+      if (PLATFORM === 'x' && b.closest('nav, header, [role="navigation"], [role="banner"]')) return;
       const label = textOf(b) || b.getAttribute('aria-label') || '';
       if (POST_WORD.test(label) || /tweetButton/.test(b.getAttribute('data-testid') || '')) lastUserPost = Date.now();
     },
@@ -443,22 +458,44 @@
   }
 
   // ─────────────── X ───────────────
-  // /compose/post opens a dialog over the home page, which has its own inline composer: prefer the dialog's.
-  const xBox = (n = 0) =>
-    document.querySelector(`[role="dialog"] [data-testid="tweetTextarea_${n}"]`) ||
-    document.querySelector(`[data-testid="tweetTextarea_${n}"]`) ||
-    (n === 0 ? $$('[role="dialog"] [role="textbox"][aria-label="Post text"], [role="textbox"][aria-label="Post text"], [role="textbox"][aria-label="Tweet text"]').find(visible) : null);
-  const xScope = () => xBox(0)?.closest('[role="dialog"]') || document.querySelector('[data-testid="primaryColumn"]') || document;
-  const xPostBtn = () =>
-    document.querySelector('[role="dialog"] [data-testid="tweetButton"]') ||
-    document.querySelector('[data-testid="tweetButton"]') ||
-    document.querySelector('[data-testid="tweetButtonInline"]') ||
-    byText(xScope(), /^post( all)?$/i);
-  const xFileInput = () => xScope().querySelector('input[data-testid="fileInput"]') || $$('input[type="file"]', xScope()).find((i) => /image|video/.test(i.accept || '')) || document.querySelector('input[data-testid="fileInput"]');
-  const xSignedOut = () => /\/login|\/i\/flow\/login|\/i\/flow\/signup/.test(location.pathname) || (!xBox(0) && !!document.querySelector('[data-testid="loginButton"]'));
-  const xToast = () => textOf(document.querySelector('[data-testid="toast"]'));
+  // X's composer (checked live, Nov 2026): a <textarea> labelled "What's happening?" in a dialog at /compose/post
+  // (the home page has a second, inline one), a multiple file input, a "Post" / "Post all" button, "Add another post"
+  // for threads, previews as img[alt^="Preview of"] with "Remove <file>" / hidden "Retry <file>" buttons, and almost no
+  // data-testid attributes. The older Draft.js composer (data-testid="tweetTextarea_N", tweetButton…) is still supported.
+  const X_BOX = 'textarea, [data-testid^="tweetTextarea_"][contenteditable="true"], [data-testid^="tweetTextarea_"] [contenteditable="true"], [role="textbox"][contenteditable="true"]';
+  const xDialog = () => $$('[role="dialog"]').find((d) => visible(d) && d.querySelector(X_BOX));
+  const xRoot = () => xDialog() || document.querySelector('[data-testid="primaryColumn"]') || document.querySelector('main') || document;
+  function xBoxes() {
+    const all = $$(X_BOX, xRoot()).filter((el) => visible(el) && !el.closest('#ritpost-social') && !el.closest('form[role="search"]'));
+    return all.filter((el) => !all.some((o) => o !== el && el.contains(o))); // innermost editable only
+  }
+  const xBox = (n = 0) => xBoxes()[n] || null;
+  const boxText = (el) => (!el ? '' : el.tagName === 'TEXTAREA' || el.tagName === 'INPUT' ? el.value : textOf(el));
+  /** The smallest container around the first text box that also holds `pick(container)` (Post button, file input…). */
+  function nearBox(pick) {
+    let el = xBox(0);
+    for (let i = 0; el && i < 25; i++, el = el.parentElement) {
+      const hit = pick(el);
+      if (hit) return hit;
+      if (el.getAttribute?.('role') === 'dialog') break;
+    }
+    return null;
+  }
+  const X_POST = /^(post|post all|tweet|tweet all)$/i;
+  const xPostIn = (root) =>
+    root.querySelector?.('[data-testid="tweetButton"], [data-testid="tweetButtonInline"]') || $$('button, [role="button"]', root).find((b) => visible(b) && X_POST.test(textOf(b)));
+  const xPostBtn = () => nearBox(xPostIn) || (xDialog() ? xPostIn(xDialog()) : null);
+  const xScope = () => nearBox((el) => (xPostIn(el) ? el : null)) || xRoot();
+  const xFileInput = () =>
+    nearBox((el) => el.querySelector('input[type="file"]')) ||
+    xRoot().querySelector('input[data-testid="fileInput"], input[type="file"][accept*="image"], input[type="file"][accept*="video"]');
+  const xSignedOut = () =>
+    /\/login|\/i\/flow\/login|\/i\/flow\/signup/.test(location.pathname) ||
+    (!xBox(0) && !!(document.querySelector('[data-testid="loginButton"]') || $$('a[href="/login"], a[href^="/i/flow/login"]').find(visible)));
+  const xToast = () => [...new Set($$('[data-testid="toast"], [role="alert"], [role="status"]').map(textOf).filter(Boolean))].join(' ').slice(0, 300);
   const X_ERROR = /(something went wrong|already said that|duplicate|limit|couldn['’]t|failed|not allowed|try again)/i;
-  const xMediaCount = () => $$('[data-testid="attachments"] img, [data-testid="attachments"] video, [data-testid="attachments"] [role="link"]', xScope()).length;
+  const xMediaCount = () => $$('img[alt^="Preview of"], [data-testid="attachments"] img, [data-testid="attachments"] video, [data-testid="attachments"] [role="link"], video', xScope()).filter((m) => !m.closest('article')).length;
+  const xUploadFailed = () => $$('button[aria-label^="Retry "]', xScope()).find(visible);
 
   async function xPost(run, base) {
     if (xSignedOut()) return fail('Sign in to X in this tab first, then try again.');
@@ -488,7 +525,7 @@
       ui.update({ ...base, msg: parts.length > 1 ? `Writing post ${i + 1} of ${parts.length}…` : 'Writing your post…', progress: 0.5 + (i / parts.length) * 0.2, buttons: [stopBtn()] });
       let b = xBox(i);
       if (!b && i > 0) {
-        const add = xScope().querySelector('[data-testid="addButton"]') || byText(xScope(), /^add (another )?post$/i);
+        const add = xScope().querySelector('[data-testid="addButton"]') || byText(xScope(), /^add (another )?(post|tweet)$/i);
         if (!add) return fail('Couldn’t add the next post of the thread on X.');
         add.click();
         b = await waitFor(() => xBox(i), 6000);
@@ -499,8 +536,9 @@
     if (!alive()) return;
     // Wait until uploads finish and the Post button is enabled.
     ui.update({ ...base, msg: 'Waiting for X to finish uploading…', progress: 0.75, buttons: [stopBtn()] });
-    const btn = await waitFor(() => (xPostBtn() && !isDisabled(xPostBtn()) ? xPostBtn() : null), 5 * 60 * 1000, 500);
+    const btn = await waitFor(() => (xUploadFailed() ? 'failed' : xPostBtn() && !isDisabled(xPostBtn()) ? xPostBtn() : null), 5 * 60 * 1000, 500);
     if (!alive()) return;
+    if (btn === 'failed') return fail('X couldn’t upload a file. Check its size and type (photos up to 5 MB, videos up to 512 MB), then try again.');
     if (!btn) {
       const over = textOf(xScope()).match(/-\d+/);
       return fail(over ? 'Your text is longer than X allows. Shorten it or post it as a thread.' : 'X’s Post button stayed disabled.');
@@ -513,7 +551,7 @@
       const t = xToast();
       if (/sent|posted|your post was/i.test(t)) return { ok: true };
       if (X_ERROR.test(t)) return { error: t.slice(0, 160) };
-      if (!xBox(0) || (location.pathname !== '/compose/post' && !document.querySelector('[role="dialog"] [data-testid="tweetTextarea_0"]') && !textOf(xBox(0)))) return { ok: true };
+      if (!xBox(0) || (location.pathname !== '/compose/post' && !xDialog() && !boxText(xBox(0)))) return { ok: true };
       return null;
     }, 3 * 60 * 1000, 500);
     return res || { error: 'X didn’t confirm the post within 3 minutes. Check your profile.' };
@@ -547,7 +585,7 @@
           b.click();
           await sleep(1200);
           // Some buttons need a full pointer sequence.
-          if (b.isConnected && !isDisabled(b) && Date.now() - lastUserPost > 5000 && PLATFORM === 'x' && xBox(0) && textOf(xBox(0))) fireClick(b);
+          if (b.isConnected && !isDisabled(b) && Date.now() - lastUserPost > 5000 && PLATFORM === 'x' && xBox(0) && boxText(xBox(0))) fireClick(b);
         }
       } else {
         ui.update({

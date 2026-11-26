@@ -684,10 +684,10 @@ function renderCounts() {
     : !hasContent
       ? 'Write a message or attach a file'
       : !n
-        ? 'Select groups to start'
+        ? 'Select WhatsApp groups to start'
         : auto
-          ? `Auto-send to ${plural(n, 'group')} · every ${state.settings.intervalSec}s`
-          : `Start sending to ${plural(n, 'group')}`;
+          ? `Auto-send to ${plural(n, 'WhatsApp group')} · every ${state.settings.intervalSec}s`
+          : `Send to ${plural(n, 'WhatsApp group')}`;
 }
 
 // ─────────────── send mode ───────────────
@@ -1709,7 +1709,7 @@ async function start() {
   $('startBtn').disabled = true;
   $('startLabel').textContent = 'Opening WhatsApp Web…';
 
-  const res = await bg('BG_START', { run: { items, settings: state.settings, attachments } });
+  const res = await bg('BG_START', { run: { items, settings: state.settings, attachments, message } });
   if (res?.ok) {
     state.status = { ...state.status, open: true, running: true, paused: false };
     renderStatus();
@@ -2202,6 +2202,7 @@ function fbConfirmStart() {
       (async () => {
         const run = {
           items: items.map((t) => ({ id: t.id, name: t.name, url: t.url, kind: t.kind, text: fbText(message.replaceAll('{group}', t.name)) })),
+          message,
           attachmentIds: sendMedia ? media.map((a) => a.id) : [],
           linkPreview: !sendMedia || !media.length,
           mode: fb.settings.mode,
@@ -4199,6 +4200,169 @@ function renderSched() {
   );
 }
 
+// ─────────────── History ───────────────
+const hist = { items: [], filter: 'all', limit: 15, open: new Set() };
+async function histLoad() {
+  const d = await chrome.storage.local.get('postHistory');
+  hist.items = Array.isArray(d.postHistory) ? d.postHistory : [];
+}
+const HIST_PLATS = ['whatsapp', 'facebook', 'instagram', 'x'];
+const platBadge = (p) => h('span', { class: `t-ic ${p === 'whatsapp' ? 'wa' : p === 'facebook' ? 'fb' : p === 'instagram' ? 'ig' : 'x'}`, title: platLabel(p) }, p === 'whatsapp' ? '✆' : p === 'facebook' ? 'f' : p === 'instagram' ? '◎' : '𝕏');
+function histResult(e) {
+  const many = (n) => (e.platform === 'whatsapp' ? plural(n, 'group') : `${n} ${n === 1 ? 'group or Page' : 'groups and Pages'}`);
+  if (e.outcome === 'running') return { cls: '', text: 'In progress…' };
+  if (e.platform === 'instagram' || e.platform === 'x') return e.outcome === 'done' ? { cls: 'ok', text: `Posted to ${platLabel(e.platform)}${e.kind === 'story' ? ' (Story)' : ''}` } : e.outcome === 'failed' ? { cls: 'bad', text: 'Not posted' } : { cls: 'part', text: 'Stopped before posting' };
+  const verb = e.platform === 'whatsapp' ? 'Sent to' : 'Posted to';
+  const of = `${e.ok} of ${many(e.total)}`;
+  if (e.ok === e.total) return { cls: 'ok', text: `${verb} ${many(e.total)}` };
+  if (!e.ok) return { cls: 'bad', text: e.outcome === 'stopped' ? 'Stopped before anything was sent' : `Nothing ${e.platform === 'whatsapp' ? 'sent' : 'posted'}` };
+  return { cls: 'part', text: `${verb} ${of}${e.outcome === 'stopped' ? ' (stopped)' : ''}` };
+}
+function histUseAgain(e) {
+  if (e.platform === 'whatsapp') {
+    setMessage(e.text);
+    switchTab('compose');
+    toast('Message loaded in Compose');
+  } else if (e.platform === 'facebook') {
+    fb.settings.same = false;
+    fb.settings.text = e.text;
+    fbSaveSettings();
+    renderFb();
+    switchTab('facebook');
+    toast('Facebook post loaded');
+  } else {
+    socDetach();
+    soc.settings.platform = e.platform;
+    soc.settings.captions[e.platform] = e.text;
+    socSave();
+    renderSoc();
+    switchTab('social');
+    toast(`${platLabel(e.platform)} ${e.platform === 'x' ? 'post' : 'caption'} loaded`);
+  }
+}
+/** Load the message again and select only the groups / Pages that failed. */
+function histRetryFailed(e) {
+  const want = new Set((e.failedTargets || []).map(keyOf));
+  if (e.platform === 'whatsapp') {
+    const ids = state.groups.filter((g) => want.has(keyOf(g.name))).map((g) => g.id);
+    if (!ids.length) return toast('Those groups aren’t in your list any more.', true);
+    state.selected = new Set(ids);
+    saveGroups();
+    refreshGroups();
+    setMessage(e.text);
+    switchTab('compose');
+    toast(`${plural(ids.length, 'group')} selected with the same message. Check them, then press Send.`);
+  } else {
+    const ids = fb.targets.filter((t) => want.has(keyOf(t.name))).map((t) => t.id);
+    if (!ids.length) return toast('Those groups or Pages aren’t in your Facebook list any more.', true);
+    fb.selected = new Set(ids);
+    fbSave();
+    fb.settings.same = false;
+    fb.settings.text = e.text;
+    fbSaveSettings();
+    renderFb();
+    switchTab('facebook');
+    toast(`${ids.length} selected with the same post. Check them, then press Post.`);
+  }
+}
+function renderHist() {
+  const all = hist.items;
+  const week = all.filter((e) => e.at > Date.now() - 7 * 86400000 && e.outcome !== 'running');
+  const sent = week.reduce((a, e) => a + (e.ok || 0), 0);
+  const tried = week.reduce((a, e) => a + (e.total || 0), 0);
+  const plats = new Set(week.filter((e) => e.ok).map((e) => e.platform));
+  $('histCount').textContent = all.length ? `(${all.length})` : '';
+  $('histLinks').hidden = !all.length;
+  $('histStats').hidden = !week.length;
+  setChildren(
+    $('histStats'),
+    h('div', { class: 'st' }, h('b', {}, String(sent)), h('span', {}, 'posts this week')),
+    h('div', { class: 'st' }, h('b', {}, tried ? `${Math.round((sent / tried) * 100)}%` : '–'), h('span', {}, 'delivered')),
+    h('div', { class: 'st' }, h('b', {}, String(plats.size)), h('span', {}, `platform${plats.size === 1 ? '' : 's'} used`))
+  );
+  const counts = Object.fromEntries(HIST_PLATS.map((p) => [p, all.filter((e) => e.platform === p).length]));
+  $('histFilter').hidden = !all.length;
+  setChildren(
+    $('histFilter'),
+    h('button', { type: 'button', class: hist.filter === 'all' ? 'on' : '', onclick: () => ((hist.filter = 'all'), (hist.limit = 15), renderHist()) }, 'All ', h('span', { class: 'n' }, String(all.length))),
+    ...HIST_PLATS.filter((p) => counts[p]).map((p) =>
+      h('button', { type: 'button', class: hist.filter === p ? 'on' : '', onclick: () => ((hist.filter = p), (hist.limit = 15), renderHist()) }, platBadge(p), platLabel(p), ' ', h('span', { class: 'n' }, String(counts[p])))
+    )
+  );
+  const list = all.filter((e) => hist.filter === 'all' || e.platform === hist.filter);
+  $('histEmpty').hidden = all.length > 0;
+  $('histMore').hidden = list.length <= hist.limit;
+  setChildren(
+    $('histList'),
+    ...list.slice(0, hist.limit).map((e) => {
+      const r = histResult(e);
+      const open = hist.open.has(e.id);
+      return h(
+        'li',
+        { class: open ? 'open' : '' },
+        h('div', { class: 'top' }, platBadge(e.platform), h('b', { class: `res ${r.cls}` }, r.text), h('span', { class: 'ago', title: new Date(e.at).toLocaleString() }, RS.relative(e.at))),
+        e.text ? h('div', { class: 'snip' }, e.text) : h('div', { class: 'snip muted' }, e.files ? plural(e.files, 'file') : '(no text)'),
+        e.error && r.cls !== 'ok' ? h('div', { class: e.outcome === 'stopped' && !e.failed ? 'muted small' : 'err' }, e.error) : null,
+        open && e.targets?.length ? h('div', { class: 'targets' }, `To: ${e.targets.join(', ')}${e.total > e.targets.length ? ` and ${e.total - e.targets.length} more` : ''}`) : null,
+        h('div', { class: 'meta' }, h('span', {}, e.mode === 'auto' ? 'Automatic' : 'Manual'), e.scheduled ? h('span', {}, '· Scheduled') : null, e.files ? h('span', {}, `· ${plural(e.files, 'file')}`) : null, e.skipped ? h('span', {}, `· ${e.skipped} skipped`) : null),
+        h(
+          'div',
+          { class: 'acts' },
+          e.text && e.failedTargets?.length && (e.platform === 'whatsapp' || e.platform === 'facebook') ? h('button', { type: 'button', class: 'link', onclick: () => histRetryFailed(e) }, `Retry failed (${e.failedTargets.length})`) : null,
+          e.text ? h('button', { type: 'button', class: 'link', onclick: () => histUseAgain(e) }, 'Use again') : null,
+          e.text ? h('button', { type: 'button', class: 'link', onclick: () => navigator.clipboard?.writeText(e.text).then(() => toast('Copied'), () => toast('Couldn’t copy', true)) }, 'Copy') : null,
+          h('button', { type: 'button', class: 'link', onclick: () => (open ? hist.open.delete(e.id) : hist.open.add(e.id), renderHist()) }, open ? 'Less' : 'Details'),
+          h(
+            'button',
+            {
+              type: 'button',
+              class: 'link danger',
+              onclick: () => {
+                const before = hist.items;
+                hist.items = hist.items.filter((x) => x.id !== e.id);
+                persist({ postHistory: hist.items });
+                renderHist();
+                toast('Removed from history', false, { label: 'Undo', run: () => ((hist.items = before), persist({ postHistory: before }), renderHist()) });
+              },
+            },
+            'Remove'
+          )
+        )
+      );
+    })
+  );
+}
+async function histExport() {
+  const esc = (v) => {
+    let s = String(v ?? '');
+    if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
+    return `"${s.replace(/"/g, '""')}"`;
+  };
+  const rows = [['date', 'platform', 'result', 'delivered', 'total', 'skipped', 'mode', 'scheduled', 'files', 'targets', 'error', 'text']].concat(
+    hist.items.map((e) => [new Date(e.at).toISOString(), platLabel(e.platform), histResult(e).text, e.ok ?? '', e.total ?? '', e.skipped ?? '', e.mode, e.scheduled ? 'yes' : 'no', e.files || 0, (e.targets || []).join('; '), e.error || '', e.text || ''])
+  );
+  const res = await bg('BG_DOWNLOAD', { filename: `ritpost-history-${new Date().toISOString().slice(0, 10)}.csv`, text: rows.map((r) => r.map(esc).join(',')).join('\r\n'), mime: 'text/csv' });
+  if (!res?.ok) toast(`Export failed: ${res?.error || 'unknown error'}`, true);
+  else if (!res.cancelled) toast(`Exported ${plural(hist.items.length, 'post')}`);
+}
+function histBind() {
+  $('histMore').addEventListener('click', () => ((hist.limit += 30), renderHist()));
+  $('histExport').addEventListener('click', histExport);
+  $('histClear').addEventListener('click', () => {
+    const before = hist.items;
+    hist.items = [];
+    persist({ postHistory: [] });
+    renderHist();
+    toast('History cleared', false, { label: 'Undo', run: () => ((hist.items = before), persist({ postHistory: before }), renderHist()) });
+  });
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes.postHistory) {
+      hist.items = changes.postHistory.newValue || [];
+      renderHist();
+    }
+  });
+}
+
 function schedBind() {
   $('schedBtn').addEventListener('click', () => {
     const tab = document.body.dataset.tab;
@@ -4510,6 +4674,7 @@ async function refreshStatus() {
   await load();
   await fbLoad();
   await schedLoad();
+  await histLoad();
   await socLoad();
   await aiLoad();
   bind();
@@ -4519,8 +4684,10 @@ async function refreshStatus() {
   fbBind();
   socBind();
   schedBind();
+  histBind();
   renderAll();
   renderSched();
+  renderHist();
   $('version').textContent = `RitPost v${chrome.runtime.getManifest().version}`;
 
   // Opened while on Facebook: show the Facebook tab. Otherwise bring WhatsApp Web up beside the panel.

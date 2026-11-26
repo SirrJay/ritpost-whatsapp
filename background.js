@@ -113,6 +113,14 @@ async function startRun(payload, windowId) {
     else tab = await chrome.tabs.create({ url: WA_URL, active: true, ...(windowId ? { windowId } : {}) });
     const res = await sendToContent(tab.id, { type: 'RITPOST_START', payload }, 30000);
     if (!res?.ok) settleClaim('whatsapp', 0).catch(() => {});
+    else
+      histStart('whatsapp', {
+        text: payload.message || payload.items?.[0]?.text,
+        targets: (payload.items || []).map((i) => i.name),
+        mode: payload.settings?.mode,
+        files: payload.attachments?.length || 0,
+        scheduled: !!payload.scheduleId,
+      }).catch(() => {});
     return res;
   } catch (e) {
     settleClaim('whatsapp', 0).catch(() => {});
@@ -186,6 +194,13 @@ async function fbStart(run, windowId) {
   if (denied) return denied;
   const first = run.items[0].url;
   let tab = await findFbTab(windowId);
+  histStart('facebook', {
+    text: run.message || run.items[0].text,
+    targets: run.items.map((i) => i.name),
+    mode: run.mode,
+    files: run.attachmentIds?.length || 0,
+    scheduled: !!run.scheduleId,
+  }).catch(() => {});
   const fbRun = {
     ...run,
     id: Date.now().toString(36),
@@ -289,6 +304,14 @@ async function socialStart(run, windowId) {
   if (denied) return denied;
 
   const fresh = { ...run, id: Date.now().toString(36), status: 'running', step: 'start', startedAt: Date.now(), error: '', errorShown: false };
+  histStart(run.platform, {
+    text: run.thread?.length ? run.thread.join('\n\n') : run.caption,
+    targets: [run.platform === 'instagram' ? (run.kind === 'story' ? 'Instagram Story' : 'Instagram') : 'X'],
+    mode: run.mode,
+    files: files.length,
+    scheduled: !!run.scheduleId,
+    kind: run.kind,
+  }).catch(() => {});
   if (run.platform === 'instagram' && run.kind === 'story') {
     const win = await chrome.windows.create({ url: 'about:blank', type: 'popup', width: 430, height: 880, focused: true });
     const tabId = win.tabs?.[0]?.id;
@@ -417,6 +440,36 @@ async function planGate(platform, count, { auto = false, scheduled = false } = {
 }
 
 /** A run ended: give back the posts it didn't make. */
+// ─────────────── Posting history ───────────────
+// Every run (WhatsApp, Facebook, Instagram, X; by hand or scheduled) is kept in "postHistory", newest first, on this computer only.
+const HISTORY_MAX = 300;
+async function histStart(platform, info) {
+  const entry = {
+    id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+    platform,
+    at: Date.now(),
+    text: String(info.text || '').slice(0, 6000),
+    targets: (info.targets || []).slice(0, 40).map((t) => String(t).slice(0, 80)),
+    total: info.targets?.length || 1,
+    mode: info.mode === 'auto' ? 'auto' : 'manual',
+    files: info.files || 0,
+    scheduled: !!info.scheduled,
+    kind: info.kind || '',
+    outcome: 'running',
+  };
+  await chrome.storage.local.set({ [`histPending_${platform}`]: entry });
+}
+async function histEnd(platform, startedAt, result) {
+  const key = `histPending_${platform}`;
+  const pending = (await chrome.storage.local.get(key))[key];
+  if (!pending) return;
+  if (startedAt && Math.abs(pending.at - startedAt) > 5 * 60 * 1000) return; // a different run
+  await chrome.storage.local.remove(key);
+  const { postHistory } = await chrome.storage.local.get('postHistory');
+  const entry = { ...pending, ...result, finishedAt: Date.now(), error: String(result.error || '').slice(0, 300), failedTargets: (result.failedTargets || []).slice(0, 100) };
+  await chrome.storage.local.set({ postHistory: [entry, ...(Array.isArray(postHistory) ? postHistory : [])].slice(0, HISTORY_MAX) });
+}
+
 async function settleClaim(platform, used, startedAt = 0) {
   const key = `planClaim_${platform}`;
   const claim = (await chrome.storage.local.get(key))[key];
@@ -432,13 +485,48 @@ async function settleClaim(platform, used, startedAt = 0) {
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
   const wa = changes.lastRun?.newValue;
-  if (wa?.done && !changes.lastRun.oldValue?.done) settleClaim('whatsapp', wa.counts?.sent || 0, wa.startedAt).catch(() => {});
+  if (wa?.done && !changes.lastRun.oldValue?.done) {
+    settleClaim('whatsapp', wa.counts?.sent || 0, wa.startedAt).catch(() => {});
+    const c = wa.counts || {};
+    const fails = (wa.results || []).filter((r) => r.status !== 'sent' && r.status !== 'skipped');
+    histEnd('whatsapp', wa.startedAt, {
+      total: wa.total,
+      ok: c.sent || 0,
+      failed: (c.failed || 0) + (c.notfound || 0) + (c.readonly || 0),
+      skipped: (c.skipped || 0) + (c.cancelled || 0),
+      outcome: c.cancelled ? 'stopped' : 'done',
+      error: fails[0] ? `${fails[0].name}: ${fails[0].reason || fails[0].status}` : '',
+      failedTargets: fails.filter((r) => r.status !== 'cancelled').map((r) => r.name),
+    }).catch(() => {});
+  }
   const fr = changes.fbRun?.newValue;
   const fo = changes.fbRun?.oldValue;
-  if (fr && fo && (fo.status === 'running' || fo.status === 'waiting') && (fr.status === 'done' || fr.status === 'stopped'))
-    settleClaim('facebook', (fr.results || []).filter((r) => r.status === 'posted').length, fr.startedAt).catch(() => {});
+  if (fr && fo && (fo.status === 'running' || fo.status === 'waiting') && (fr.status === 'done' || fr.status === 'stopped')) {
+    const res = fr.results || [];
+    settleClaim('facebook', res.filter((r) => r.status === 'posted').length, fr.startedAt).catch(() => {});
+    const bad = res.find((r) => r.status === 'failed');
+    histEnd('facebook', fr.startedAt, {
+      total: fr.items?.length || res.length,
+      ok: res.filter((r) => r.status === 'posted').length,
+      failed: res.filter((r) => r.status === 'failed').length,
+      skipped: res.filter((r) => r.status === 'skipped').length,
+      outcome: fr.status,
+      error: fr.stopReason || (bad ? `${bad.name || ''}: ${bad.error || bad.reason || 'failed'}` : ''),
+      failedTargets: res.map((r, i) => (r.status === 'failed' ? r.name || fr.items?.[i]?.name : null)).filter(Boolean),
+    }).catch(() => {});
+  }
   const sr = changes.socialRun?.newValue;
-  if (sr && changes.socialRun.oldValue?.status === 'running' && sr.status !== 'running') settleClaim(sr.platform, sr.status === 'done' ? 1 : 0, sr.startedAt).catch(() => {});
+  if (sr && changes.socialRun.oldValue?.status === 'running' && sr.status !== 'running') {
+    settleClaim(sr.platform, sr.status === 'done' ? 1 : 0, sr.startedAt).catch(() => {});
+    histEnd(sr.platform, sr.startedAt, {
+      total: 1,
+      ok: sr.status === 'done' ? 1 : 0,
+      failed: sr.status === 'failed' ? 1 : 0,
+      skipped: sr.status === 'stopped' ? 1 : 0,
+      outcome: sr.status === 'done' ? 'done' : sr.status === 'failed' ? 'failed' : 'stopped',
+      error: sr.error || sr.stopReason || '',
+    }).catch(() => {});
+  }
 });
 
 // ─────────────── Scheduled posts ───────────────
@@ -651,8 +739,8 @@ chrome.storage.onChanged.addListener((changes, area) => {
 chrome.runtime.onStartup.addListener(() => syncAlarms().catch(() => {}));
 syncAlarms().catch(() => {});
 
-async function downloadFile({ filename, json }) {
-  const url = `data:application/json;charset=utf-8,${encodeURIComponent(json)}`;
+async function downloadFile({ filename, json, text, mime }) {
+  const url = text !== undefined ? `data:${mime || 'text/plain'};charset=utf-8,${encodeURIComponent('\ufeff' + text)}` : `data:application/json;charset=utf-8,${encodeURIComponent(json)}`;
   try {
     await chrome.downloads.download({ url, filename, saveAs: true, conflictAction: 'uniquify' });
     return { ok: true };
